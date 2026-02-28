@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { Mode, CylinderName, MaterialColor } from '../types';
 
+type SensorName = 'feed' | 'color' | 'material';
+
 interface DeviceStore {
   // 状态
   mode: Mode;
@@ -28,6 +30,8 @@ interface DeviceStore {
   stopConveyor: () => void;
   extendCylinder: (name: CylinderName) => void;
   retractCylinder: (name: CylinderName) => void;
+  setSensor: (name: SensorName, active: boolean) => void;
+  updateMaterialPosition: (position: [number, number, number]) => void;
   spawnMaterial: () => void;
   clearMaterial: () => void;
   reset: () => void;
@@ -77,6 +81,20 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     cylinders: {
       ...state.cylinders,
       [name]: { extended: false },
+    },
+  })),
+
+  setSensor: (name, active) => set((state) => ({
+    sensors: {
+      ...state.sensors,
+      [name]: active,
+    },
+  })),
+
+  updateMaterialPosition: (position) => set((state) => ({
+    material: {
+      ...state.material,
+      position,
     },
   })),
 

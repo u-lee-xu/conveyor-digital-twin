@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
-import { ModeSelector, Panel } from './components/ui';
+import { ModeSelector } from './components/ui';
 import { ControlPanel, StatusPanel } from './components/panels';
 import { useDeviceStore } from './stores';
+import { usePhysics } from './hooks/usePhysics';
 
 function App() {
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -14,6 +15,9 @@ function App() {
     sensors, 
     material 
   } = useDeviceStore();
+
+  // 启用物理模拟
+  usePhysics();
 
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Panel, StatusIndicator } from '../ui';
 import { useDeviceStore } from '../../stores';
 
 export const StatusPanel: React.FC = () => {

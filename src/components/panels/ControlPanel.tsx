@@ -1,5 +1,5 @@
 import React from 'react';
-import { Panel, Button } from '../ui';
+import { Button } from '../ui';
 import { useDeviceStore } from '../../stores';
 
 export const ControlPanel: React.FC = () => {
