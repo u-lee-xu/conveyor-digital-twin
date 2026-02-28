@@ -9,7 +9,7 @@ interface CylinderProps {
   name?: string;
 }
 
-export const Cylinder: React.FC<CylinderProps> = ({ position, extended, name = 'cylinder' }) => {
+export const Cylinder: React.FC<CylinderProps> = ({ position, extended }) => {
   const { scene } = useScene();
   const groupRef = useRef<THREE.Group | null>(null);
   const rodRef = useRef<THREE.Mesh | null>(null);
@@ -17,6 +17,7 @@ export const Cylinder: React.FC<CylinderProps> = ({ position, extended, name = '
   const led2Ref = useRef<THREE.Mesh | null>(null);
   const targetPositionRef = useRef(0);
   const extendedRef = useRef(extended);
+  const animationIdRef = useRef<number>(0);
 
   useEffect(() => {
     extendedRef.current = extended;
@@ -115,13 +116,17 @@ export const Cylinder: React.FC<CylinderProps> = ({ position, extended, name = '
 
       if (Math.abs(diff) > 0.005) {
         rodRef.current.position.y += diff * 0.15;
-        requestAnimationFrame(animate);
+        animationIdRef.current = requestAnimationFrame(animate);
       } else {
         rodRef.current.position.y = target;
       }
     };
 
     animate();
+
+    return () => {
+      cancelAnimationFrame(animationIdRef.current);
+    };
   }, [extended]);
 
   // LED状态更新
