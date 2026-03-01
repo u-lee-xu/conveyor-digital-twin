@@ -62,12 +62,20 @@ export function usePhysics() {
               const [x, y, z] = material.position;
               const newZ = z - 0.02; // 推出速度（往Z轴负方向）
 
-              if (newZ < CONVEYOR_Z_MIN - 0.3) {
-                // 物料被推出传送带，清除
-                state.clearMaterial();
+              if (name === 'feed') {
+                // 上料气缸：物料推到传送带轴线（Z=0）停止
+                if (newZ <= 0) {
+                  state.updateMaterialPosition([x, y, 0]);
+                } else {
+                  state.updateMaterialPosition([x, y, newZ]);
+                }
               } else {
-                // 推动物料
-                state.updateMaterialPosition([x, y, newZ]);
+                // 分拣气缸：物料推出传送带后清除
+                if (newZ < CONVEYOR_Z_MIN - 0.3) {
+                  state.clearMaterial();
+                } else {
+                  state.updateMaterialPosition([x, y, newZ]);
+                }
               }
             }
           }
