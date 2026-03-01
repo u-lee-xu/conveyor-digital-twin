@@ -15,6 +15,23 @@ export function usePhysics() {
       const state = useDeviceStore.getState();
       const { material, conveyorRunning, cylinders } = state;
 
+      // 传感器检测 - 独立于传送带运行状态
+      if (material.visible) {
+        const [currentX, , currentZ] = material.position;
+        
+        // 检查物料是否在传送带范围内（Z轴和X轴）
+        const isOnConveyor = 
+          currentX >= CONVEYOR_START_X && 
+          currentX <= CONVEYOR_END_X &&
+          currentZ >= CONVEYOR_Z_MIN && 
+          currentZ <= CONVEYOR_Z_MAX;
+        
+        if (isOnConveyor) {
+          // 传感器检测
+          checkSensors(currentX, state.setSensor);
+        }
+      }
+
       // 物料跟随传送带运动
       if (material.visible && conveyorRunning) {
         const [currentX, currentY, currentZ] = material.position;
@@ -39,9 +56,6 @@ export function usePhysics() {
             state.setSensor('material', false);
           } else {
             state.updateMaterialPosition([newX, currentY, currentZ]);
-
-            // 传感器检测
-            checkSensors(newX, state.setSensor);
           }
         }
       }
