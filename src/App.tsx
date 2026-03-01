@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
 import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
-import { ControlPanel, StatusPanel, DemoPanel } from './components/panels';
+import { ControlPanel, StatusPanel, DemoPanel, SyncPanel } from './components/panels';
 import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
 import { useDemoMode } from './hooks/useDemoMode';
+import { useSyncMode } from './hooks/useSyncMode';
 
 function App() {
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -23,6 +24,17 @@ function App() {
 
   // 演示模式
   const { state: demoState } = useDemoMode();
+
+  // 同步模式
+  const {
+    step: syncStep,
+    phase: syncPhase,
+    mqttConfig,
+    calibration,
+    connect: mqttConnect,
+    startCalibrate,
+    disconnect: mqttDisconnect,
+  } = useSyncMode();
 
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
@@ -100,11 +112,15 @@ function App() {
 
         {mode === 'sync' && (
           <div className="glass rounded-xl p-4 gradient-border">
-            <div className="text-center py-8">
-              <span className="text-4xl">🔗</span>
-              <p className="text-gray-400 text-sm mt-3">MQTT 同步模式</p>
-              <p className="text-gray-600 text-xs mt-1">开发中...</p>
-            </div>
+            <SyncPanel 
+              step={syncStep}
+              phase={syncPhase}
+              mqttConfig={mqttConfig}
+              calibration={calibration}
+              onConnect={mqttConnect}
+              onStartCalibrate={startCalibrate}
+              onDisconnect={mqttDisconnect}
+            />
           </div>
         )}
 
