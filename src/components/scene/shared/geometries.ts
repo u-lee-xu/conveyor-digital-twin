@@ -11,8 +11,8 @@ export const geometries = {
   // 气缸主体
   cylinderBody: new THREE.CylinderGeometry(0.08, 0.08, 0.5, 16),
   
-  // 气缸推杆（缩短长度）
-  cylinderRod: new THREE.CylinderGeometry(0.03, 0.03, 0.5, 16),
+  // 气缸推杆（缩短长度避免穿透）
+  cylinderRod: new THREE.CylinderGeometry(0.03, 0.03, 0.3, 16),
   
   // 气口
   cylinderPort: new THREE.CylinderGeometry(0.02, 0.02, 0.05, 8),
