@@ -18,6 +18,14 @@ type CalibratePhase =
   | 'DETECT_MATERIAL'// 等待物料传感器
   | 'COMPLETE';      // 本轮完成
 
+// 预设MQTT服务器
+const MQTT_PRESETS = [
+  { name: 'EMQX 公共服务器', host: 'broker.emqx.io', port: 1883 },
+  { name: 'Eclipse Mosquitto', host: 'test.mosquitto.org', port: 1883 },
+  { name: 'HiveMQ 公共服务器', host: 'broker.hivemq.com', port: 1883 },
+  { name: '自定义服务器', host: '', port: 1883 },
+];
+
 interface SyncPanelProps {
   step: CalibrateStep;
   phase: CalibratePhase;
@@ -48,8 +56,18 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
   const [host, setHost] = useState(mqttConfig.host);
   const [port, setPort] = useState(mqttConfig.port.toString());
   const [topic, setTopic] = useState(mqttConfig.topic);
+  const [selectedPreset, setSelectedPreset] = useState(0);
 
   const { sensors, conveyorRunning } = useDeviceStore();
+
+  const handlePresetChange = (index: number) => {
+    setSelectedPreset(index);
+    const preset = MQTT_PRESETS[index];
+    if (preset.host) {
+      setHost(preset.host);
+      setPort(preset.port.toString());
+    }
+  };
 
   const handleConnect = () => {
     onConnect(host, parseInt(port) || 1883, topic);
@@ -63,6 +81,20 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
           <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">MQTT 连接配置</div>
           
           <div className="space-y-3">
+            {/* 服务器选择 */}
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">服务器选择</label>
+              <select
+                value={selectedPreset}
+                onChange={(e) => handlePresetChange(parseInt(e.target.value))}
+                className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer"
+              >
+                {MQTT_PRESETS.map((preset, index) => (
+                  <option key={index} value={index}>{preset.name}</option>
+                ))}
+              </select>
+            </div>
+            
             <div>
               <label className="text-xs text-gray-400 mb-1 block">服务器地址</label>
               <input
