@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDeviceStore } from '../stores';
+import { mqttService } from '../services/mqtt';
+import type { MqttMessage } from '../services/mqtt';
 
 // 校准步骤
 export type CalibrateStep = 
@@ -32,6 +34,11 @@ interface CalibrationData {
 
 export function useSyncMode() {
   const mode = useDeviceStore((state) => state.mode);
+  const setSensor = useDeviceStore((state) => state.setSensor);
+  const extendCylinder = useDeviceStore((state) => state.extendCylinder);
+  const retractCylinder = useDeviceStore((state) => state.retractCylinder);
+  const startConveyor = useDeviceStore((state) => state.startConveyor);
+  const stopConveyor = useDeviceStore((state) => state.stopConveyor);
   
   const [step, setStep] = useState<CalibrateStep>('IDLE');
   const [phase, setPhase] = useState<CalibratePhase>('WAIT_MATERIAL');
@@ -46,17 +53,50 @@ export function useSyncMode() {
     phase2Time: null,
   });
 
+  // 处理MQTT消息
+  const handleMqttMessage = useCallback((topic: string, message: MqttMessage) => {
+    console.log('MQTT Message:', topic, message);
+    
+    // 根据消息类型更新状态
+    if (message.type === 'sensor') {
+      setSensor(message.name as 'feed' | 'color' | 'material', message.value as boolean);
+    } else if (message.type === 'cylinder') {
+      if (message.value as boolean) {
+        extendCylinder(message.name as 'feed' | 'sorting1' | 'sorting2');
+      } else {
+        retractCylinder(message.name as 'feed' | 'sorting1' | 'sorting2');
+      }
+    } else if (message.type === 'conveyor') {
+      if (message.value as boolean) {
+        startConveyor();
+      } else {
+        stopConveyor();
+      }
+    }
+  }, [setSensor, extendCylinder, retractCylinder, startConveyor, stopConveyor]);
+
   // 连接MQTT
   const connect = useCallback((host: string, port: number, topic: string) => {
     setStep('CONNECTING');
     setMqttConfig({ host, port, topic });
     
-    // TODO: 实际MQTT连接逻辑
-    // 模拟连接成功
-    setTimeout(() => {
-      setStep('CONNECTED');
-    }, 1000);
-  }, []);
+    mqttService.connect(
+      { host, port, topic },
+      {
+        onConnect: () => {
+          setStep('CONNECTED');
+        },
+        onDisconnect: () => {
+          setStep('IDLE');
+        },
+        onError: (error) => {
+          console.error('MQTT Connection Error:', error);
+          setStep('IDLE');
+        },
+        onMessage: handleMqttMessage,
+      }
+    );
+  }, [handleMqttMessage]);
 
   // 开始校准
   const startCalibrate = useCallback(() => {
@@ -67,6 +107,7 @@ export function useSyncMode() {
 
   // 断开连接
   const disconnect = useCallback(() => {
+    mqttService.disconnect();
     setStep('IDLE');
     setPhase('WAIT_MATERIAL');
     setCalibration({
@@ -74,12 +115,12 @@ export function useSyncMode() {
       phase1Time: null,
       phase2Time: null,
     });
-    // TODO: 断开MQTT连接
   }, []);
 
-  // 当模式切换时重置状态
-  const resetSyncMode = useCallback(() => {
+  // 当模式切换时断开连接
+  useEffect(() => {
     if (mode !== 'sync') {
+      mqttService.disconnect();
       setStep('IDLE');
       setPhase('WAIT_MATERIAL');
     }
@@ -93,6 +134,5 @@ export function useSyncMode() {
     connect,
     startCalibrate,
     disconnect,
-    resetSyncMode,
   };
 }
