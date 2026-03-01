@@ -61,8 +61,20 @@ export function useDemoMode() {
   const waitForMaterialPosition = useCallback((targetX: number): Promise<void> => {
     return new Promise((resolve) => {
       const check = () => {
+        // 检查是否应该停止
+        if (stoppedRef.current) {
+          resolve();
+          return;
+        }
+        
         const currentMaterial = useDeviceStore.getState().material;
-        if (currentMaterial.visible && currentMaterial.position[0] >= targetX) {
+        // 如果物料不可见，也返回（可能已被清除）
+        if (!currentMaterial.visible) {
+          resolve();
+          return;
+        }
+        
+        if (currentMaterial.position[0] >= targetX) {
           resolve();
         } else {
           requestAnimationFrame(check);
@@ -144,19 +156,32 @@ export function useDemoMode() {
     
     // 推送物料到传送带上
     await feedMaterial();
+    
+    // 上料完成后触发上料传感器
+    setSensor('feed', true);
     await delay(300);
+    setSensor('feed', false);
+    await delay(200);
     
     // 上料气缸缩回
     setDemoState('FEED_RETRACT');
     retractCylinder('feed');
-    await delay(500);
+    await delay(300);
     
     // 启动传送带
     setDemoState('TRANSIT');
     startConveyor();
     
-    // 传送带动画循环
+    // 判断目标停止位置
+    const isBlack = materialColorRef.current === 'black';
+    const targetStopX = isBlack ? CYLINDERS.sorting1 : CYLINDERS.sorting2;
+    
+    // 传送带动画循环 - 物料一直移动直到被分拣
+    let animationStopped = false;
     const animateTransit = () => {
+      // 检查是否应该停止
+      if (stoppedRef.current || animationStopped) return;
+      
       const currentMaterial = useDeviceStore.getState().material;
       if (currentMaterial.visible && useDeviceStore.getState().mode === 'auto') {
         const [x, y, z] = currentMaterial.position;
@@ -166,30 +191,38 @@ export function useDemoMode() {
         checkSensors(newX);
         
         // 更新位置
-        if (newX < SENSORS.material + 0.3) {
-          updateMaterialPosition([newX, y, z]);
-          requestAnimationFrame(animateTransit);
-        }
+        updateMaterialPosition([newX, y, z]);
+        requestAnimationFrame(animateTransit);
       }
     };
     animateTransit();
     
     // 等待物料到达色标传感器位置
-    await waitForMaterialPosition(SENSORS.color - 0.1);
+    await waitForMaterialPosition(SENSORS.color);
     
     // 色标传感器检测颜色
     // 黑色物料触发色标传感器，蓝色不触发
-    const isBlack = materialColorRef.current === 'black';
     setSensor('color', isBlack);
     await delay(300);
     setSensor('color', false);
     
+    // 等待物料到达目标分拣位置
+    await waitForMaterialPosition(targetStopX);
+    
+    // 停止动画循环和传送带
+    animationStopped = true;
+    stopConveyor();
+    
     // 根据颜色选择分拣气缸
     if (isBlack) {
       // 黑色：分拣1推出
-      await waitForMaterialPosition(CYLINDERS.sorting1);
       setDemoState('SORTING1');
-      stopConveyor();
+      // 将物料精确移动到气缸位置
+      const currentMaterial = useDeviceStore.getState().material;
+      if (currentMaterial.visible) {
+        updateMaterialPosition([CYLINDERS.sorting1, currentMaterial.position[1], currentMaterial.position[2]]);
+      }
+      await delay(100);
       extendCylinder('sorting1');
       await delay(600);
       
@@ -201,10 +234,14 @@ export function useDemoMode() {
       retractCylinder('sorting1');
       await delay(500);
     } else {
-      // 蓝色：继续传送到分拣2
-      await waitForMaterialPosition(CYLINDERS.sorting2);
+      // 蓝色：分拣2推出
       setDemoState('SORTING2');
-      stopConveyor();
+      // 将物料精确移动到气缸位置
+      const currentMaterial = useDeviceStore.getState().material;
+      if (currentMaterial.visible) {
+        updateMaterialPosition([CYLINDERS.sorting2, currentMaterial.position[1], currentMaterial.position[2]]);
+      }
+      await delay(100);
       extendCylinder('sorting2');
       await delay(600);
       
