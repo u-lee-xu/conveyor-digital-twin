@@ -50,7 +50,7 @@ export const Cylinder: React.FC<CylinderProps> = ({ position, extended }) => {
 
     // 活塞杆
     const rod = new THREE.Mesh(geometries.cylinderRod, materials.cylinderRod);
-    rod.position.set(0, extendedRef.current ? 0.55 : 0.2, 0);
+    rod.position.set(0, extendedRef.current ? 0.43 : 0.18, 0);
     rod.castShadow = true;
     group.add(rod);
     rodRef.current = rod;
@@ -104,7 +104,7 @@ export const Cylinder: React.FC<CylinderProps> = ({ position, extended }) => {
   useEffect(() => {
     if (!rodRef.current) return;
 
-    targetPositionRef.current = extended ? 0.55 : 0.2;
+    targetPositionRef.current = extended ? 0.43 : 0.18;
 
     const animate = () => {
       if (!rodRef.current) return;
