@@ -72,15 +72,15 @@ export function useDemoMode() {
     });
   }, []);
 
-  // 推出物料动画
+  // 推出物料动画（分拣用）
   const pushMaterial = useCallback(async () => {
     const push = () => {
       const currentMaterial = useDeviceStore.getState().material;
       if (currentMaterial.visible) {
         const [x, y, z] = currentMaterial.position;
-        const newZ = z + 0.05;
+        const newZ = z - 0.05; // 往Z轴负方向推出
         
-        if (newZ > 1.5) {
+        if (newZ < -0.5) {
           clearMaterial();
         } else {
           updateMaterialPosition([x, y, newZ]);
@@ -91,6 +91,31 @@ export function useDemoMode() {
     push();
     await delay(500);
   }, [clearMaterial, updateMaterialPosition, delay]);
+
+  // 上料推送动画（从物料台推到传送带）
+  const feedMaterial = useCallback(async () => {
+    return new Promise<void>((resolve) => {
+      const feed = () => {
+        const currentMaterial = useDeviceStore.getState().material;
+        if (currentMaterial.visible) {
+          const [x, y, z] = currentMaterial.position;
+          const newZ = z - 0.03; // 往Z轴负方向移动
+          
+          // 当物料到达传送带中心（Z≈0）时停止
+          if (newZ <= 0) {
+            updateMaterialPosition([x, y, 0]);
+            resolve();
+          } else {
+            updateMaterialPosition([x, y, newZ]);
+            requestAnimationFrame(feed);
+          }
+        } else {
+          resolve();
+        }
+      };
+      feed();
+    });
+  }, [updateMaterialPosition]);
 
   // 启动演示循环
   const startDemo = useCallback(async () => {
@@ -116,7 +141,10 @@ export function useDemoMode() {
     // 上料气缸推出
     setDemoState('FEEDING');
     extendCylinder('feed');
-    await delay(800);
+    
+    // 推送物料到传送带上
+    await feedMaterial();
+    await delay(300);
     
     // 上料气缸缩回
     setDemoState('FEED_RETRACT');

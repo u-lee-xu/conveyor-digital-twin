@@ -17,6 +17,9 @@ export const CYLINDERS = {
 // 传送带参数
 export const CONVEYOR_SPEED = 0.01;
 export const CONVEYOR_END_X = 1.8;
+export const CONVEYOR_START_X = -1.75;
+export const CONVEYOR_Z_MIN = -0.3;
+export const CONVEYOR_Z_MAX = 0.5;
 
 // 传感器检测范围
 export const SENSOR_RANGE = 0.15;
