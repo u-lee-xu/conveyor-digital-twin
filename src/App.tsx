@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
 import { ModeSelector } from './components/ui';
-import { ControlPanel, StatusPanel } from './components/panels';
+import { ControlPanel, StatusPanel, DemoPanel } from './components/panels';
 import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
+import { useDemoMode } from './hooks/useDemoMode';
 
 function App() {
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -19,6 +20,9 @@ function App() {
   // 启用物理模拟
   usePhysics();
 
+  // 演示模式
+  const { state: demoState } = useDemoMode();
+
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
       {/* 3D 场景 */}
@@ -30,9 +34,9 @@ function App() {
           <MaterialTable position={[-1.3, 0.98, 0.6]} />
           
           {/* 气缸 */}
-          <Cylinder position={[-1.3, 1.10, 1.2]} extended={cylinders.feed.extended} name="feed" />
-          <Cylinder position={[-0.2, 1.10, 0.8]} extended={cylinders.sorting1.extended} name="sorting1" />
-          <Cylinder position={[0.9, 1.10, 0.8]} extended={cylinders.sorting2.extended} name="sorting2" />
+          <Cylinder position={[-1.3, 1.10, 1.2]} extended={cylinders.feed.extended} />
+          <Cylinder position={[-0.2, 1.10, 0.8]} extended={cylinders.sorting1.extended} />
+          <Cylinder position={[0.9, 1.10, 0.8]} extended={cylinders.sorting2.extended} />
           
           {/* 传感器 */}
           <Sensor position={[-1.3, 1.45, 0]} active={sensors.feed} type="feed" />
@@ -89,11 +93,7 @@ function App() {
 
         {mode === 'auto' && (
           <div className="glass rounded-xl p-4 gradient-border">
-            <div className="text-center py-8">
-              <span className="text-4xl">🤖</span>
-              <p className="text-gray-400 text-sm mt-3">自动演示模式</p>
-              <p className="text-gray-600 text-xs mt-1">开发中...</p>
-            </div>
+            <DemoPanel demoState={demoState} />
           </div>
         )}
 
