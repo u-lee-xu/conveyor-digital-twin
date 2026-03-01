@@ -1,5 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useDeviceStore } from '../stores';
+import { SENSORS, CYLINDERS, MATERIAL_INITIAL_POSITION } from '../components/scene/shared';
+
+// 演示模式专用常量
+const DEMO_CONVEYOR_SPEED = 0.012;
+const DEMO_SENSOR_RANGE = 0.2;
 
 // 状态机状态
 type DemoState = 
@@ -14,25 +19,8 @@ type DemoState =
   | 'SORTING2_RETRACT' // 分拣2气缸缩回
   | 'COMPLETE';      // 完成
 
-// 场景常量
-const SENSORS = {
-  feed: -1.3,
-  color: -0.2,
-  material: 0.9,
-};
-
-const CYLINDERS = {
-  feed: -1.3,
-  sorting1: -0.2,
-  sorting2: 0.9,
-};
-
-const CONVEYOR_SPEED = 0.012;
-const SENSOR_RANGE = 0.2;
-
 export function useDemoMode() {
   const mode = useDeviceStore((state) => state.mode);
-  const material = useDeviceStore((state) => state.material);
   const setSensor = useDeviceStore((state) => state.setSensor);
   const updateMaterialPosition = useDeviceStore((state) => state.updateMaterialPosition);
   const clearMaterial = useDeviceStore((state) => state.clearMaterial);
@@ -44,12 +32,19 @@ export function useDemoMode() {
   // 使用useState而不是useRef，以便触发UI更新
   const [demoState, setDemoState] = useState<DemoState>('IDLE');
   const isRunningRef = useRef(false);
+  const stoppedRef = useRef(false); // 用于停止异步循环
   const materialColorRef = useRef<'blue' | 'black'>('blue');
 
-  // 状态转换延迟
+  // 可中断的延迟函数
   const delay = useCallback((ms: number) => {
     return new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
+      const timeoutId = setTimeout(() => {
+        if (!stoppedRef.current) {
+          resolve();
+        }
+      }, ms);
+      // 存储timeoutId以便清理
+      return () => clearTimeout(timeoutId);
     });
   }, []);
 
@@ -57,7 +52,7 @@ export function useDemoMode() {
   const checkSensors = useCallback((materialX: number) => {
     Object.entries(SENSORS).forEach(([name, sensorX]) => {
       const distance = Math.abs(materialX - sensorX);
-      const isTriggered = distance < SENSOR_RANGE;
+      const isTriggered = distance < DEMO_SENSOR_RANGE;
       setSensor(name as keyof typeof SENSORS, isTriggered);
     });
   }, [setSensor]);
@@ -99,7 +94,7 @@ export function useDemoMode() {
 
   // 启动演示循环
   const startDemo = useCallback(async () => {
-    if (useDeviceStore.getState().mode !== 'auto' || isRunningRef.current) return;
+    if (useDeviceStore.getState().mode !== 'auto' || isRunningRef.current || stoppedRef.current) return;
     
     isRunningRef.current = true;
     
@@ -112,7 +107,7 @@ export function useDemoMode() {
       material: {
         visible: true,
         color,
-        position: [-1.3, 1.06, 0.6],
+        position: MATERIAL_INITIAL_POSITION,
       },
     });
     
@@ -137,7 +132,7 @@ export function useDemoMode() {
       const currentMaterial = useDeviceStore.getState().material;
       if (currentMaterial.visible && useDeviceStore.getState().mode === 'auto') {
         const [x, y, z] = currentMaterial.position;
-        const newX = x + CONVEYOR_SPEED;
+        const newX = x + DEMO_CONVEYOR_SPEED;
         
         // 检测传感器
         checkSensors(newX);
@@ -214,20 +209,30 @@ export function useDemoMode() {
   useEffect(() => {
     if (mode !== 'auto') {
       // 非演示模式，停止状态机
+      stoppedRef.current = true;
       setDemoState('IDLE');
       isRunningRef.current = false;
       return;
     }
 
+    // 重置停止标志
+    stoppedRef.current = false;
+
     // 自动循环
     const runLoop = async () => {
-      while (useDeviceStore.getState().mode === 'auto') {
+      while (useDeviceStore.getState().mode === 'auto' && !stoppedRef.current) {
         await startDemo();
+        if (stoppedRef.current) break;
         await delay(2000); // 等待2秒后开始下一轮
       }
     };
 
     runLoop();
+
+    // 清理函数
+    return () => {
+      stoppedRef.current = true;
+    };
   }, [mode, startDemo, delay]);
 
   return {

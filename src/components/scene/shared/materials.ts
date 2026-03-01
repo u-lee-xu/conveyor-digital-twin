@@ -126,4 +126,23 @@ export const materials = {
     metalness: 0.0,
     roughness: 0.9,
   }),
+  
+  // 传感器类型标签材质
+  sensorLabelFeed: new THREE.MeshStandardMaterial({
+    color: 0x4CAF50,
+    emissive: 0x4CAF50,
+    emissiveIntensity: 0.3,
+  }),
+  
+  sensorLabelColor: new THREE.MeshStandardMaterial({
+    color: 0x2196F3,
+    emissive: 0x2196F3,
+    emissiveIntensity: 0.3,
+  }),
+  
+  sensorLabelMaterial: new THREE.MeshStandardMaterial({
+    color: 0xFF9800,
+    emissive: 0xFF9800,
+    emissiveIntensity: 0.3,
+  }),
 };
