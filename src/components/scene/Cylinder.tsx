@@ -6,7 +6,6 @@ import { geometries, materials } from './shared';
 interface CylinderProps {
   position: [number, number, number];
   extended: boolean;
-  name?: string;
 }
 
 export const Cylinder: React.FC<CylinderProps> = ({ position, extended }) => {
