@@ -29,6 +29,9 @@ export const geometries = {
   // 传感器支架
   sensorBracket: new THREE.BoxGeometry(0.02, 0.15, 0.02),
   
+  // 传感器类型标签
+  sensorLabel: new THREE.BoxGeometry(0.015, 0.015, 0.02),
+  
   // 物料
   material: new THREE.BoxGeometry(0.15, 0.12, 0.15),
   

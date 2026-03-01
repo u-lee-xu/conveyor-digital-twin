@@ -41,23 +41,15 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
     ledRef.current = led;
 
     // 根据类型添加标签颜色
-    let labelColor = 0x888888;
-    if (type === 'feed') {
-      labelColor = 0x4CAF50; // 绿色
-    } else if (type === 'color') {
-      labelColor = 0x2196F3; // 蓝色
+    let labelMaterial = materials.sensorLabelFeed;
+    if (type === 'color') {
+      labelMaterial = materials.sensorLabelColor;
     } else if (type === 'material') {
-      labelColor = 0xFF9800; // 橙色
+      labelMaterial = materials.sensorLabelMaterial;
     }
 
     // 类型标签
-    const labelGeometry = new THREE.BoxGeometry(0.015, 0.015, 0.02);
-    const labelMaterial = new THREE.MeshStandardMaterial({
-      color: labelColor,
-      emissive: labelColor,
-      emissiveIntensity: 0.3,
-    });
-    const label = new THREE.Mesh(labelGeometry, labelMaterial);
+    const label = new THREE.Mesh(geometries.sensorLabel, labelMaterial);
     label.position.set(0, 0.03, -0.05);
     group.add(label);
 

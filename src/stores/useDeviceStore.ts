@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import type { Mode, CylinderName, MaterialColor } from '../types';
-
-type SensorName = 'feed' | 'color' | 'material';
+import type { Mode, CylinderName, SensorName, MaterialColor } from '../types';
 
 interface DeviceStore {
   // 状态

@@ -1,26 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
-
-// 场景常量
-const CONVEYOR_SPEED = 0.01; // 传送带速度 (单位/帧)
-const CONVEYOR_END_X = 1.8; // 传送带终点 X
-
-// 传感器位置
-const SENSORS = {
-  feed: -1.3,
-  color: -0.2,
-  material: 0.9,
-};
-
-// 气缸位置
-const CYLINDERS = {
-  feed: -1.3,
-  sorting1: -0.2,
-  sorting2: 0.9,
-};
-
-// 传感器检测范围
-const SENSOR_RANGE = 0.15;
+import type { SensorName } from '../types';
+import { SENSORS, CYLINDERS, CONVEYOR_SPEED, CONVEYOR_END_X, SENSOR_RANGE } from '../components/scene/shared';
 
 export function usePhysics() {
   const mode = useDeviceStore((state) => state.mode);
@@ -97,10 +78,10 @@ export function usePhysics() {
 }
 
 // 检查传感器触发
-function checkSensors(materialX: number, setSensor: (name: 'feed' | 'color' | 'material', active: boolean) => void) {
+function checkSensors(materialX: number, setSensor: (name: SensorName, active: boolean) => void) {
   Object.entries(SENSORS).forEach(([name, sensorX]) => {
     const distance = Math.abs(materialX - sensorX);
     const isTriggered = distance < SENSOR_RANGE;
-    setSensor(name as 'feed' | 'color' | 'material', isTriggered);
+    setSensor(name as SensorName, isTriggered);
   });
 }

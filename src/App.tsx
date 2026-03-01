@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
+import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
 import { ControlPanel, StatusPanel, DemoPanel } from './components/panels';
 import { useDeviceStore } from './stores';
@@ -31,17 +32,17 @@ function App() {
           <ConveyorBelt running={conveyorRunning} />
           
           {/* 物料台 - 物料初始位置下方 */}
-          <MaterialTable position={[-1.3, 0.98, 0.6]} />
+          <MaterialTable position={MATERIAL_TABLE_POSITION} />
           
           {/* 气缸 */}
-          <Cylinder position={[-1.3, 1.10, 1.2]} extended={cylinders.feed.extended} />
-          <Cylinder position={[-0.2, 1.10, 0.8]} extended={cylinders.sorting1.extended} />
-          <Cylinder position={[0.9, 1.10, 0.8]} extended={cylinders.sorting2.extended} />
+          <Cylinder position={CYLINDER_POSITIONS.feed} extended={cylinders.feed.extended} />
+          <Cylinder position={CYLINDER_POSITIONS.sorting1} extended={cylinders.sorting1.extended} />
+          <Cylinder position={CYLINDER_POSITIONS.sorting2} extended={cylinders.sorting2.extended} />
           
           {/* 传感器 */}
-          <Sensor position={[-1.3, 1.45, 0]} active={sensors.feed} type="feed" />
-          <Sensor position={[-0.2, 1.45, 0]} active={sensors.color} type="color" />
-          <Sensor position={[0.9, 1.45, 0]} active={sensors.material} type="material" />
+          <Sensor position={SENSOR_POSITIONS.feed} active={sensors.feed} type="feed" />
+          <Sensor position={SENSOR_POSITIONS.color} active={sensors.color} type="color" />
+          <Sensor position={SENSOR_POSITIONS.material} active={sensors.material} type="material" />
           
           {/* 物料 */}
           {material.visible && (

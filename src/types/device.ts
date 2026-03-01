@@ -9,6 +9,9 @@ export interface CylinderState {
 // 气缸名称
 export type CylinderName = 'feed' | 'sorting1' | 'sorting2';
 
+// 传感器名称
+export type SensorName = 'feed' | 'color' | 'material';
+
 // 所有气缸状态
 export interface CylindersState {
   feed: CylinderState;

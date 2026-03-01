@@ -13,30 +13,53 @@ export const Material: React.FC<MaterialProps> = ({ position, color, visible }) 
   const { scene } = useScene();
   const meshRef = useRef<THREE.Mesh | null>(null);
 
+  // 首次挂载时创建 mesh（只创建一次）
   useEffect(() => {
-    if (!scene || !visible) return;
+    if (!scene) return;
 
-    const material = new THREE.Mesh(
+    const mesh = new THREE.Mesh(
       geometries.material,
-      color === 'blue' ? materials.materialBlue : materials.materialBlack
+      materials.materialBlue
     );
-    material.position.set(...position);
-    material.castShadow = true;
-    material.receiveShadow = true;
-    meshRef.current = material;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    meshRef.current = mesh;
 
-    scene.add(material);
+    // 初始状态
+    if (visible) {
+      mesh.position.set(...position);
+      mesh.material = color === 'blue' ? materials.materialBlue : materials.materialBlack;
+      scene.add(mesh);
+    }
 
     return () => {
-      scene.remove(material);
+      if (meshRef.current) {
+        scene.remove(meshRef.current);
+      }
     };
-  }, [scene, position, color, visible]);
+  }, [scene]); // 只依赖 scene
 
+  // 更新可见性和位置
   useEffect(() => {
-    if (meshRef.current && visible) {
+    if (!meshRef.current || !scene) return;
+
+    if (visible) {
       meshRef.current.position.set(...position);
+      if (!scene.children.includes(meshRef.current)) {
+        scene.add(meshRef.current);
+      }
+    } else {
+      if (scene.children.includes(meshRef.current)) {
+        scene.remove(meshRef.current);
+      }
     }
-  }, [position, visible]);
+  }, [scene, visible, position]);
+
+  // 更新颜色
+  useEffect(() => {
+    if (!meshRef.current) return;
+    meshRef.current.material = color === 'blue' ? materials.materialBlue : materials.materialBlack;
+  }, [color]);
 
   return null;
 };
