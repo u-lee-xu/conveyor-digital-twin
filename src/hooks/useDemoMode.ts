@@ -84,25 +84,29 @@ export function useDemoMode() {
     });
   }, []);
 
-  // 推出物料动画（分拣用）
+  // 推出物料动画（分拣用）- 与气缸伸出同步
   const pushMaterial = useCallback(async () => {
-    const push = () => {
-      const currentMaterial = useDeviceStore.getState().material;
-      if (currentMaterial.visible) {
-        const [x, y, z] = currentMaterial.position;
-        const newZ = z - 0.05; // 往Z轴负方向推出
-        
-        if (newZ < -0.5) {
-          clearMaterial();
+    return new Promise<void>((resolve) => {
+      const push = () => {
+        const currentMaterial = useDeviceStore.getState().material;
+        if (currentMaterial.visible) {
+          const [x, y, z] = currentMaterial.position;
+          const newZ = z - 0.04; // 推出速度
+          
+          if (newZ < -0.5) {
+            clearMaterial();
+            resolve();
+          } else {
+            updateMaterialPosition([x, y, newZ]);
+            requestAnimationFrame(push);
+          }
         } else {
-          updateMaterialPosition([x, y, newZ]);
-          requestAnimationFrame(push);
+          resolve();
         }
-      }
-    };
-    push();
-    await delay(500);
-  }, [clearMaterial, updateMaterialPosition, delay]);
+      };
+      push();
+    });
+  }, [clearMaterial, updateMaterialPosition]);
 
   // 上料推送动画（从物料台推到传送带）
   const feedMaterial = useCallback(async () => {
@@ -222,17 +226,16 @@ export function useDemoMode() {
       if (currentMaterial.visible) {
         updateMaterialPosition([CYLINDERS.sorting1, currentMaterial.position[1], currentMaterial.position[2]]);
       }
-      await delay(100);
-      extendCylinder('sorting1');
-      await delay(600);
+      await delay(50);
       
-      // 推出物料
-      await pushMaterial();
+      // 气缸伸出和物料推出同时进行
+      extendCylinder('sorting1');
+      await pushMaterial(); // 物料推出的同时气缸在伸出
       
       // 缩回气缸
       setDemoState('SORTING1_RETRACT');
       retractCylinder('sorting1');
-      await delay(500);
+      await delay(300);
     } else {
       // 蓝色：分拣2推出
       setDemoState('SORTING2');
@@ -241,17 +244,16 @@ export function useDemoMode() {
       if (currentMaterial.visible) {
         updateMaterialPosition([CYLINDERS.sorting2, currentMaterial.position[1], currentMaterial.position[2]]);
       }
-      await delay(100);
-      extendCylinder('sorting2');
-      await delay(600);
+      await delay(50);
       
-      // 推出物料
-      await pushMaterial();
+      // 气缸伸出和物料推出同时进行
+      extendCylinder('sorting2');
+      await pushMaterial(); // 物料推出的同时气缸在伸出
       
       // 缩回气缸
       setDemoState('SORTING2_RETRACT');
       retractCylinder('sorting2');
-      await delay(500);
+      await delay(300);
     }
     
     // 完成一个循环
