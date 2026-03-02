@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
 import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
-import { ControlPanel, StatusPanel, DemoPanel, SyncPanel } from './components/panels';
+import { ControlPanel, StatusPanel, DemoPanel, SyncPanel, SimPanel } from './components/panels';
 import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
 import { useSyncPhysics } from './hooks/useSyncPhysics';
 import { useDemoMode } from './hooks/useDemoMode';
 import { useSyncMode } from './hooks/useSyncMode';
+import { useSimMode } from './hooks/useSimMode';
 
 function App() {
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -55,6 +56,20 @@ function App() {
     },
   });
 
+  // 仿真模式
+  const {
+    step: simStep,
+    errorMessage: simError,
+    mqttConfig: simMqttConfig,
+    stats: simStats,
+    connect: simConnect,
+    disconnect: simDisconnect,
+    publishAllFeedback: simPublishFeedback,
+  } = useSimMode();
+
+  // 物理模拟（手动模式和仿真模式）
+  usePhysics();
+
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
       {/* 3D 场景 */}
@@ -75,8 +90,8 @@ function App() {
           <Sensor position={SENSOR_POSITIONS.color} active={sensors.color} type="color" />
           <Sensor position={SENSOR_POSITIONS.material} active={sensors.material} type="material" />
           
-          {/* 物料 - 手动/演示模式 */}
-          {material.visible && mode !== 'sync' && (
+          {/* 物料 - 手动/演示/仿真模式 */}
+          {material.visible && (mode === 'manual' || mode === 'auto' || mode === 'sim') && (
             <Material 
               position={material.position} 
               color={material.color} 
@@ -161,11 +176,18 @@ function App() {
 
         {mode === 'sim' && (
           <div className="glass rounded-xl p-4 gradient-border">
-            <div className="text-center py-8">
-              <span className="text-4xl">🧪</span>
-              <p className="text-gray-400 text-sm mt-3">仿真模式</p>
-              <p className="text-gray-600 text-xs mt-1">开发中...</p>
-            </div>
+            <SimPanel 
+              step={simStep}
+              errorMessage={simError}
+              mqttConfig={simMqttConfig}
+              stats={simStats}
+              sensors={sensors}
+              cylinders={cylinders}
+              conveyorRunning={conveyorRunning}
+              onConnect={simConnect}
+              onDisconnect={simDisconnect}
+              onPublishAllFeedback={simPublishFeedback}
+            />
           </div>
         )}
       </div>

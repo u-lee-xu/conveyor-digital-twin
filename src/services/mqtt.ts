@@ -10,7 +10,7 @@ interface MqttConfig {
 
 // MQTT消息类型
 export interface MqttMessage {
-  type: 'sensor' | 'cylinder' | 'conveyor' | 'material';
+  type: 'sensor' | 'cylinder' | 'conveyor' | 'material' | 'control' | 'feedback' | 'magnetic';
   name: string;
   value: boolean | number | string;
   timestamp: number;
