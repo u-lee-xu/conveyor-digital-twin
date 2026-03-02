@@ -29,10 +29,16 @@ function App() {
   const {
     step: syncStep,
     phase: syncPhase,
+    round: syncRound,
+    currentMaterialColor,
     mqttConfig,
     calibration,
     connect: mqttConnect,
     startCalibrate,
+    placeMaterial,
+    nextRound,
+    resetCalibrate,
+    startSync,
     disconnect: mqttDisconnect,
   } = useSyncMode();
 
@@ -115,10 +121,16 @@ function App() {
             <SyncPanel 
               step={syncStep}
               phase={syncPhase}
+              round={syncRound}
+              currentMaterialColor={currentMaterialColor}
               mqttConfig={mqttConfig}
               calibration={calibration}
               onConnect={mqttConnect}
               onStartCalibrate={startCalibrate}
+              onPlaceMaterial={placeMaterial}
+              onNextRound={nextRound}
+              onResetCalibrate={resetCalibrate}
+              onStartSync={startSync}
               onDisconnect={mqttDisconnect}
             />
           </div>

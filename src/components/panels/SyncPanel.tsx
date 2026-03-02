@@ -1,22 +1,6 @@
 import React, { useState } from 'react';
 import { useDeviceStore } from '../../stores';
-
-// 校准步骤
-type CalibrateStep = 
-  | 'IDLE'           // 等待连接
-  | 'CONNECTING'     // 连接中
-  | 'CONNECTED'      // 已连接，等待校准
-  | 'CALIBRATING'    // 校准中
-  | 'CALIBRATED'     // 校准完成
-  | 'SYNCING';       // 同步运行中
-
-// 校准阶段
-type CalibratePhase = 
-  | 'WAIT_MATERIAL'  // 等待放入物料
-  | 'DETECT_FEED'    // 等待上料传感器
-  | 'DETECT_COLOR'   // 等待色标传感器
-  | 'DETECT_MATERIAL'// 等待物料传感器
-  | 'COMPLETE';      // 本轮完成
+import type { CalibrateStep, CalibratePhase, CalibrateRound, CalibrationData, MaterialColor } from '../../hooks/useSyncMode';
 
 // 预设MQTT服务器
 const MQTT_PRESETS = [
@@ -29,28 +13,36 @@ const MQTT_PRESETS = [
 interface SyncPanelProps {
   step: CalibrateStep;
   phase: CalibratePhase;
+  round: CalibrateRound;
+  currentMaterialColor: MaterialColor;
   mqttConfig: {
     host: string;
     port: number;
     topic: string;
   };
-  calibration: {
-    speed: number | null;
-    phase1Time: number | null;
-    phase2Time: number | null;
-  };
+  calibration: CalibrationData;
   onConnect: (host: string, port: number, topic: string) => void;
   onStartCalibrate: () => void;
+  onPlaceMaterial: () => void;
+  onNextRound: () => void;
+  onResetCalibrate: () => void;
+  onStartSync: () => void;
   onDisconnect: () => void;
 }
 
 export const SyncPanel: React.FC<SyncPanelProps> = ({
   step,
   phase,
+  round,
+  currentMaterialColor,
   mqttConfig,
   calibration,
   onConnect,
   onStartCalibrate,
+  onPlaceMaterial,
+  onNextRound,
+  onResetCalibrate,
+  onStartSync,
   onDisconnect,
 }) => {
   const [host, setHost] = useState(mqttConfig.host);
@@ -71,6 +63,28 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
 
   const handleConnect = () => {
     onConnect(host, parseInt(port) || 1883, topic);
+  };
+
+  // 获取校准阶段进度
+  const getProgress = () => {
+    if (round === 1) {
+      switch (phase) {
+        case 'WAIT_MATERIAL': return 0;
+        case 'DETECT_FEED': return 16;
+        case 'DETECT_COLOR': return 33;
+        case 'SORTING': return 45;
+        case 'COMPLETE': return 50;
+        default: return 0;
+      }
+    } else {
+      switch (phase) {
+        case 'WAIT_MATERIAL': return 50;
+        case 'DETECT_MATERIAL': return 66;
+        case 'SORTING': return 83;
+        case 'COMPLETE': return 100;
+        default: return 50;
+      }
+    }
   };
 
   return (
@@ -167,12 +181,17 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
             </div>
           </div>
 
-          {/* 校准引导 */}
+          {/* 校准引导 - 初始 */}
           {step === 'CONNECTED' && (
             <div className="device-card">
               <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">校准引导</div>
               <div className="text-sm text-gray-300 mb-4">
-                同步模式需要先校准传送带速度，请准备2个物料进行校准。
+                同步模式需要先校准传送带速度，请准备<span className="text-white font-medium">黑色</span>和<span className="text-blue-400 font-medium">蓝色</span>物料各1个进行校准。
+              </div>
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-4">
+                <div className="text-xs text-amber-400">
+                  校准流程：第1轮用黑色物料，第2轮用蓝色物料
+                </div>
               </div>
               <button
                 onClick={onStartCalibrate}
@@ -186,46 +205,89 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
           {/* 校准进行中 */}
           {step === 'CALIBRATING' && (
             <div className="device-card">
-              <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">校准进行中</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">
+                校准进行中 - 第{round}轮
+              </div>
               
-              {/* 校准阶段指示 */}
+              {/* 轮次指示 */}
+              <div className="flex items-center gap-2 mb-4">
+                <div className={`flex-1 h-2 rounded-full ${round >= 1 ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gray-700'}`}></div>
+                <div className={`flex-1 h-2 rounded-full ${round >= 2 ? 'bg-gradient-to-r from-blue-500 to-cyan-500' : 'bg-gray-700'}`}></div>
+              </div>
+              
+              {/* 校准进度条 */}
               <div className="mb-4">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <span className={phase === 'WAIT_MATERIAL' ? 'text-white' : 'text-gray-500'}>等待物料</span>
-                  <span className={phase === 'DETECT_FEED' ? 'text-white' : 'text-gray-500'}>上料检测</span>
-                  <span className={phase === 'DETECT_COLOR' ? 'text-white' : 'text-gray-500'}>色标检测</span>
-                  <span className={phase === 'DETECT_MATERIAL' ? 'text-white' : 'text-gray-500'}>物料检测</span>
-                </div>
-                <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300"
-                    style={{ width: `${(() => {
-                      switch (phase) {
-                        case 'WAIT_MATERIAL': return '0%';
-                        case 'DETECT_FEED': return '25%';
-                        case 'DETECT_COLOR': return '50%';
-                        case 'DETECT_MATERIAL': return '75%';
-                        case 'COMPLETE': return '100%';
-                        default: return '0%';
-                      }
-                    })()}` }}
+                    style={{ width: `${getProgress()}%` }}
                   ></div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>第1轮(黑色)</span>
+                  <span>第2轮(蓝色)</span>
+                </div>
+              </div>
+
+              {/* 当前轮次物料提示 */}
+              <div className={`p-3 rounded-lg mb-4 ${
+                round === 1 
+                  ? 'bg-gray-500/10 border border-gray-500/30' 
+                  : 'bg-blue-500/10 border border-blue-500/30'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded ${
+                    round === 1 ? 'bg-gray-600' : 'bg-blue-500'
+                  }`}></div>
+                  <span className={`text-sm font-medium ${
+                    round === 1 ? 'text-gray-300' : 'text-blue-300'
+                  }`}>
+                    第{round}轮：请使用<span className="font-bold">{round === 1 ? '黑色' : '蓝色'}</span>物料
+                  </span>
                 </div>
               </div>
 
               {/* 当前阶段提示 */}
-              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-4">
                 <div className="text-sm text-blue-400">
-                  {phase === 'WAIT_MATERIAL' && '请在物料台放入物料，系统将自动检测'}
-                  {phase === 'DETECT_FEED' && '正在等待上料传感器检测...'}
-                  {phase === 'DETECT_COLOR' && '正在等待色标传感器检测...'}
-                  {phase === 'DETECT_MATERIAL' && '正在等待物料传感器检测...'}
-                  {phase === 'COMPLETE' && '本轮校准完成！'}
+                  {round === 1 && (
+                    <>
+                      {phase === 'WAIT_MATERIAL' && '请在物料台放入黑色物料，然后点击"已放入物料"按钮'}
+                      {phase === 'DETECT_FEED' && '正在等待上料传感器检测...'}
+                      {phase === 'DETECT_COLOR' && '检测到物料！正在等待色标传感器...'}
+                      {phase === 'SORTING' && '色标传感器触发（黑色物料），分拣1即将动作...'}
+                      {phase === 'COMPLETE' && '第1轮完成！请点击"开始第2轮"'}
+                    </>
+                  )}
+                  {round === 2 && (
+                    <>
+                      {phase === 'WAIT_MATERIAL' && '请在物料台放入蓝色物料，然后点击"已放入物料"按钮'}
+                      {phase === 'DETECT_MATERIAL' && '检测到物料！正在等待物料传感器...'}
+                      {phase === 'SORTING' && '物料传感器触发，分拣2即将动作...'}
+                      {phase === 'COMPLETE' && '校准完成！'}
+                    </>
+                  )}
                 </div>
               </div>
 
+              {/* 检测到的物料颜色 */}
+              {currentMaterialColor !== 'unknown' && (
+                <div className={`p-2 rounded-lg mb-4 flex items-center gap-2 ${
+                  currentMaterialColor === 'black' 
+                    ? 'bg-gray-500/20 border border-gray-500/30' 
+                    : 'bg-blue-500/20 border border-blue-500/30'
+                }`}>
+                  <div className={`w-3 h-3 rounded ${
+                    currentMaterialColor === 'black' ? 'bg-gray-600' : 'bg-blue-500'
+                  }`}></div>
+                  <span className="text-xs text-gray-300">
+                    检测到：{currentMaterialColor === 'black' ? '黑色物料' : '蓝色物料'}
+                  </span>
+                </div>
+              )}
+
               {/* 传感器实时状态 */}
-              <div className="mt-4">
+              <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-2">传感器状态</div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className={`p-2 rounded-lg text-center ${sensors.feed ? 'bg-green-500/10 border border-green-500/30' : 'bg-gray-800/50 border border-gray-700/30'}`}>
@@ -242,6 +304,33 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 操作按钮 */}
+              {phase === 'WAIT_MATERIAL' && (
+                <button
+                  onClick={onPlaceMaterial}
+                  className="w-full py-2 px-4 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-medium hover:from-green-600 hover:to-emerald-600 transition-all"
+                >
+                  已放入物料
+                </button>
+              )}
+              
+              {round === 1 && phase === 'COMPLETE' && (
+                <button
+                  onClick={onNextRound}
+                  className="w-full py-2 px-4 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all"
+                >
+                  开始第2轮
+                </button>
+              )}
+
+              {/* 重新校准按钮 */}
+              <button
+                onClick={onResetCalibrate}
+                className="w-full py-2 px-4 rounded-lg bg-gray-700/50 text-gray-300 text-sm hover:bg-gray-700 transition-all mt-2"
+              >
+                重新校准
+              </button>
             </div>
           )}
         </>
@@ -253,8 +342,8 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
           <div className="device-card">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-gray-200">MQTT 状态</span>
-              <span className="status-badge status-badge-active pulse-indicator">
-                同步中
+              <span className={`status-badge ${step === 'SYNCING' ? 'status-badge-active pulse-indicator' : 'status-badge-inactive'}`}>
+                {step === 'SYNCING' ? '同步中' : '已校准'}
               </span>
             </div>
             <div className="text-xs text-gray-500">
@@ -265,12 +354,38 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
           {/* 校准结果 */}
           <div className="device-card">
             <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">校准结果</div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">传送带速度</span>
-              <span className="text-lg font-medium text-cyan-400">
-                {calibration.speed ? `${(calibration.speed * 100).toFixed(2)} m/s` : '未校准'}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">第1段动画时间</span>
+                <span className="text-lg font-medium text-green-400">
+                  {calibration.phase1Time ? `${calibration.phase1Time} ms` : '未校准'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">第2段动画时间</span>
+                <span className="text-lg font-medium text-blue-400">
+                  {calibration.phase2Time ? `${calibration.phase2Time} ms` : '未校准'}
+                </span>
+              </div>
             </div>
+            
+            {/* 开始同步按钮 */}
+            {step === 'CALIBRATED' && (
+              <button
+                onClick={onStartSync}
+                className="w-full py-2 px-4 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium hover:from-purple-600 hover:to-pink-600 transition-all mt-4"
+              >
+                开始同步
+              </button>
+            )}
+            
+            {/* 重新校准按钮 */}
+            <button
+              onClick={onResetCalibrate}
+              className="w-full py-2 px-4 rounded-lg bg-gray-700/50 text-gray-300 text-sm hover:bg-gray-700 transition-all mt-2"
+            >
+              重新校准
+            </button>
           </div>
 
           {/* 实时状态 */}

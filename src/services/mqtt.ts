@@ -35,7 +35,13 @@ class MqttService {
     this.config = config;
     this.callbacks = callbacks;
 
-    const url = `mqtt://${config.host}:${config.port}`;
+    // 浏览器环境使用WebSocket连接
+    // WebSocket端口映射：TCP 1883 -> WS 8083, TCP 8883 -> WSS 8084
+    const wsPort = config.port === 1883 ? 8083 : config.port === 8883 ? 8084 : config.port;
+    const protocol = config.port === 8883 ? 'wss' : 'ws';
+    const url = `${protocol}://${config.host}:${wsPort}/mqtt`;
+
+    console.log('MQTT connecting to:', url);
 
     try {
       this.client = mqtt.connect(url, {
