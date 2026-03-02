@@ -1,6 +1,23 @@
 import { create } from 'zustand';
 import type { Mode, CylinderName, SensorName, MaterialColor } from '../types';
 
+// 同步模式物料状态
+interface SyncMaterial {
+  visible: boolean;
+  color: MaterialColor;
+  position: [number, number, number];
+  startTime: number | null;  // 物料开始移动的时间
+  detectedColor: MaterialColor | null;  // 检测到的颜色
+  phase: 0 | 1 | 2;  // 0: 未开始, 1: 第1段动画, 2: 第2段动画
+}
+
+// 检测结果记录
+interface DetectionRecord {
+  timestamp: number;
+  color: MaterialColor;
+  sortedBy: 'sorting1' | 'sorting2';
+}
+
 interface DeviceStore {
   // 状态
   mode: Mode;
@@ -20,6 +37,10 @@ interface DeviceStore {
     color: MaterialColor;
     position: [number, number, number];
   };
+  
+  // 同步模式状态
+  syncMaterial: SyncMaterial;
+  detectionHistory: DetectionRecord[];
 
   // 操作
   setMode: (mode: Mode) => void;
@@ -33,6 +54,13 @@ interface DeviceStore {
   spawnMaterial: () => void;
   clearMaterial: () => void;
   reset: () => void;
+  
+  // 同步模式操作
+  spawnSyncMaterial: (color: MaterialColor) => void;
+  updateSyncMaterial: (updates: Partial<SyncMaterial>) => void;
+  clearSyncMaterial: () => void;
+  addDetectionRecord: (record: DetectionRecord) => void;
+  clearDetectionHistory: () => void;
 }
 
 const initialState = {
@@ -53,6 +81,15 @@ const initialState = {
     color: 'blue' as MaterialColor,
     position: [-1.3, 1.06, 0.6] as [number, number, number],
   },
+  syncMaterial: {
+    visible: false,
+    color: 'blue' as MaterialColor,
+    position: [-1.3, 1.06, 0] as [number, number, number],
+    startTime: null,
+    detectedColor: null,
+    phase: 0 as 0 | 1 | 2,
+  },
+  detectionHistory: [] as DetectionRecord[],
 };
 
 export const useDeviceStore = create<DeviceStore>((set) => ({
@@ -112,4 +149,39 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   })),
 
   reset: () => set(initialState),
+  
+  // 同步模式操作
+  spawnSyncMaterial: (color) => set({
+    syncMaterial: {
+      visible: true,
+      color,
+      position: [-1.3, 1.06, 0],
+      startTime: Date.now(),
+      detectedColor: null,
+      phase: 1,
+    },
+  }),
+
+  updateSyncMaterial: (updates) => set((state) => ({
+    syncMaterial: {
+      ...state.syncMaterial,
+      ...updates,
+    },
+  })),
+
+  clearSyncMaterial: () => set((state) => ({
+    syncMaterial: {
+      ...state.syncMaterial,
+      visible: false,
+      startTime: null,
+      detectedColor: null,
+      phase: 0,
+    },
+  })),
+
+  addDetectionRecord: (record) => set((state) => ({
+    detectionHistory: [...state.detectionHistory, record],
+  })),
+
+  clearDetectionHistory: () => set({ detectionHistory: [] }),
 }));
