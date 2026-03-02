@@ -113,8 +113,12 @@ export function useSyncMode() {
       // 蓝色物料不会触发色标传感器，所以跳过色标检测
       // 直接检测物料传感器
       if (phase === 'DETECT_MATERIAL' && sensors.material && !prevSensors.material) {
-        const t2 = calibration.t2 || now;
-        const phase2Time = now - t2;
+        // 使用第1轮记录的t2（色标传感器位置时间）
+        if (!calibration.t2) {
+          console.error('[校准] 第2轮：缺少第1轮的t2数据，请重新校准');
+          return;
+        }
+        const phase2Time = now - calibration.t2;
         console.log('[校准] 第2轮：物料传感器触发 T3=', now, 'Δt2=', phase2Time);
         setCalibration(prev => ({ ...prev, t3: now, phase2Time }));
         setCurrentMaterialColor('blue');
@@ -139,18 +143,34 @@ export function useSyncMode() {
     // 同步模式下处理消息
     if (step === 'SYNCING') {
       if (message.type === 'sensor') {
-        setSensor(message.name as 'feed' | 'color' | 'material', message.value as boolean);
+        const validSensorNames = ['feed', 'color', 'material'] as const;
+        const name = message.name as string;
+        if (validSensorNames.includes(name as typeof validSensorNames[number])) {
+          setSensor(name as typeof validSensorNames[number], message.value as boolean);
+        }
       } else if (message.type === 'cylinder') {
-        if (message.value as boolean) {
-          extendCylinder(message.name as 'feed' | 'sorting1' | 'sorting2');
-        } else {
-          retractCylinder(message.name as 'feed' | 'sorting1' | 'sorting2');
+        const validCylinderNames = ['feed', 'sorting1', 'sorting2'] as const;
+        const name = message.name as string;
+        if (validCylinderNames.includes(name as typeof validCylinderNames[number])) {
+          if (message.value as boolean) {
+            extendCylinder(name as typeof validCylinderNames[number]);
+          } else {
+            retractCylinder(name as typeof validCylinderNames[number]);
+          }
         }
       } else if (message.type === 'conveyor') {
         if (message.value as boolean) {
           startConveyor();
         } else {
           stopConveyor();
+        }
+      } else if (message.type === 'material') {
+        // 同步模式下处理物料生成消息
+        if (message.value === true || message.value === 1 || message.value === 'spawn') {
+          const color = typeof message.value === 'string' && message.value.includes('black') ? 'black' : 'blue';
+          useDeviceStore.getState().spawnSyncMaterial(color);
+        } else if (message.value === false || message.value === 0 || message.value === 'clear') {
+          useDeviceStore.getState().clearSyncMaterial();
         }
       }
     }

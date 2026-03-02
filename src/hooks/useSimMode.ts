@@ -49,10 +49,21 @@ export function useSimMode() {
     cylinders: { feed: false, sorting1: false, sorting2: false },
     conveyorRunning: false,
   });
+  
+  // 保存最新的发布函数引用，避免闭包陷阱
+  const publishAllFeedbackRef = useRef<() => void>(() => {});
+
+
+  // 更新 ref
+  useEffect(() => {
+    publishAllFeedbackRef.current = publishAllFeedback;
+  });
 
   // 发布反馈信号给PLC
   const publishFeedback = useCallback((subTopic: string, value: boolean | number | string) => {
-    if (step !== 'CONNECTED') return;
+    // 使用 getState() 获取最新状态，避免闭包陷阱
+    const currentStep = useDeviceStore.getState().mode === 'sim' ? 'CONNECTED' : 'IDLE';
+    if (currentStep !== 'CONNECTED') return;
     
     const message: MqttMessage = {
       type: 'feedback',
@@ -67,26 +78,29 @@ export function useSimMode() {
       messagesSent: prev.messagesSent + 1,
       feedbackSignals: prev.feedbackSignals + 1 
     }));
-  }, [step]);
+  }, []);
 
   // 发布所有传感器和设备状态
   const publishAllFeedback = useCallback(() => {
+    // 使用 getState() 获取最新状态
+    const state = useDeviceStore.getState();
+    
     // 传感器状态
-    publishFeedback('sensor_feed', sensors.feed);
-    publishFeedback('sensor_color', sensors.color);
-    publishFeedback('sensor_material', sensors.material);
+    publishFeedback('sensor_feed', state.sensors.feed);
+    publishFeedback('sensor_color', state.sensors.color);
+    publishFeedback('sensor_material', state.sensors.material);
     
     // 磁性开关状态（基于气缸位置）
-    publishFeedback('magnetic_feed_extend', cylinders.feed.extended);
-    publishFeedback('magnetic_feed_retract', !cylinders.feed.extended);
-    publishFeedback('magnetic_sorting1_extend', cylinders.sorting1.extended);
-    publishFeedback('magnetic_sorting1_retract', !cylinders.sorting1.extended);
-    publishFeedback('magnetic_sorting2_extend', cylinders.sorting2.extended);
-    publishFeedback('magnetic_sorting2_retract', !cylinders.sorting2.extended);
+    publishFeedback('magnetic_feed_extend', state.cylinders.feed.extended);
+    publishFeedback('magnetic_feed_retract', !state.cylinders.feed.extended);
+    publishFeedback('magnetic_sorting1_extend', state.cylinders.sorting1.extended);
+    publishFeedback('magnetic_sorting1_retract', !state.cylinders.sorting1.extended);
+    publishFeedback('magnetic_sorting2_extend', state.cylinders.sorting2.extended);
+    publishFeedback('magnetic_sorting2_retract', !state.cylinders.sorting2.extended);
     
     // 传送带状态
-    publishFeedback('conveyor_running', conveyorRunning);
-  }, [sensors, cylinders, conveyorRunning, publishFeedback]);
+    publishFeedback('conveyor_running', state.conveyorRunning);
+  }, [publishFeedback]);
 
   // 检测状态变化并发布反馈
   useEffect(() => {
@@ -148,11 +162,17 @@ export function useSimMode() {
     
     // 处理控制信号
     if (message.type === 'control' || message.type === 'cylinder') {
-      const name = message.name as 'feed' | 'sorting1' | 'sorting2';
+      const validNames = ['feed', 'sorting1', 'sorting2'] as const;
+      const name = message.name as string;
+      if (!validNames.includes(name as typeof validNames[number])) {
+        console.warn('[仿真模式] 无效的气缸名称:', name);
+        return;
+      }
+      const cylinderName = name as typeof validNames[number];
       if (message.value === true || message.value === 1 || message.value === 'extend') {
-        extendCylinder(name);
+        extendCylinder(cylinderName);
       } else {
-        retractCylinder(name);
+        retractCylinder(cylinderName);
       }
     } else if (message.type === 'conveyor') {
       if (message.value === true || message.value === 1 || message.value === 'start') {
@@ -189,8 +209,8 @@ export function useSimMode() {
         onConnect: () => {
           console.log('[仿真模式] MQTT连接成功');
           setStep('CONNECTED');
-          // 连接成功后发布初始状态
-          setTimeout(() => publishAllFeedback(), 500);
+          // 连接成功后发布初始状态，使用 ref 避免闭包陷阱
+          setTimeout(() => publishAllFeedbackRef.current(), 500);
         },
         onDisconnect: () => {
           console.log('[仿真模式] MQTT断开连接');
@@ -204,7 +224,7 @@ export function useSimMode() {
         onMessage: handleMqttMessage,
       }
     );
-  }, [handleMqttMessage, publishAllFeedback]);
+  }, [handleMqttMessage]);
 
   // 断开连接
   const disconnect = useCallback(() => {
