@@ -67,8 +67,7 @@ function App() {
     publishAllFeedback: simPublishFeedback,
   } = useSimMode();
 
-  // 物理模拟（手动模式和仿真模式）
-  usePhysics();
+
 
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
