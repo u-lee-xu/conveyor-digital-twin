@@ -5,6 +5,7 @@ import { ModeSelector } from './components/ui';
 import { ControlPanel, StatusPanel, DemoPanel, SyncPanel } from './components/panels';
 import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
+import { useSyncPhysics } from './hooks/useSyncPhysics';
 import { useDemoMode } from './hooks/useDemoMode';
 import { useSyncMode } from './hooks/useSyncMode';
 
@@ -16,10 +17,12 @@ function App() {
     conveyorRunning, 
     cylinders, 
     sensors, 
-    material 
+    material,
+    syncMaterial,
+    detectionHistory,
   } = useDeviceStore();
 
-  // 启用物理模拟
+  // 启用物理模拟（手动模式）
   usePhysics();
 
   // 演示模式
@@ -42,6 +45,16 @@ function App() {
     disconnect: mqttDisconnect,
   } = useSyncMode();
 
+  // 同步模式物理动画（校准完成后启用）
+  const isSyncPhysicsEnabled = mode === 'sync' && syncStep === 'SYNCING';
+  useSyncPhysics({
+    enabled: isSyncPhysicsEnabled,
+    calibration: {
+      phase1Time: calibration.phase1Time,
+      phase2Time: calibration.phase2Time,
+    },
+  });
+
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
       {/* 3D 场景 */}
@@ -62,12 +75,21 @@ function App() {
           <Sensor position={SENSOR_POSITIONS.color} active={sensors.color} type="color" />
           <Sensor position={SENSOR_POSITIONS.material} active={sensors.material} type="material" />
           
-          {/* 物料 */}
-          {material.visible && (
+          {/* 物料 - 手动/演示模式 */}
+          {material.visible && mode !== 'sync' && (
             <Material 
               position={material.position} 
               color={material.color} 
               visible={material.visible} 
+            />
+          )}
+          
+          {/* 物料 - 同步模式 */}
+          {syncMaterial.visible && mode === 'sync' && (
+            <Material 
+              position={syncMaterial.position} 
+              color={syncMaterial.color} 
+              visible={syncMaterial.visible} 
             />
           )}
         </Scene>
@@ -125,6 +147,7 @@ function App() {
               currentMaterialColor={currentMaterialColor}
               mqttConfig={mqttConfig}
               calibration={calibration}
+              detectionHistory={detectionHistory}
               onConnect={mqttConnect}
               onStartCalibrate={startCalibrate}
               onPlaceMaterial={placeMaterial}

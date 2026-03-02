@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 import { useDeviceStore } from '../../stores';
 import type { CalibrateStep, CalibratePhase, CalibrateRound, CalibrationData, MaterialColor } from '../../hooks/useSyncMode';
 
+// 检测结果记录
+interface DetectionRecord {
+  timestamp: number;
+  color: MaterialColor;
+  sortedBy: 'sorting1' | 'sorting2';
+}
+
 // 预设MQTT服务器
 const MQTT_PRESETS = [
   { name: 'EMQX 公共服务器', host: 'broker.emqx.io', port: 1883 },
@@ -21,6 +28,7 @@ interface SyncPanelProps {
     topic: string;
   };
   calibration: CalibrationData;
+  detectionHistory: DetectionRecord[];
   onConnect: (host: string, port: number, topic: string) => void;
   onStartCalibrate: () => void;
   onPlaceMaterial: () => void;
@@ -37,6 +45,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
   currentMaterialColor,
   mqttConfig,
   calibration,
+  detectionHistory,
   onConnect,
   onStartCalibrate,
   onPlaceMaterial,
@@ -414,6 +423,30 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
               </div>
             </div>
           </div>
+
+          {/* 检测历史记录 */}
+          {step === 'SYNCING' && detectionHistory.length > 0 && (
+            <div className="device-card">
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">检测结果</div>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {detectionHistory.slice(-5).reverse().map((record, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 rounded-lg bg-gray-800/30">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded ${
+                        record.color === 'black' ? 'bg-gray-600' : 'bg-blue-500'
+                      }`}></div>
+                      <span className="text-xs text-gray-300">
+                        {record.color === 'black' ? '黑色' : '蓝色'}物料
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      分拣{record.sortedBy === 'sorting1' ? '1' : '2'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 断开连接 */}
           <button
