@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
 import { mqttService } from '../services/mqtt';
-import type { MqttMessage } from '../services/mqtt';
+import type { ValidatedMqttMessage } from '../services/mqtt';
 
 // 仿真模式步骤
 export type SimStep = 
@@ -65,7 +65,7 @@ export function useSimMode() {
     const currentStep = useDeviceStore.getState().mode === 'sim' ? 'CONNECTED' : 'IDLE';
     if (currentStep !== 'CONNECTED') return;
     
-    const message: MqttMessage = {
+    const message: ValidatedMqttMessage = {
       type: 'feedback',
       name: subTopic,
       value,
@@ -151,7 +151,7 @@ export function useSimMode() {
   }, [step, sensors, cylinders, conveyorRunning, publishFeedback]);
 
   // 处理MQTT控制消息
-  const handleMqttMessage = useCallback((topic: string, message: MqttMessage) => {
+  const handleMqttMessage = useCallback((topic: string, message: ValidatedMqttMessage) => {
     console.log('[仿真模式] 收到控制信号:', topic, message);
     
     setStats(prev => ({ 
