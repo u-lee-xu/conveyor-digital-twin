@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>数字孪生传送带系统 V3</title>
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob:;
+      font-src 'self' data:;
+      connect-src 'self' ws://*:8083 wss://*:8084 ws://localhost:* wss://*:*;
+      worker-src 'self' blob:;
+    " />
   </head>
   <body class="bg-dark-900">
     <div id="root"></div>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
 import { mqttService } from '../services/mqtt';
-import type { MqttMessage } from '../services/mqtt';
+import type { ValidatedMqttMessage } from '../services/mqtt';
 
 // 校准步骤
 export type CalibrateStep = 
@@ -137,7 +137,7 @@ export function useSyncMode() {
   }, [step, phase, round, sensors, calibration.t1, calibration.t2]);
 
   // 处理MQTT消息
-  const handleMqttMessage = useCallback((topic: string, message: MqttMessage) => {
+  const handleMqttMessage = useCallback((topic: string, message: ValidatedMqttMessage) => {
     console.log('MQTT Message:', topic, message);
     
     // 同步模式下处理消息
