@@ -1,0 +1,30 @@
+# 数字孪生网关默认配置
+
+# 网关配置
+gateway:
+  mode: sim              # sync | sim
+  poll_interval: 100     # 轮询间隔(ms)
+  user_id: ""            # 用户ID（从平台获取）
+
+# Modbus配置
+modbus:
+  host: "192.168.1.100"  # PLC IP地址
+  port: 502              # Modbus端口
+  unit_id: 1             # 从站ID
+  timeout: 5             # 连接超时(秒)
+
+# MQTT配置
+mqtt:
+  broker: "broker.emqx.io"
+  port: 8084             # WSS端口
+  use_tls: true
+  username: ""           # 用户名（可选）
+  password: ""           # 密码（可选）
+  keepalive: 60
+
+# 日志配置
+logging:
+  level: INFO
+  file: "gateway.log"
+  max_size: 10485760     # 10MB
+  backup_count: 5
