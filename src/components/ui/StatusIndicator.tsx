@@ -29,10 +29,10 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-dark-800/50 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-      <span className="text-gray-300 text-sm font-medium">{label}</span>
+      <span className="text-white text-sm font-medium">{label}</span>
       <div className="flex items-center gap-2">
         {active && pulse && (
-          <span className="text-xs text-gray-400 animate-pulse">●</span>
+          <span className="text-xs text-white animate-pulse">●</span>
         )}
         <span
           className={`
