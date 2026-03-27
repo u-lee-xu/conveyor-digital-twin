@@ -6,6 +6,7 @@ interface PanelProps {
   className?: string;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+  gradient?: boolean;
 }
 
 export const Panel: React.FC<PanelProps> = ({
@@ -14,37 +15,45 @@ export const Panel: React.FC<PanelProps> = ({
   className = '',
   collapsible = false,
   defaultCollapsed = false,
+  gradient = false,
 }) => {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
     <div
       className={`
-        bg-dark-800/80 backdrop-blur-glass rounded-xl
-        border border-dark-600/50 shadow-lg
+        glass-enhanced rounded-2xl
+        transition-all duration-300
+        ${gradient ? 'gradient-border' : ''}
         ${className}
       `}
     >
       {title && (
         <div
           className={`
-            px-4 py-3 border-b border-dark-600/50
-            ${collapsible ? 'cursor-pointer hover:bg-dark-700/50' : ''}
+            px-5 py-4 border-b border-white/10
+            ${collapsible ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}
           `}
           onClick={() => collapsible && setCollapsed(!collapsed)}
         >
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-200">{title}</h3>
+            <h3 className="text-base font-bold text-white">
+              {gradient && <span className="text-gradient">{title}</span>}
+              {!gradient && title}
+            </h3>
             {collapsible && (
-              <span className="text-gray-400 text-xs">
-                {collapsed ? '▼' : '▲'}
+              <span className={`
+                text-gray-400 text-sm transition-transform duration-300
+                ${collapsed ? 'rotate-180' : ''}
+              `}>
+                ▼
               </span>
             )}
           </div>
         </div>
       )}
       {(!collapsible || !collapsed) && (
-        <div className="p-4">
+        <div className="p-5">
           {children}
         </div>
       )}
