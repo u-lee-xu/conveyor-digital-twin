@@ -1,4 +1,4 @@
-import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
+import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable, Label } from './components/scene';
 import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
 import { ControlPanel, StatusPanel, DemoPanel, SyncPanel, SimPanel } from './components/panels';
@@ -76,16 +76,27 @@ function App() {
           
           {/* 物料台 - 物料初始位置下方 */}
           <MaterialTable position={MATERIAL_TABLE_POSITION} />
+          <Label text="物料台" position={MATERIAL_TABLE_POSITION} offset={[0, 0.8, 0]} color="gray" />
           
           {/* 气缸 */}
           <Cylinder position={CYLINDER_POSITIONS.feed} extended={cylinders.feed.extended} />
+          <Label text="上料气缸" position={CYLINDER_POSITIONS.feed} offset={[0, 1.2, 0]} color="blue" />
+          
           <Cylinder position={CYLINDER_POSITIONS.sorting1} extended={cylinders.sorting1.extended} />
+          <Label text="分拣1" position={CYLINDER_POSITIONS.sorting1} offset={[0, 1.2, 0]} color="purple" />
+          
           <Cylinder position={CYLINDER_POSITIONS.sorting2} extended={cylinders.sorting2.extended} />
+          <Label text="分拣2" position={CYLINDER_POSITIONS.sorting2} offset={[0, 1.2, 0]} color="purple" />
           
           {/* 传感器 */}
           <Sensor position={SENSOR_POSITIONS.feed} active={sensors.feed} type="feed" />
+          <Label text="上料传感器" position={SENSOR_POSITIONS.feed} offset={[0, 0.8, 0]} color="green" />
+          
           <Sensor position={SENSOR_POSITIONS.color} active={sensors.color} type="color" />
+          <Label text="色标传感器" position={SENSOR_POSITIONS.color} offset={[0, 0.8, 0]} color="orange" />
+          
           <Sensor position={SENSOR_POSITIONS.material} active={sensors.material} type="material" />
+          <Label text="物料传感器" position={SENSOR_POSITIONS.material} offset={[0, 0.8, 0]} color="green" />
           
           {/* 物料 - 手动/演示/仿真模式 */}
           {material.visible && (mode === 'manual' || mode === 'auto' || mode === 'sim') && (
