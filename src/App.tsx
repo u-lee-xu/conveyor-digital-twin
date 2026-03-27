@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable } from './components/scene';
 import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
@@ -11,7 +10,6 @@ import { useSyncMode } from './hooks/useSyncMode';
 import { useSimMode } from './hooks/useSimMode';
 
 function App() {
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const { 
     mode, 
     setMode, 
@@ -110,13 +108,7 @@ function App() {
       </div>
 
       {/* 左侧控制面板 */}
-      <div 
-        className={`
-          absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)]
-          overflow-y-auto transition-transform duration-300
-          ${panelCollapsed ? '-translate-x-96' : 'translate-x-0'}
-        `}
-      >
+      <div className="absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
         {/* 项目信息 */}
         <div className="glass rounded-xl p-4 mb-4 gradient-border">
           <div className="flex items-center gap-3">
@@ -190,18 +182,6 @@ function App() {
           </div>
         )}
       </div>
-
-      {/* 折叠按钮 */}
-      <button
-        onClick={() => setPanelCollapsed(!panelCollapsed)}
-        className="absolute top-4 z-20 w-8 h-8 rounded-lg
-                   glass border border-gray-700/50
-                   text-gray-400 hover:text-white transition-colors
-                   flex items-center justify-center text-sm"
-        style={{ left: panelCollapsed ? '1rem' : '21rem' }}
-      >
-        {panelCollapsed ? '▶' : '◀'}
-      </button>
 
       {/* 版本信息 */}
       <div className="absolute bottom-4 right-4 text-xs text-gray-600">
