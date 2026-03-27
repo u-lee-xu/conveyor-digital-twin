@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, createContext, useContext, useCallback, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 interface SceneContextType {
   scene: THREE.Scene | null;
@@ -25,6 +26,7 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const css2DRendererRef = useRef<CSS2DRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const animationIdRef = useRef<number>(0);
   const [sceneState, setSceneState] = useState<THREE.Scene | null>(null);
@@ -55,6 +57,15 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+
+    // 创建CSS2D渲染器用于HTML标签
+    const css2DRenderer = new CSS2DRenderer();
+    css2DRenderer.setSize(window.innerWidth, window.innerHeight);
+    css2DRenderer.domElement.style.position = 'absolute';
+    css2DRenderer.domElement.style.top = '0';
+    css2DRenderer.domElement.style.pointerEvents = 'none';
+    containerRef.current.appendChild(css2DRenderer.domElement);
+    css2DRendererRef.current = css2DRenderer;
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -95,6 +106,7 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
       animationIdRef.current = requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
+      css2DRenderer.render(scene, camera);
     };
     animate();
 
@@ -102,6 +114,7 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      css2DRenderer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
 
