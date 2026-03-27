@@ -121,42 +121,42 @@ function App() {
       {/* 左侧控制面板 */}
       <div className="absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
         {/* 项目信息 */}
-        <div className="glass rounded-xl p-4 mb-4 gradient-border">
+        <div className="glass-enhanced rounded-2xl p-5 mb-6 gradient-border">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <span className="text-white text-lg">⚙️</span>
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <span className="text-white text-xl">⚙️</span>
             </div>
             <div>
-              <h1 className="text-base font-bold text-white">
+              <h1 className="text-lg font-bold text-white">
                 数字孪生传送带系统
               </h1>
-              <p className="text-xs text-gray-500">V3 · React + Three.js + TypeScript</p>
+              <p className="text-xs text-gray-400">V3 · React + Three.js + TypeScript</p>
             </div>
           </div>
         </div>
 
         {/* 模式选择 */}
-        <div className="glass rounded-xl p-4 mb-4 gradient-border">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">运行模式</div>
+        <div className="glass-enhanced rounded-2xl p-5 mb-6 gradient-border">
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">运行模式</div>
           <ModeSelector currentMode={mode} onModeChange={setMode} />
         </div>
 
         {/* 根据模式显示不同面板 */}
         {mode === 'manual' && (
-          <div className="glass rounded-xl p-4 gradient-border">
+          <div className="space-y-6">
             <ControlPanel />
             <StatusPanel />
           </div>
         )}
 
         {mode === 'auto' && (
-          <div className="glass rounded-xl p-4 gradient-border">
+          <div className="glass-enhanced rounded-2xl p-5 gradient-border">
             <DemoPanel demoState={demoState} />
           </div>
         )}
 
         {mode === 'sync' && (
-          <div className="glass rounded-xl p-4 gradient-border">
+          <div className="glass-enhanced rounded-2xl p-5 gradient-border">
             <SyncPanel 
               step={syncStep}
               phase={syncPhase}
