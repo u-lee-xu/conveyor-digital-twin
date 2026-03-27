@@ -53,6 +53,17 @@ export default {
           'purple-pink': 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
           'cyan-blue': 'linear-gradient(135deg, #22d3ee 0%, #3b82f6 100%)',
           'green-cyan': 'linear-gradient(135deg, #10b981 0%, #22d3ee 100%)',
+        },
+        'surface': {
+          panel: 'rgba(15, 23, 42, 0.85)',
+          panelLight: 'rgba(30, 41, 59, 0.9)',
+          elevated: 'rgba(51, 65, 85, 0.5)',
+        },
+        'text': {
+          primary: '#ffffff',
+          secondary: '#e2e8f0',
+          tertiary: '#cbd5e1',
+          muted: '#94a3b8',
         }
       },
       animation: {
@@ -90,6 +101,7 @@ export default {
         'neon-purple': '0 0 10px rgba(168, 85, 247, 0.5), 0 0 20px rgba(168, 85, 247, 0.3)',
         'neon-pink': '0 0 10px rgba(236, 72, 153, 0.5), 0 0 20px rgba(236, 72, 153, 0.3)',
         'glass': '0 8px 32px rgba(0, 0, 0, 0.3)',
+        'elevated': '0 12px 40px rgba(0, 0, 0, 0.4)',
       },
       backdropBlur: {
         'glass': '20px',

@@ -16,7 +16,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: linear-gradient(135deg, #0a0f1a 0%, #0f172a 50%, #0a0f1a 100%);
-  color: #f8fafc;
+  color: #ffffff; /* 提高对比度：从#f8fafc改为纯白 */
 }
 
 /* 动态背景网格 */
