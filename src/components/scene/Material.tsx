@@ -33,8 +33,14 @@ export const Material: React.FC<MaterialProps> = ({ position, color, visible }) 
     }
 
     return () => {
-      if (meshRef.current) {
-        scene.remove(meshRef.current);
+      // 清理时安全地移除 mesh
+      if (meshRef.current && scene) {
+        try {
+          scene.remove(meshRef.current);
+        } catch (e) {
+          // 忽略移除错误
+        }
+        meshRef.current = null;
       }
     };
   }, [scene]); // 只依赖 scene
@@ -53,7 +59,7 @@ export const Material: React.FC<MaterialProps> = ({ position, color, visible }) 
         scene.remove(meshRef.current);
       }
     }
-  }, [scene, visible, position]);
+  }, [scene, visible, position]); // 添加position依赖，确保位置变化时更新mesh位置
 
   // 更新颜色
   useEffect(() => {

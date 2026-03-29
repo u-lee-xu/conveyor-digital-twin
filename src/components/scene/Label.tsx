@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import React from 'react';
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { useScene } from './Scene';
@@ -18,7 +19,7 @@ const colorStyles = {
   gray: { bg: 'rgba(107, 114, 128, 0.9)', border: 'rgba(156, 163, 175, 1)', text: '#f1f5f9' },
 };
 
-export const Label: React.FC<LabelProps> = ({ 
+export const Label: React.FC<LabelProps> = React.memo(({ 
   text, 
   position, 
   offset = [0, 0.5, 0],
@@ -26,18 +27,25 @@ export const Label: React.FC<LabelProps> = ({
 }) => {
   const { scene } = useScene();
   const labelRef = useRef<CSS2DObject | null>(null);
-
+  const isAddedRef = useRef(false);
+  
   useEffect(() => {
     if (!scene) return;
 
     const styles = colorStyles[color];
 
+    // 检测屏幕宽度，调整响应式样式
+    const isMobile = window.innerWidth < 640;
+    const fontSize = isMobile ? '10px' : '12px';
+    const padding = isMobile ? '4px 8px' : '6px 12px';
+    const borderRadius = isMobile ? '6px' : '8px';
+
     // 创建HTML元素
     const div = document.createElement('div');
     div.style.cssText = `
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 12px;
+      padding: ${padding};
+      border-radius: ${borderRadius};
+      font-size: ${fontSize};
       font-weight: 600;
       border: 2px solid ${styles.border};
       background-color: ${styles.bg};
@@ -46,6 +54,7 @@ export const Label: React.FC<LabelProps> = ({
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      transition: all 0.2s ease;
     `;
     div.textContent = text;
 
@@ -58,18 +67,53 @@ export const Label: React.FC<LabelProps> = ({
     const offsetVector = new THREE.Vector3(ox, oy, oz);
     label.position.add(offsetVector);
 
+    // 添加到场景
     scene.add(label);
     labelRef.current = label;
+    isAddedRef.current = true;
 
     return () => {
-      if (labelRef.current) {
-        scene.remove(labelRef.current);
+      // 清理时移除标签
+      if (labelRef.current && scene) {
+        try {
+          scene.remove(labelRef.current);
+        } catch (e) {
+          // 忽略移除错误
+        }
         labelRef.current = null;
+        isAddedRef.current = false;
       }
     };
-  }, [scene, text, position, offset, color]);
+  }, [scene, text, color]); // 只依赖真正会变化的属性
+
+  // 位置和偏移变化时更新标签位置
+  useEffect(() => {
+    if (!labelRef.current) return;
+    
+    const newPosition = new THREE.Vector3(...position);
+    const [ox, oy, oz] = offset;
+    const offsetVector = new THREE.Vector3(ox, oy, oz);
+    newPosition.add(offsetVector);
+    
+    labelRef.current.position.copy(newPosition);
+  }, [position, offset]);
 
   return null;
-};
+}, (prevProps, nextProps) => {
+  // 自定义比较函数：只在真正需要时才重新渲染
+  const prevOffset = prevProps.offset || [0, 0.5, 0];
+  const nextOffset = nextProps.offset || [0, 0.5, 0];
+  
+  return (
+    prevProps.text === nextProps.text &&
+    prevProps.color === nextProps.color &&
+    prevProps.position[0] === nextProps.position[0] &&
+    prevProps.position[1] === nextProps.position[1] &&
+    prevProps.position[2] === nextProps.position[2] &&
+    prevOffset[0] === nextOffset[0] &&
+    prevOffset[1] === nextOffset[1] &&
+    prevOffset[2] === nextOffset[2]
+  );
+});
 
 export default Label;

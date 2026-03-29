@@ -2,7 +2,12 @@ import React from 'react';
 import { Button } from '../ui';
 import { useDeviceStore } from '../../stores';
 
-export const ControlPanel: React.FC = () => {
+interface ControlPanelProps {
+  isMobile?: boolean;
+  onPanelClose?: () => void;
+}
+
+export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, onPanelClose }) => {
   const {
     conveyorRunning,
     cylinders,
@@ -17,6 +22,18 @@ export const ControlPanel: React.FC = () => {
 
   return (
     <div className="space-y-3">
+      {/* 移动端关闭按钮 */}
+      {isMobile && onPanelClose && (
+        <Button
+          onClick={onPanelClose}
+          variant="default"
+          size="sm"
+          className="w-full mb-4"
+        >
+          ▼ 关闭面板
+        </Button>
+      )}
+
       {/* 传送带控制 */}
       <div className="device-card">
         <div className="flex items-center justify-between mb-4">
@@ -31,7 +48,7 @@ export const ControlPanel: React.FC = () => {
             onClick={startConveyor} 
             variant={conveyorRunning ? 'success' : 'default'}
             size="md"
-            className="flex-1 btn-hover-lift"
+            className="flex-1 btn-hover-lift text-white"
             glow
           >
             ▶ 启动
@@ -75,7 +92,7 @@ export const ControlPanel: React.FC = () => {
               onClick={() => retractCylinder('feed')}
               variant={!cylinders.feed.extended ? 'warning' : 'default'}
               size="sm"
-              className="flex-1 btn-hover-lift"
+              className="flex-1 btn-hover-lift text-white"
             >
               ↙ 缩回
             </Button>
@@ -103,7 +120,7 @@ export const ControlPanel: React.FC = () => {
               onClick={() => retractCylinder('sorting1')}
               variant={!cylinders.sorting1.extended ? 'warning' : 'default'}
               size="sm"
-              className="flex-1 btn-hover-lift"
+              className="flex-1 btn-hover-lift text-white"
             >
               ↙ 缩回
             </Button>
@@ -131,7 +148,7 @@ export const ControlPanel: React.FC = () => {
               onClick={() => retractCylinder('sorting2')}
               variant={!cylinders.sorting2.extended ? 'warning' : 'default'}
               size="sm"
-              className="flex-1 btn-hover-lift"
+              className="flex-1 btn-hover-lift text-white"
             >
               ↙ 缩回
             </Button>
