@@ -149,6 +149,8 @@ export function useDemoMode() {
         visible: true,
         color,
         position: MATERIAL_INITIAL_POSITION,
+        onConveyor: false,
+        conveyorDelay: 0,
       },
     });
     

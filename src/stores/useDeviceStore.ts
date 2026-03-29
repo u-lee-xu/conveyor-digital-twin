@@ -36,6 +36,8 @@ interface DeviceStore {
     visible: boolean;
     color: MaterialColor;
     position: [number, number, number];
+    onConveyor: boolean; // 标记物料是否在传送带上（已推出）
+    conveyorDelay: number; // 传送带延迟（毫秒），物料到达传送带中心后的停顿时间
   };
   
   // 同步模式状态
@@ -51,6 +53,8 @@ interface DeviceStore {
   retractCylinder: (name: CylinderName) => void;
   setSensor: (name: SensorName, active: boolean) => void;
   updateMaterialPosition: (position: [number, number, number]) => void;
+  setMaterialOnConveyor: (onConveyor: boolean) => void;
+  setMaterialConveyorDelay: (delay: number) => void;
   spawnMaterial: () => void;
   clearMaterial: () => void;
   reset: () => void;
@@ -80,6 +84,8 @@ const initialState = {
     visible: false,
     color: 'blue' as MaterialColor,
     position: [-1.3, 1.06, 0.6] as [number, number, number],
+    onConveyor: false,
+    conveyorDelay: 0,
   },
   syncMaterial: {
     visible: false,
@@ -133,11 +139,27 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     },
   })),
 
+  setMaterialOnConveyor: (onConveyor) => set((state) => ({
+    material: {
+      ...state.material,
+      onConveyor,
+    },
+  })),
+
+  setMaterialConveyorDelay: (delay) => set((state) => ({
+    material: {
+      ...state.material,
+      conveyorDelay: delay,
+    },
+  })),
+
   spawnMaterial: () => set({
     material: {
       visible: true,
       color: Math.random() > 0.5 ? 'blue' : 'black',
       position: [-1.3, 1.06, 0.6],
+      onConveyor: false,
+      conveyorDelay: 0,
     },
   }),
 
@@ -145,6 +167,8 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     material: {
       ...state.material,
       visible: false,
+      onConveyor: false,
+      conveyorDelay: 0,
     },
   })),
 

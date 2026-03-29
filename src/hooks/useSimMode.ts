@@ -189,6 +189,8 @@ export function useSimMode() {
             visible: true,
             color,
             position: [-1.3, 1.06, 0.6],
+            onConveyor: false,
+            conveyorDelay: 0,
           },
         });
       } else if (message.value === false || message.value === 0 || message.value === 'clear') {

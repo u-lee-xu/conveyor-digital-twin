@@ -144,7 +144,7 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
   return (
     <SceneContext.Provider value={{ scene: sceneState, add, remove }}>
       <div ref={containerRef} className="w-full h-full" />
-      {sceneState && children}
+      {children}
     </SceneContext.Provider>
   );
 };

@@ -72,12 +72,14 @@ export function usePhysics() {
           if (distance < 0.2) {
             const cylinder = cylinders[name as keyof typeof cylinders];
             if (cylinder?.extended) {
-              // 气缸推出物料 - 将物料沿 Z 轴负方向移动（远离气缸）
+              // 气缸推出物料
               const [x, y, z] = material.position;
-              const newZ = z - 0.02; // 推出速度（往Z轴负方向）
+              let newZ: number;
 
               if (name === 'feed') {
                 // 上料气缸：物料推到传送带轴线（Z=0）停止
+                // 上料气缸在 Z=1.2，物料从 Z=0.6 推到 Z=0（沿 Z 轴负方向，远离气缸）
+                newZ = z - 0.05; // 推出速度（往Z轴负方向）
                 if (newZ <= 0) {
                   state.updateMaterialPosition([x, y, 0]);
                 } else {
@@ -85,7 +87,10 @@ export function usePhysics() {
                 }
               } else {
                 // 分拣气缸：物料推出传送带后清除
-                if (newZ < CONVEYOR_Z_MIN - 0.3) {
+                // 分拣气缸在 Z=0.8（传送带右侧），物料在 Z=0
+                // 物料应往 Z 轴正方向移动（远离气缸，远离 Z=0.8）
+                newZ = z + 0.05; // 推出速度（往Z轴正方向，远离气缸）
+                if (newZ > CONVEYOR_Z_MAX) {
                   state.clearMaterial();
                 } else {
                   state.updateMaterialPosition([x, y, newZ]);

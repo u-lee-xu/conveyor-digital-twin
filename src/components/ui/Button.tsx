@@ -11,23 +11,23 @@ interface ButtonProps {
 }
 
 const variantStyles = {
-  primary: 'bg-gradient-to-r from-accent-primary-500 to-accent-primary-600 hover:from-accent-primary-600 hover:to-accent-primary-500 text-white',
-  success: 'bg-gradient-to-r from-accent-success-500 to-accent-success-600 hover:from-accent-success-600 hover:to-accent-success-500 text-white',
-  warning: 'bg-gradient-to-r from-accent-warning-500 to-accent-warning-600 hover:from-accent-warning-600 hover:to-accent-warning-500 text-white',
-  danger: 'bg-gradient-to-r from-accent-danger-500 to-accent-danger-600 hover:from-accent-danger-600 hover:to-accent-danger-500 text-white',
-  default: 'bg-dark-700 hover:bg-dark-600 text-gray-200 border border-dark-600',
-  gradient: 'bg-gradient-to-r from-accent-primary-500 via-neon-purple to-neon-pink hover:from-accent-primary-400 hover:via-neon-purple hover:to-neon-pink text-white',
-  neon: 'bg-dark-800 hover:bg-dark-700 text-neon-blue border border-neon-blue',
+  primary: 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white shadow-lg shadow-blue-500/30',
+  success: 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white shadow-lg shadow-green-500/30',
+  warning: 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white shadow-lg shadow-amber-500/30',
+  danger: 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white shadow-lg shadow-red-500/30',
+  default: 'bg-slate-700/80 hover:bg-slate-600/90 text-slate-100 border border-slate-600/50 backdrop-blur-sm',
+  gradient: 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-400 hover:via-purple-400 hover:to-pink-400 text-white shadow-lg shadow-purple-500/30',
+  neon: 'bg-slate-800/90 hover:bg-slate-700/90 text-cyan-400 border border-cyan-500/50 shadow-lg shadow-cyan-500/20',
 };
 
 const glowStyles = {
-  primary: 'hover:shadow-neon-blue',
-  success: 'hover:shadow-glow-green',
-  warning: 'hover:shadow-glow-orange',
-  danger: 'hover:shadow-neon-pink',
-  default: '',
-  gradient: 'hover:shadow-neon-purple',
-  neon: 'hover:shadow-neon-blue',
+  primary: 'hover:shadow-blue-500/50 hover:shadow-xl',
+  success: 'hover:shadow-green-500/50 hover:shadow-xl',
+  warning: 'hover:shadow-amber-500/50 hover:shadow-xl',
+  danger: 'hover:shadow-red-500/50 hover:shadow-xl',
+  default: 'hover:shadow-slate-500/20',
+  gradient: 'hover:shadow-purple-500/50 hover:shadow-xl',
+  neon: 'hover:shadow-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/20',
 };
 
 const sizeStyles = {
@@ -45,16 +45,27 @@ export const Button: React.FC<ButtonProps> = ({
   className = '',
   glow = false,
 }) => {
+  const handlePress = () => {
+    // 移动端震动反馈
+    if ('vibrate' in navigator && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(50); // 轻微震动50ms
+    }
+    
+    if (onClick) {
+      onClick();
+    }
+  };
+
   return (
     <button
-      onClick={onClick}
+      onClick={handlePress}
       disabled={disabled}
       className={`
-        rounded-xl font-semibold transition-all duration-300
+        rounded-xl font-semibold transition-all duration-150
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${glow ? glowStyles[variant] : 'hover:shadow-lg'}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer btn-hover-lift'}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer btn-hover-lift btn-active'}
         ${className}
       `}
     >
