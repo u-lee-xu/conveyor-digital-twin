@@ -79,9 +79,8 @@ export function usePhysics() {
               const [mx, my, mz] = material.position;
               
               // 气缸推板/头部的世界Z坐标
-              // 上料气缸: rodLen = 1.1, offset = 1.11
-              // 分拣气缸: rodLen = 0.7, offset = 0.72
-              const surfaceOffset = name === 'feed' ? 1.11 : 0.72;
+              // 统一使用推板 (offset = 0.72)
+              const surfaceOffset = 0.72;
               const plateSurfaceZ = cz - (cylinder.currentExtension + surfaceOffset);
 
               // 物料半径 0.075，其靠近气缸一侧的Z坐标为 mz + 0.075
