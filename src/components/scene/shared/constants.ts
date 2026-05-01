@@ -24,14 +24,14 @@ export const CONVEYOR_Z_MAX = 0.35; // 缩小范围，仅包含传送带宽度
 // 传感器检测范围
 export const SENSOR_RANGE = 0.15;
 
-// 物料初始位置
+// 物料初始位置 - Z=0.6，配合 1.3 长度气缸
 export const MATERIAL_INITIAL_POSITION: [number, number, number] = [-1.3, 1.06, 0.6];
 
-// 气缸3D位置 - Y=1.12，气缸底部Y=1.04高于辊筒顶部Y=1.0
+// 气缸3D位置 - 统一 Z=1.5，缸体长度 1.3
 export const CYLINDER_POSITIONS = {
-  feed: [-1.3, 1.12, 1.2] as [number, number, number],
-  sorting1: [-0.2, 1.12, 1.2] as [number, number, number], 
-  sorting2: [0.9, 1.12, 1.2] as [number, number, number],
+  feed: [-1.3, 1.12, 1.5] as [number, number, number],
+  sorting1: [-0.2, 1.12, 0.8] as [number, number, number], 
+  sorting2: [0.9, 1.12, 0.8] as [number, number, number],
 } as const;
 
 // 传感器3D位置
@@ -41,5 +41,5 @@ export const SENSOR_POSITIONS = {
   material: [0.9, 1.45, 0] as [number, number, number],
 } as const;
 
-// 物料台位置
+// 物料台位置 - Z=0.6
 export const MATERIAL_TABLE_POSITION: [number, number, number] = [-1.3, 0.98, 0.6];

@@ -78,24 +78,23 @@ export function usePhysics() {
               const [, , cz] = CYLINDER_POSITIONS[name as keyof typeof cylinders];
               const [mx, my, mz] = material.position;
               
-              // 气缸推板表面的世界Z坐标
-              // 气缸在cz，推杆向负Z方向延伸
-              // 推板中心在 localY = currentExtension + 0.6
-              // 推板厚度 0.03，表面在 localY = currentExtension + 0.615
-              const plateSurfaceZ = cz - (cylinder.currentExtension + 0.615);
+              // 气缸推板/头部的世界Z坐标
+              // 上料气缸: rodLen = 1.1, offset = 1.11
+              // 分拣气缸: rodLen = 0.7, offset = 0.72
+              const surfaceOffset = name === 'feed' ? 1.11 : 0.72;
+              const plateSurfaceZ = cz - (cylinder.currentExtension + surfaceOffset);
 
-              if (name === 'feed') {
-                // 上料气缸：物料在 Z=0.6，被推向 Z=0
-                // 如果推板表面已经触及或超过物料侧面 (mz + 0.075)
-                if (plateSurfaceZ <= mz + 0.075) {
-                  const newZ = Math.max(0, plateSurfaceZ - 0.075);
-                  state.updateMaterialPosition([mx, my, newZ]);
-                }
-              } else {
-                // 分拣气缸：物料在 Z=0，被推离传送带
-                if (plateSurfaceZ <= mz + 0.075) {
-                  const newZ = plateSurfaceZ - 0.075;
-                  if (newZ < CONVEYOR_Z_MIN - 0.2) {
+              // 物料半径 0.075，其靠近气缸一侧的Z坐标为 mz + 0.075
+              if (plateSurfaceZ <= mz + 0.075) {
+                // 发生碰撞，物料被推着走
+                const newZ = plateSurfaceZ - 0.075;
+                
+                if (name === 'feed') {
+                  // 上料气缸：确保不推过中轴线 (0)
+                  state.updateMaterialPosition([mx, my, Math.max(0, newZ)]);
+                } else {
+                  // 分拣气缸：如果推离传送带范围则清除
+                  if (newZ < CONVEYOR_Z_MIN - 0.1) {
                     state.clearMaterial();
                     state.setSensor('color', false);
                     state.setSensor('material', false);

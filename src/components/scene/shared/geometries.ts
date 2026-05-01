@@ -10,11 +10,11 @@ export const geometries = {
   
   // 气缸主体
   cylinderBody: new THREE.BoxGeometry(0.18, 0.8, 0.18),
-  cylinderBodyLong: new THREE.BoxGeometry(0.18, 1.2, 0.18),
+  cylinderBodyLong: new THREE.BoxGeometry(0.18, 1.3, 0.18),
   
   // 气缸推杆
-  cylinderRod: new THREE.CylinderGeometry(0.035, 0.035, 0.8, 16),
-  cylinderRodShort: new THREE.CylinderGeometry(0.035, 0.035, 0.75, 16),
+  cylinderRod: new THREE.CylinderGeometry(0.035, 0.035, 0.7, 16),
+  cylinderRodLong: new THREE.CylinderGeometry(0.035, 0.035, 1.1, 16),
   
   // 气缸推板 (优化比例)
   cylinderPushPlate: new THREE.BoxGeometry(0.2, 0.04, 0.18),
@@ -23,6 +23,7 @@ export const geometries = {
   valveBody: new THREE.BoxGeometry(0.04, 0.04, 0.04),
   // 节流阀调节头
   valveCap: new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8),
+  
   // 气管头
   tubeConnector: new THREE.CylinderGeometry(0.02, 0.02, 0.04, 8),
   
