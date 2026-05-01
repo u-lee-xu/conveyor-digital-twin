@@ -1,73 +1,50 @@
-# React + TypeScript + Vite
+# 数字孪生传送带分拣系统 V3
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+这是一个基于 React, Three.js 和 ModbusTCP 的数字孪生项目。
 
-Currently, two official plugins are available:
+## 功能特点
+- **手动模式**: 直接控制气缸、传送带和投放物料。
+- **演示模式**: 自动运行分拣流程。
+- **同步模式**: 与真实 PLC 状态实时同步。
+- **仿真模式**: 网页作为虚拟产线，与 PLC (实体或仿真) 进行闭环控制调试。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 运行环境
+- Node.js (建议 v18+)
+- ModbusTCP 服务器 (如仿真软件 Modbus Poll/Slave 或真实 PLC)
 
-## React Compiler
+## 快速开始
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1. 安装依赖
+```bash
+npm install
+cd websocket-server && npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 2. 启动服务 (推荐)
+使用以下命令同时启动前端开发服务器和 WebSocket 代理服务器：
+```bash
+npm run start:all
 ```
+
+或者分开启动：
+
+**启动 WebSocket 代理服务器:**
+```bash
+npm run websocket:start
+```
+
+**启动前端:**
+```bash
+npm run dev
+```
+
+## 通信架构
+网页前端 <--WebSocket (8081)--> Node.js 代理服务器 <--ModbusTCP (502)--> PLC
+
+## Modbus 地址定义 (线圈)
+- 0: 启动
+- 1: 复位
+- 2-7: 气缸磁性开关反馈
+- 8-10: 传感器反馈
+- 100-102: 气缸控制阀
+- 103: 传送带运行

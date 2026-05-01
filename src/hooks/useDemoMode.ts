@@ -1,10 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useDeviceStore } from '../stores';
-import { SENSORS, CYLINDERS, MATERIAL_INITIAL_POSITION } from '../components/scene/shared';
-
-// 演示模式专用常量
-const DEMO_CONVEYOR_SPEED = 0.012;
-const DEMO_SENSOR_RANGE = 0.2;
+import { SENSORS, CYLINDERS } from '../components/scene/shared';
 
 // 状态机状态
 type DemoState = 
@@ -21,13 +17,10 @@ type DemoState =
 
 export function useDemoMode() {
   const mode = useDeviceStore((state) => state.mode);
-  const setSensor = useDeviceStore((state) => state.setSensor);
-  const updateMaterialPosition = useDeviceStore((state) => state.updateMaterialPosition);
-  const clearMaterial = useDeviceStore((state) => state.clearMaterial);
-  const startConveyor = useDeviceStore((state) => state.startConveyor);
-  const stopConveyor = useDeviceStore((state) => state.stopConveyor);
   const extendCylinder = useDeviceStore((state) => state.extendCylinder);
   const retractCylinder = useDeviceStore((state) => state.retractCylinder);
+  const startConveyor = useDeviceStore((state) => state.startConveyor);
+  const stopConveyor = useDeviceStore((state) => state.stopConveyor);
 
   // 使用useState而不是useRef，以便触发UI更新
   const [demoState, setDemoState] = useState<DemoState>('IDLE');
@@ -47,15 +40,6 @@ export function useDemoMode() {
       return () => clearTimeout(timeoutId);
     });
   }, []);
-
-  // 检测传感器
-  const checkSensors = useCallback((materialX: number) => {
-    Object.entries(SENSORS).forEach(([name, sensorX]) => {
-      const distance = Math.abs(materialX - sensorX);
-      const isTriggered = distance < DEMO_SENSOR_RANGE;
-      setSensor(name as keyof typeof SENSORS, isTriggered);
-    });
-  }, [setSensor]);
 
   // 等待物料到达指定位置
   const waitForMaterialPosition = useCallback((targetX: number): Promise<void> => {
@@ -84,54 +68,40 @@ export function useDemoMode() {
     });
   }, []);
 
-  // 推出物料动画（分拣用）- 与气缸伸出同步
-  const pushMaterial = useCallback(async () => {
-    return new Promise<void>((resolve) => {
-      const push = () => {
+  // 等待物料到达指定Z位置（用于上料完成判断）
+  const waitForMaterialZ = useCallback((targetZ: number): Promise<void> => {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (stoppedRef.current) { resolve(); return; }
         const currentMaterial = useDeviceStore.getState().material;
-        if (currentMaterial.visible) {
-          const [x, y, z] = currentMaterial.position;
-          const newZ = z - 0.04; // 推出速度
-          
-          if (newZ < -0.5) {
-            clearMaterial();
-            resolve();
-          } else {
-            updateMaterialPosition([x, y, newZ]);
-            requestAnimationFrame(push);
-          }
-        } else {
+        if (!currentMaterial.visible) { resolve(); return; }
+        
+        // feed方向是减小Z
+        if (currentMaterial.position[2] <= targetZ) {
           resolve();
+        } else {
+          requestAnimationFrame(check);
         }
       };
-      push();
+      check();
     });
-  }, [clearMaterial, updateMaterialPosition]);
+  }, []);
 
-  // 上料推送动画（从物料台推到传送带）
-  const feedMaterial = useCallback(async () => {
-    return new Promise<void>((resolve) => {
-      const feed = () => {
+  // 等待物料被清除（用于分拣完成判断）
+  const waitForMaterialCleared = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (stoppedRef.current) { resolve(); return; }
         const currentMaterial = useDeviceStore.getState().material;
-        if (currentMaterial.visible) {
-          const [x, y, z] = currentMaterial.position;
-          const newZ = z - 0.03; // 往Z轴负方向移动
-          
-          // 当物料到达传送带中心（Z≈0）时停止
-          if (newZ <= 0) {
-            updateMaterialPosition([x, y, 0]);
-            resolve();
-          } else {
-            updateMaterialPosition([x, y, newZ]);
-            requestAnimationFrame(feed);
-          }
-        } else {
+        if (!currentMaterial.visible) {
           resolve();
+        } else {
+          requestAnimationFrame(check);
         }
       };
-      feed();
+      check();
     });
-  }, [updateMaterialPosition]);
+  }, []);
 
   // 启动演示循环
   const startDemo = useCallback(async () => {
@@ -144,35 +114,26 @@ export function useDemoMode() {
     materialColorRef.current = color;
     
     setDemoState('SPAWN');
-    useDeviceStore.setState({
-      material: {
-        visible: true,
-        color,
-        position: MATERIAL_INITIAL_POSITION,
-        onConveyor: false,
-        conveyorDelay: 0,
-      },
-    });
+    useDeviceStore.getState().spawnMaterial();
+    // 强制设置颜色（store的spawnMaterial是随机的，这里为了状态一致性）
+    useDeviceStore.setState(state => ({
+        material: { ...state.material, color }
+    }));
     
-    await delay(500);
+    await delay(1000);
     
     // 上料气缸推出
     setDemoState('FEEDING');
     extendCylinder('feed');
     
-    // 推送物料到传送带上
-    await feedMaterial();
-    
-    // 上料完成后触发上料传感器
-    setSensor('feed', true);
-    await delay(300);
-    setSensor('feed', false);
+    // 等待物理引擎将物料推到传送带上（Z=0）
+    await waitForMaterialZ(0.05);
     await delay(200);
     
     // 上料气缸缩回
     setDemoState('FEED_RETRACT');
     retractCylinder('feed');
-    await delay(300);
+    await delay(500);
     
     // 启动传送带
     setDemoState('TRANSIT');
@@ -182,97 +143,55 @@ export function useDemoMode() {
     const isBlack = materialColorRef.current === 'black';
     const targetStopX = isBlack ? CYLINDERS.sorting1 : CYLINDERS.sorting2;
     
-    // 传送带动画循环 - 物料一直移动直到被分拣
-    let animationStopped = false;
-    const animateTransit = () => {
-      // 检查是否应该停止
-      if (stoppedRef.current || animationStopped) return;
-      
-      const currentMaterial = useDeviceStore.getState().material;
-      if (currentMaterial.visible && useDeviceStore.getState().mode === 'auto') {
-        const [x, y, z] = currentMaterial.position;
-        const newX = x + DEMO_CONVEYOR_SPEED;
-        
-        // 检测传感器
-        checkSensors(newX);
-        
-        // 更新位置
-        updateMaterialPosition([newX, y, z]);
-        requestAnimationFrame(animateTransit);
-      }
-    };
-    animateTransit();
-    
-    // 等待物料到达色标传感器位置
-    await waitForMaterialPosition(SENSORS.color);
-    
-    // 色标传感器检测颜色
-    // 黑色物料触发色标传感器，蓝色不触发
-    setSensor('color', isBlack);
-    await delay(300);
-    setSensor('color', false);
+    // 等待物料到达色标传感器位置附近进行检测（物理引擎会自动触发传感器）
+    await waitForMaterialPosition(SENSORS.color - 0.05);
+    // 缩短延迟，仅留出极短时间确保传感器触发
+    await delay(100); 
     
     // 等待物料到达目标分拣位置
+    // 对于分拣1，位置就是 -0.2；对于分拣2，位置是 0.9
     await waitForMaterialPosition(targetStopX);
     
-    // 停止动画循环和传送带
-    animationStopped = true;
+    // 到达位置，停止传送带
     stopConveyor();
+    // 稍微等待传送带完全停止
+    await delay(100);
     
     // 根据颜色选择分拣气缸
     if (isBlack) {
       // 黑色：分拣1推出
       setDemoState('SORTING1');
-      // 将物料精确移动到气缸位置
-      const currentMaterial = useDeviceStore.getState().material;
-      if (currentMaterial.visible) {
-        updateMaterialPosition([CYLINDERS.sorting1, currentMaterial.position[1], currentMaterial.position[2]]);
-      }
-      await delay(50);
-      
-      // 气缸伸出和物料推出同时进行
       extendCylinder('sorting1');
-      await pushMaterial(); // 物料推出的同时气缸在伸出
+      
+      // 等待物理引擎将物料推离传送带（被清除）
+      await waitForMaterialCleared();
       
       // 缩回气缸
       setDemoState('SORTING1_RETRACT');
       retractCylinder('sorting1');
-      await delay(300);
+      await delay(500);
     } else {
       // 蓝色：分拣2推出
       setDemoState('SORTING2');
-      // 将物料精确移动到气缸位置
-      const currentMaterial = useDeviceStore.getState().material;
-      if (currentMaterial.visible) {
-        updateMaterialPosition([CYLINDERS.sorting2, currentMaterial.position[1], currentMaterial.position[2]]);
-      }
-      await delay(50);
-      
-      // 气缸伸出和物料推出同时进行
       extendCylinder('sorting2');
-      await pushMaterial(); // 物料推出的同时气缸在伸出
+      
+      // 等待物理引擎将物料推离传送带（被清除）
+      await waitForMaterialCleared();
       
       // 缩回气缸
       setDemoState('SORTING2_RETRACT');
       retractCylinder('sorting2');
-      await delay(300);
+      await delay(500);
     }
     
     // 完成一个循环
     setDemoState('COMPLETE');
-    clearMaterial();
-    
-    // 重置传感器
-    setSensor('feed', false);
-    setSensor('color', false);
-    setSensor('material', false);
-    
     await delay(1000);
     
     // 重新开始
     setDemoState('IDLE');
     isRunningRef.current = false;
-  }, [extendCylinder, retractCylinder, startConveyor, stopConveyor, setSensor, clearMaterial, checkSensors, updateMaterialPosition, waitForMaterialPosition, pushMaterial, delay]);
+  }, [extendCylinder, retractCylinder, startConveyor, stopConveyor, waitForMaterialPosition, waitForMaterialZ, waitForMaterialCleared, delay]);
 
   // 当模式切换时启动/停止演示
   useEffect(() => {

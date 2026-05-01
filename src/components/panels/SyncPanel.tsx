@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDeviceStore } from '../../stores';
 import type { CalibrateStep, CalibratePhase, CalibrateRound, CalibrationData, MaterialColor } from '../../hooks/useSyncMode';
+import type { ModbusStatus } from '../../services/modbus';
 
 // 检测结果记录
 interface DetectionRecord {
@@ -9,12 +10,10 @@ interface DetectionRecord {
   sortedBy: 'sorting1' | 'sorting2';
 }
 
-// 预设MQTT服务器
-const MQTT_PRESETS = [
-  { name: 'EMQX 公共服务器', host: 'broker.emqx.io', port: 1883 },
-  { name: 'Eclipse Mosquitto', host: 'test.mosquitto.org', port: 1883 },
-  { name: 'HiveMQ 公共服务器', host: 'broker.hivemq.com', port: 1883 },
-  { name: '自定义服务器', host: '', port: 1883 },
+// 预设ModbusTCP服务器
+const MODBUS_PRESETS = [
+  { name: '本地服务器', host: '127.0.0.1', port: 502 },
+  { name: '自定义服务器', host: '', port: 502 },
 ];
 
 interface SyncPanelProps {
@@ -22,14 +21,14 @@ interface SyncPanelProps {
   phase: CalibratePhase;
   round: CalibrateRound;
   currentMaterialColor: MaterialColor;
-  mqttConfig: {
+  modbusConfig: {
     host: string;
     port: number;
-    topic: string;
   };
+  modbusStatus: ModbusStatus;
   calibration: CalibrationData;
   detectionHistory: DetectionRecord[];
-  onConnect: (host: string, port: number, topic: string) => void;
+  onConnect: (host: string, port: number) => void;
   onStartCalibrate: () => void;
   onPlaceMaterial: () => void;
   onNextRound: () => void;
@@ -43,7 +42,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
   phase,
   round,
   currentMaterialColor,
-  mqttConfig,
+  modbusConfig,
   calibration,
   detectionHistory,
   onConnect,
@@ -54,22 +53,16 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
   onStartSync,
   onDisconnect,
 }) => {
-  const [host, setHost] = useState(mqttConfig.host);
-  const [port, setPort] = useState(mqttConfig.port.toString());
-  const [topic, setTopic] = useState(mqttConfig.topic);
+  const [host, setHost] = useState(modbusConfig.host);
+  const [port, setPort] = useState(modbusConfig.port.toString());
   const [selectedPreset, setSelectedPreset] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
 
   const { sensors, conveyorRunning } = useDeviceStore();
 
-  // 计算WebSocket地址
-  const wsPort = parseInt(port) === 1883 ? 8083 : parseInt(port) === 8883 ? 8084 : parseInt(port);
-  const wsProtocol = parseInt(port) === 8883 ? 'wss' : 'ws';
-  const wsUrl = `${wsProtocol}://${host}:${wsPort}/mqtt`;
-
   const handlePresetChange = (index: number) => {
     setSelectedPreset(index);
-    const preset = MQTT_PRESETS[index];
+    const preset = MODBUS_PRESETS[index];
     if (preset.host) {
       setHost(preset.host);
       setPort(preset.port.toString());
@@ -77,7 +70,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
   };
 
   const handleConnect = () => {
-    onConnect(host, parseInt(port) || 1883, topic);
+    onConnect(host, parseInt(port) || 502);
   };
 
   // 获取校准阶段进度
@@ -104,10 +97,10 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* MQTT连接配置 */}
+      {/* ModbusTCP连接配置 */}
       {step === 'IDLE' && (
         <div className="device-card">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">MQTT 连接配置</div>
+          <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">ModbusTCP 连接配置</div>
           
           <div className="space-y-3">
             {/* 服务器选择 */}
@@ -118,7 +111,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
                 onChange={(e) => handlePresetChange(parseInt(e.target.value))}
                 className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50 cursor-pointer"
               >
-                {MQTT_PRESETS.map((preset, index) => (
+                {MODBUS_PRESETS.map((preset, index) => (
                   <option key={index} value={index}>{preset.name}</option>
                 ))}
               </select>
@@ -130,7 +123,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
                 type="text"
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
-                placeholder="broker.emqx.io"
+                placeholder="127.0.0.1"
                 className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
               />
             </div>
@@ -141,18 +134,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
                 type="text"
                 value={port}
                 onChange={(e) => setPort(e.target.value)}
-                placeholder="1883"
-                className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
-              />
-            </div>
-            
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">主题前缀</label>
-              <input
-                type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="digital-twin/user1"
+                placeholder="502"
                 className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
               />
             </div>
@@ -161,7 +143,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
               onClick={handleConnect}
               className="w-full py-2 px-4 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all"
             >
-              连接 MQTT
+              连接 ModbusTCP
             </button>
             
             {/* 帮助按钮 */}
@@ -170,7 +152,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
               className="w-full py-2 px-4 rounded-lg bg-gray-700/30 text-gray-400 text-sm hover:bg-gray-700/50 transition-all flex items-center justify-center gap-2"
             >
               <span>?</span>
-              <span>MQTT 配置说明</span>
+              <span>ModbusTCP 配置说明</span>
               <span className={`transform transition-transform ${showHelp ? 'rotate-180' : ''}`}>▼</span>
             </button>
             
@@ -181,56 +163,27 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
                 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">WebSocket 地址:</span>
-                    <code className="text-xs text-cyan-400 bg-gray-900/50 px-2 py-1 rounded">{wsUrl}</code>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">订阅主题:</span>
-                    <code className="text-xs text-cyan-400 bg-gray-900/50 px-2 py-1 rounded">{topic}/#</code>
+                    <span className="text-xs text-gray-500">ModbusTCP 地址:</span>
+                    <code className="text-xs text-cyan-400 bg-gray-900/50 px-2 py-1 rounded">{host}:{port}</code>
                   </div>
                 </div>
                 
                 <div className="border-t border-gray-700/50 pt-3">
-                  <div className="text-xs text-gray-400 font-medium mb-2">消息格式</div>
+                  <div className="text-xs text-gray-400 font-medium mb-2">地址映射</div>
                   
                   <div className="space-y-2">
                     <div>
-                      <div className="text-xs text-gray-500 mb-1">传感器状态:</div>
+                      <div className="text-xs text-gray-500 mb-1">线圈（写入传感器信号）:</div>
                       <code className="text-xs text-green-400 bg-gray-900/50 px-2 py-1 rounded block overflow-x-auto">
-                        {`{"type":"sensor","name":"feed","value":true}`}
+                        地址0: 上料传感器 | 地址1: 色标传感器 | 地址2: 物料传感器
                       </code>
                     </div>
                     
                     <div>
-                      <div className="text-xs text-gray-500 mb-1">气缸控制:</div>
+                      <div className="text-xs text-gray-500 mb-1">离散输入（读取控制信号）:</div>
                       <code className="text-xs text-yellow-400 bg-gray-900/50 px-2 py-1 rounded block overflow-x-auto">
-                        {`{"type":"cylinder","name":"sorting1","value":true}`}
+                        地址0-5: 气缸控制 | 地址6: 传送带 | 地址7: 物料生成
                       </code>
-                    </div>
-                    
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">传送带控制:</div>
-                      <code className="text-xs text-blue-400 bg-gray-900/50 px-2 py-1 rounded block overflow-x-auto">
-                        {`{"type":"conveyor","name":"main","value":true}`}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="border-t border-gray-700/50 pt-3">
-                  <div className="text-xs text-gray-400 font-medium mb-2">主题列表</div>
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">传感器:</span>
-                      <code className="text-cyan-400">{topic}/sensors</code>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">气缸:</span>
-                      <code className="text-cyan-400">{topic}/cylinders</code>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">传送带:</span>
-                      <code className="text-cyan-400">{topic}/conveyor</code>
                     </div>
                   </div>
                 </div>
@@ -256,7 +209,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
           {/* 连接状态 */}
           <div className="device-card">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-gray-200">MQTT 状态</span>
+              <span className="text-sm font-medium text-gray-200">ModbusTCP 状态</span>
               <span className="status-badge status-badge-active pulse-indicator">
                 已连接
               </span>
@@ -264,15 +217,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-gray-500">服务器:</span>
-                <code className="text-cyan-400">{mqttConfig.host}:{mqttConfig.port}</code>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">WebSocket:</span>
-                <code className="text-cyan-400">{wsProtocol}://{mqttConfig.host}:{mqttConfig.port === 1883 ? 8083 : mqttConfig.port === 8883 ? 8084 : mqttConfig.port}/mqtt</code>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">主题前缀:</span>
-                <code className="text-cyan-400">{mqttConfig.topic}</code>
+                <code className="text-cyan-400">{modbusConfig.host}:{modbusConfig.port}</code>
               </div>
             </div>
           </div>
@@ -437,7 +382,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
         <>
           <div className="device-card">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-gray-200">MQTT 状态</span>
+              <span className="text-sm font-medium text-gray-200">ModbusTCP 状态</span>
               <span className={`status-badge ${step === 'SYNCING' ? 'status-badge-active pulse-indicator' : 'status-badge-inactive'}`}>
                 {step === 'SYNCING' ? '同步中' : '已校准'}
               </span>
@@ -445,15 +390,7 @@ export const SyncPanel: React.FC<SyncPanelProps> = ({
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-gray-500">服务器:</span>
-                <code className="text-cyan-400">{mqttConfig.host}:{mqttConfig.port}</code>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">WebSocket:</span>
-                <code className="text-cyan-400">{wsProtocol}://{mqttConfig.host}:{mqttConfig.port === 1883 ? 8083 : mqttConfig.port === 8883 ? 8084 : mqttConfig.port}/mqtt</code>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">主题前缀:</span>
-                <code className="text-cyan-400">{mqttConfig.topic}</code>
+                <code className="text-cyan-400">{modbusConfig.host}:{modbusConfig.port}</code>
               </div>
             </div>
           </div>
