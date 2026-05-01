@@ -23,9 +23,9 @@ interface DeviceStore {
   mode: Mode;
   conveyorRunning: boolean;
   cylinders: {
-    feed: { extended: boolean };
-    sorting1: { extended: boolean };
-    sorting2: { extended: boolean };
+    feed: { extended: boolean; currentExtension: number };
+    sorting1: { extended: boolean; currentExtension: number };
+    sorting2: { extended: boolean; currentExtension: number };
   };
   sensors: {
     feed: boolean;
@@ -51,6 +51,7 @@ interface DeviceStore {
   stopConveyor: () => void;
   extendCylinder: (name: CylinderName) => void;
   retractCylinder: (name: CylinderName) => void;
+  updateCylinderExtension: (name: CylinderName, extension: number) => void;
   setSensor: (name: SensorName, active: boolean) => void;
   updateMaterialPosition: (position: [number, number, number]) => void;
   setMaterialOnConveyor: (onConveyor: boolean) => void;
@@ -58,6 +59,10 @@ interface DeviceStore {
   spawnMaterial: () => void;
   clearMaterial: () => void;
   reset: () => void;
+  
+  // 场景控制
+  showLabels: boolean;
+  toggleLabels: () => void;
   
   // 同步模式操作
   spawnSyncMaterial: (color: MaterialColor) => void;
@@ -69,11 +74,12 @@ interface DeviceStore {
 
 const initialState = {
   mode: 'manual' as Mode,
+  showLabels: true,
   conveyorRunning: false,
   cylinders: {
-    feed: { extended: false },
-    sorting1: { extended: false },
-    sorting2: { extended: false },
+    feed: { extended: false, currentExtension: 0.0 },
+    sorting1: { extended: false, currentExtension: -0.5 },
+    sorting2: { extended: false, currentExtension: -0.5 },
   },
   sensors: {
     feed: false,
@@ -114,14 +120,21 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   extendCylinder: (name) => set((state) => ({
     cylinders: {
       ...state.cylinders,
-      [name]: { extended: true },
+      [name]: { ...state.cylinders[name], extended: true },
     },
   })),
 
   retractCylinder: (name) => set((state) => ({
     cylinders: {
       ...state.cylinders,
-      [name]: { extended: false },
+      [name]: { ...state.cylinders[name], extended: false },
+    },
+  })),
+
+  updateCylinderExtension: (name, extension) => set((state) => ({
+    cylinders: {
+      ...state.cylinders,
+      [name]: { ...state.cylinders[name], currentExtension: extension },
     },
   })),
 
@@ -208,4 +221,6 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   })),
 
   clearDetectionHistory: () => set({ detectionHistory: [] }),
+
+  toggleLabels: () => set((state) => ({ showLabels: !state.showLabels })),
 }));

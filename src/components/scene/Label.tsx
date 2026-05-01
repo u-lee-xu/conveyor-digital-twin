@@ -3,6 +3,7 @@ import React from 'react';
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { useScene } from './Scene';
+import { useDeviceStore } from '../../stores/useDeviceStore';
 
 interface LabelProps {
   text: string;
@@ -12,11 +13,11 @@ interface LabelProps {
 }
 
 const colorStyles = {
-  blue: { bg: 'rgba(59, 130, 246, 0.9)', border: 'rgba(96, 165, 250, 1)', text: '#dbeafe' },
-  green: { bg: 'rgba(34, 197, 94, 0.9)', border: 'rgba(74, 222, 128, 1)', text: '#dcfce7' },
-  orange: { bg: 'rgba(245, 158, 11, 0.9)', border: 'rgba(251, 191, 36, 1)', text: '#fef3c7' },
-  purple: { bg: 'rgba(168, 85, 247, 0.9)', border: 'rgba(192, 132, 252, 1)', text: '#f3e8ff' },
-  gray: { bg: 'rgba(107, 114, 128, 0.9)', border: 'rgba(156, 163, 175, 1)', text: '#f1f5f9' },
+  blue: { bg: 'rgba(59, 130, 246, 0.4)', border: 'rgba(96, 165, 250, 0.6)', text: '#dbeafe' },
+  green: { bg: 'rgba(34, 197, 94, 0.4)', border: 'rgba(74, 222, 128, 0.6)', text: '#dcfce7' },
+  orange: { bg: 'rgba(245, 158, 11, 0.4)', border: 'rgba(251, 191, 36, 0.6)', text: '#fef3c7' },
+  purple: { bg: 'rgba(168, 85, 247, 0.4)', border: 'rgba(192, 132, 252, 0.6)', text: '#f3e8ff' },
+  gray: { bg: 'rgba(107, 114, 128, 0.4)', border: 'rgba(156, 163, 175, 0.6)', text: '#f1f5f9' },
 };
 
 export const Label: React.FC<LabelProps> = React.memo(({ 
@@ -26,94 +27,75 @@ export const Label: React.FC<LabelProps> = React.memo(({
   color = 'blue' 
 }) => {
   const { scene } = useScene();
+  const showLabels = useDeviceStore(state => state.showLabels);
   const labelRef = useRef<CSS2DObject | null>(null);
-  const isAddedRef = useRef(false);
   
   useEffect(() => {
     if (!scene) return;
 
     const styles = colorStyles[color];
-
-    // 检测屏幕宽度，调整响应式样式
     const isMobile = window.innerWidth < 640;
-    const fontSize = isMobile ? '10px' : '12px';
-    const padding = isMobile ? '4px 8px' : '6px 12px';
-    const borderRadius = isMobile ? '6px' : '8px';
+    const fontSize = isMobile ? '9px' : '10px';
+    const padding = isMobile ? '2px 6px' : '4px 10px';
+    const borderRadius = '6px';
 
-    // 创建HTML元素
     const div = document.createElement('div');
     div.style.cssText = `
       padding: ${padding};
       border-radius: ${borderRadius};
       font-size: ${fontSize};
-      font-weight: 600;
-      border: 2px solid ${styles.border};
+      font-weight: 500;
+      border: 1px solid ${styles.border};
       background-color: ${styles.bg};
       color: ${styles.text};
       white-space: nowrap;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      transition: all 0.2s ease;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+      opacity: ${showLabels ? '1' : '0'};
+      transform: scale(${showLabels ? '1' : '0.8'});
     `;
     div.textContent = text;
 
-    // 创建CSS2D对象
     const label = new CSS2DObject(div);
     label.position.set(...position);
     
-    // 设置偏移
     const [ox, oy, oz] = offset;
-    const offsetVector = new THREE.Vector3(ox, oy, oz);
-    label.position.add(offsetVector);
+    label.position.add(new THREE.Vector3(ox, oy, oz));
 
-    // 添加到场景
     scene.add(label);
     labelRef.current = label;
-    isAddedRef.current = true;
 
     return () => {
-      // 清理时移除标签
       if (labelRef.current && scene) {
-        try {
-          scene.remove(labelRef.current);
-        } catch (e) {
-          // 忽略移除错误
-        }
-        labelRef.current = null;
-        isAddedRef.current = false;
+        scene.remove(labelRef.current);
       }
     };
-  }, [scene, text, color]); // 只依赖真正会变化的属性
+  }, [scene, text, color]);
 
-  // 位置和偏移变化时更新标签位置
+  // 更新显示状态
+  useEffect(() => {
+    if (labelRef.current) {
+      const div = labelRef.current.element as HTMLDivElement;
+      div.style.opacity = showLabels ? '1' : '0';
+      div.style.transform = `scale(${showLabels ? '1' : '0.8'})`;
+    }
+  }, [showLabels]);
+
   useEffect(() => {
     if (!labelRef.current) return;
-    
-    const newPosition = new THREE.Vector3(...position);
-    const [ox, oy, oz] = offset;
-    const offsetVector = new THREE.Vector3(ox, oy, oz);
-    newPosition.add(offsetVector);
-    
-    labelRef.current.position.copy(newPosition);
+    const newPos = new THREE.Vector3(...position).add(new THREE.Vector3(...offset));
+    labelRef.current.position.copy(newPos);
   }, [position, offset]);
 
   return null;
-}, (prevProps, nextProps) => {
-  // 自定义比较函数：只在真正需要时才重新渲染
-  const prevOffset = prevProps.offset || [0, 0.5, 0];
-  const nextOffset = nextProps.offset || [0, 0.5, 0];
-  
-  return (
-    prevProps.text === nextProps.text &&
-    prevProps.color === nextProps.color &&
-    prevProps.position[0] === nextProps.position[0] &&
-    prevProps.position[1] === nextProps.position[1] &&
-    prevProps.position[2] === nextProps.position[2] &&
-    prevOffset[0] === nextOffset[0] &&
-    prevOffset[1] === nextOffset[1] &&
-    prevOffset[2] === nextOffset[2]
-  );
+}, (prev, next) => {
+  return prev.text === next.text && 
+         prev.color === next.color && 
+         prev.position.every((v, i) => v === next.position[i]) &&
+         (prev.offset || [0, 0.5, 0]).every((v, i) => v === (next.offset || [0, 0.5, 0])[i]);
 });
 
 export default Label;

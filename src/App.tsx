@@ -102,15 +102,16 @@ function App() {
     phase: syncPhase,
     round: syncRound,
     currentMaterialColor,
-    mqttConfig,
+    modbusConfig,
+    modbusStatus,
     calibration,
-    connect: mqttConnect,
+    connect: modbusConnect,
     startCalibrate,
     placeMaterial,
     nextRound,
     resetCalibrate,
     startSync,
-    disconnect: mqttDisconnect,
+    disconnect: modbusDisconnect,
   } = useSyncMode();
 
   // 同步模式物理动画（校准完成后启用）
@@ -127,11 +128,16 @@ function App() {
   const {
     step: simStep,
     errorMessage: simError,
-    mqttConfig: simMqttConfig,
+    modbusConfig: simModbusConfig,
+    modbusStatus: simModbusStatus,
     stats: simStats,
+    controlSignals: simControlSignals,
     connect: simConnect,
     disconnect: simDisconnect,
     publishAllFeedback: simPublishFeedback,
+    onSimulationStart: simStart,
+    onSimulationReset: simReset,
+    onSpawnMaterial: simSpawnMaterial,
   } = useSimMode();
 
 
@@ -150,17 +156,17 @@ function App() {
           )}
           
           {/* 气缸 */}
-          <Cylinder position={CYLINDER_POSITIONS.feed} extended={cylinders.feed.extended} />
+          <Cylinder name="feed" position={CYLINDER_POSITIONS.feed} extended={cylinders.feed.extended} />
           {showLabels && (
             <Label key="feed-cylinder" text="上料气缸" position={CYLINDER_POSITIONS.feed} offset={[0, 0.3, 0]} color="blue" />
           )}
           
-          <Cylinder position={CYLINDER_POSITIONS.sorting1} extended={cylinders.sorting1.extended} />
+          <Cylinder name="sorting1" position={CYLINDER_POSITIONS.sorting1} extended={cylinders.sorting1.extended} />
           {showLabels && (
             <Label key="sorting1-cylinder" text="分拣1" position={CYLINDER_POSITIONS.sorting1} offset={[0, 0.3, 0]} color="purple" />
           )}
           
-          <Cylinder position={CYLINDER_POSITIONS.sorting2} extended={cylinders.sorting2.extended} />
+          <Cylinder name="sorting2" position={CYLINDER_POSITIONS.sorting2} extended={cylinders.sorting2.extended} />
           {showLabels && (
             <Label key="sorting2-cylinder" text="分拣2" position={CYLINDER_POSITIONS.sorting2} offset={[0, 0.3, 0]} color="purple" />
           )}
@@ -259,16 +265,17 @@ function App() {
                         phase={syncPhase}
                         round={syncRound}
                         currentMaterialColor={currentMaterialColor}
-                        mqttConfig={mqttConfig}
+                        modbusConfig={modbusConfig}
+                        modbusStatus={modbusStatus}
                         calibration={calibration}
                         detectionHistory={detectionHistory}
-                        onConnect={mqttConnect}
+                        onConnect={modbusConnect}
                         onStartCalibrate={startCalibrate}
                         onPlaceMaterial={placeMaterial}
                         onNextRound={nextRound}
                         onResetCalibrate={resetCalibrate}
                         onStartSync={startSync}
-                        onDisconnect={mqttDisconnect}
+                        onDisconnect={modbusDisconnect}
                       />
                     </div>
                   )}
@@ -278,14 +285,30 @@ function App() {
                       <SimPanel 
                         step={simStep}
                         errorMessage={simError}
-                        mqttConfig={simMqttConfig}
-                        stats={simStats}
+                        modbusConfig={simModbusConfig}
+                        modbusStatus={simModbusStatus}
+                        stats={{
+                          readCount: simStats.readCount || 0,
+                          writeCount: simStats.writeCount || 0,
+                          errorCount: simStats.errorCount || 0,
+                        }}
+                        controlSignals={{
+                          start: simControlSignals.start || false,
+                          reset: simControlSignals.reset || false,
+                          feedCylinderValve: simControlSignals.feedCylinderValve || false,
+                          sorting1CylinderValve: simControlSignals.sorting1CylinderValve || false,
+                          sorting2CylinderValve: simControlSignals.sorting2CylinderValve || false,
+                          conveyor: simControlSignals.conveyor || false,
+                        }}
                         sensors={sensors}
                         cylinders={cylinders}
                         conveyorRunning={conveyorRunning}
                         onConnect={simConnect}
                         onDisconnect={simDisconnect}
                         onPublishAllFeedback={simPublishFeedback}
+                        onSimulationStart={simStart}
+                        onSimulationReset={simReset}
+                        onSpawnMaterial={simSpawnMaterial}
                       />
                     </div>
                   )}        </div>
@@ -358,16 +381,17 @@ function App() {
                     phase={syncPhase}
                     round={syncRound}
                     currentMaterialColor={currentMaterialColor}
-                    mqttConfig={mqttConfig}
+                    modbusConfig={modbusConfig}
+                    modbusStatus={modbusStatus}
                     calibration={calibration}
                     detectionHistory={detectionHistory}
-                    onConnect={mqttConnect}
+                    onConnect={modbusConnect}
                     onStartCalibrate={startCalibrate}
                     onPlaceMaterial={placeMaterial}
                     onNextRound={nextRound}
                     onResetCalibrate={resetCalibrate}
                     onStartSync={startSync}
-                    onDisconnect={mqttDisconnect}
+                    onDisconnect={modbusDisconnect}
                   />
                 </div>
               )}
@@ -377,14 +401,19 @@ function App() {
                   <SimPanel 
                     step={simStep}
                     errorMessage={simError}
-                    mqttConfig={simMqttConfig}
+                    modbusConfig={simModbusConfig}
+                    modbusStatus={simModbusStatus}
                     stats={simStats}
+                    controlSignals={simControlSignals}
                     sensors={sensors}
                     cylinders={cylinders}
                     conveyorRunning={conveyorRunning}
                     onConnect={simConnect}
                     onDisconnect={simDisconnect}
                     onPublishAllFeedback={simPublishFeedback}
+                    onSimulationStart={simStart}
+                    onSimulationReset={simReset}
+                    onSpawnMaterial={simSpawnMaterial}
                   />
                 </div>
               )}

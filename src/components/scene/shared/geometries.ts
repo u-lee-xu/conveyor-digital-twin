@@ -5,16 +5,28 @@ export const geometries = {
   // 滚筒 - 传送带使用（缩短宽度）
   roller: new THREE.CylinderGeometry(0.06, 0.06, 0.6, 16),
   
-  // 气缸端盖
-  cylinderEndCap: new THREE.BoxGeometry(0.15, 0.08, 0.15),
+  // 气缸端盖 (改为扁平型)
+  cylinderEndCap: new THREE.BoxGeometry(0.2, 0.08, 0.2),
   
   // 气缸主体
-  cylinderBody: new THREE.CylinderGeometry(0.08, 0.08, 0.5, 16),
+  cylinderBody: new THREE.BoxGeometry(0.18, 0.8, 0.18),
+  cylinderBodyLong: new THREE.BoxGeometry(0.18, 1.2, 0.18),
   
-  // 气缸推杆（缩短长度避免穿透）
-  cylinderRod: new THREE.CylinderGeometry(0.03, 0.03, 0.3, 16),
+  // 气缸推杆
+  cylinderRod: new THREE.CylinderGeometry(0.035, 0.035, 0.8, 16),
+  cylinderRodShort: new THREE.CylinderGeometry(0.035, 0.035, 0.75, 16),
   
-  // 气口
+  // 气缸推板 (优化比例)
+  cylinderPushPlate: new THREE.BoxGeometry(0.2, 0.04, 0.18),
+  
+  // 节流阀/接头主体
+  valveBody: new THREE.BoxGeometry(0.04, 0.04, 0.04),
+  // 节流阀调节头
+  valveCap: new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8),
+  // 气管头
+  tubeConnector: new THREE.CylinderGeometry(0.02, 0.02, 0.04, 8),
+  
+  // 气口 (保持原有或调整)
   cylinderPort: new THREE.CylinderGeometry(0.02, 0.02, 0.05, 8),
   
   // 磁性开关 - 小盒子

@@ -18,8 +18,8 @@ export const CYLINDERS = {
 export const CONVEYOR_SPEED = 0.01;
 export const CONVEYOR_END_X = 1.8;
 export const CONVEYOR_START_X = -1.75;
-export const CONVEYOR_Z_MIN = -0.5;
-export const CONVEYOR_Z_MAX = 0.8; // 增大范围以包含物料初始位置
+export const CONVEYOR_Z_MIN = -0.35;
+export const CONVEYOR_Z_MAX = 0.35; // 缩小范围，仅包含传送带宽度
 
 // 传感器检测范围
 export const SENSOR_RANGE = 0.15;
@@ -30,8 +30,8 @@ export const MATERIAL_INITIAL_POSITION: [number, number, number] = [-1.3, 1.06, 
 // 气缸3D位置 - Y=1.12，气缸底部Y=1.04高于辊筒顶部Y=1.0
 export const CYLINDER_POSITIONS = {
   feed: [-1.3, 1.12, 1.2] as [number, number, number],
-  sorting1: [-0.2, 1.12, 0.8] as [number, number, number],
-  sorting2: [0.9, 1.12, 0.8] as [number, number, number],
+  sorting1: [-0.2, 1.12, 1.2] as [number, number, number], 
+  sorting2: [0.9, 1.12, 1.2] as [number, number, number],
 } as const;
 
 // 传感器3D位置

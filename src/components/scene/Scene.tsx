@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, createContext, useContext, useCallback, ty
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import Stats from 'stats.js';
 
 interface SceneContextType {
   scene: THREE.Scene | null;
@@ -28,12 +29,23 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const css2DRendererRef = useRef<CSS2DRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const statsRef = useRef<Stats | null>(null);
   const animationIdRef = useRef<number>(0);
   const [sceneState, setSceneState] = useState<THREE.Scene | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
     
+    // 初始化性能监控
+    const stats = new Stats();
+    stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+    stats.dom.style.position = 'absolute';
+    stats.dom.style.top = '0px';
+    stats.dom.style.left = '0px';
+    stats.dom.style.zIndex = '100';
+    containerRef.current.appendChild(stats.dom);
+    statsRef.current = stats;
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e293b);
     sceneRef.current = scene;
@@ -75,10 +87,10 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     controls.maxPolarAngle = Math.PI / 2;
     controlsRef.current = controls;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
     directionalLight.position.set(5, 10, 7);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
@@ -104,9 +116,11 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
 
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
+      if (statsRef.current) statsRef.current.begin();
       controls.update();
       renderer.render(scene, camera);
       css2DRenderer.render(scene, camera);
+      if (statsRef.current) statsRef.current.end();
     };
     animate();
 
@@ -122,8 +136,9 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationIdRef.current);
       controls.dispose();
-      if (containerRef.current && renderer.domElement) {
-        containerRef.current.removeChild(renderer.domElement);
+      if (containerRef.current) {
+        if (renderer.domElement) containerRef.current.removeChild(renderer.domElement);
+        if (stats.dom) containerRef.current.removeChild(stats.dom);
       }
       renderer.dispose();
     };

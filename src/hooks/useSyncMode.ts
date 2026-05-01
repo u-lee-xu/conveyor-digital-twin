@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
-import { mqttService } from '../services/mqtt';
-import type { ValidatedMqttMessage } from '../services/mqtt';
+import { modbusService, MODBUS_ADDRESSES, type ModbusStatus } from '../services/modbus-websocket';
 
 // 校准步骤
 export type CalibrateStep = 
@@ -24,10 +23,9 @@ export type CalibratePhase =
 // 校准轮次
 export type CalibrateRound = 1 | 2;
 
-interface MqttConfig {
+interface ModbusConfig {
   host: string;
   port: number;
-  topic: string;
 }
 
 // 校准数据
@@ -47,21 +45,26 @@ export type MaterialColor = 'black' | 'blue' | 'unknown';
 
 export function useSyncMode() {
   const mode = useDeviceStore((state) => state.mode);
-  const setSensor = useDeviceStore((state) => state.setSensor);
   const extendCylinder = useDeviceStore((state) => state.extendCylinder);
   const retractCylinder = useDeviceStore((state) => state.retractCylinder);
   const startConveyor = useDeviceStore((state) => state.startConveyor);
   const stopConveyor = useDeviceStore((state) => state.stopConveyor);
   const sensors = useDeviceStore((state) => state.sensors);
+  const cylinders = useDeviceStore((state) => state.cylinders);
+  const conveyorRunning = useDeviceStore((state) => state.conveyorRunning);
   
   const [step, setStep] = useState<CalibrateStep>('IDLE');
   const [phase, setPhase] = useState<CalibratePhase>('WAIT_MATERIAL');
   const [round, setRound] = useState<CalibrateRound>(1);
   const [currentMaterialColor, setCurrentMaterialColor] = useState<MaterialColor>('unknown');
-  const [mqttConfig, setMqttConfig] = useState<MqttConfig>({
-    host: 'broker.emqx.io',
-    port: 1883,
-    topic: 'digital-twin/default',
+  const [modbusConfig, setModbusConfig] = useState<ModbusConfig>({
+    host: '127.0.0.1',
+    port: 502,
+  });
+  const [modbusStatus, setModbusStatus] = useState<ModbusStatus>({
+    connected: false,
+    host: '',
+    port: 0,
   });
   const [calibration, setCalibration] = useState<CalibrationData>({
     phase1Time: null,
@@ -73,6 +76,94 @@ export function useSyncMode() {
 
   // 用于跟踪上一轮传感器状态，检测上升沿
   const prevSensorsRef = useRef(sensors);
+  // 轮询定时器
+  const pollTimerRef = useRef<number | null>(null);
+
+  // 轮询读取控制信号
+  useEffect(() => {
+    if (step !== 'SYNCING') {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const result = await modbusService.readAllControlSignals();
+        if (result.success && result.values) {
+          const values = result.values;
+          
+          // 更新传送带状态
+          const conveyorSignal = values[MODBUS_ADDRESSES.CONVEYOR];
+          if (conveyorSignal !== conveyorRunning) {
+            if (conveyorSignal) {
+              startConveyor();
+            } else {
+              stopConveyor();
+            }
+          }
+
+          // 更新气缸状态 (单电控阀：有电伸出，无电缩回)
+          const updateCylinder = (name: 'feed' | 'sorting1' | 'sorting2', valveAddr: number) => {
+            const valve = values[valveAddr];
+            const currentExtended = cylinders[name].extended;
+            
+            if (valve && !currentExtended) {
+              extendCylinder(name);
+            } else if (!valve && currentExtended) {
+              retractCylinder(name);
+            }
+          };
+
+          updateCylinder('feed', MODBUS_ADDRESSES.FEED_CYLINDER_VALVE);
+          updateCylinder('sorting1', MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE);
+          updateCylinder('sorting2', MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE);
+
+          // 处理物料生成信号 (复用 START 信号作为模拟触发或根据需要定义新信号)
+          // 暂时注释掉，避免意外生成
+          /*
+          if (values[MODBUS_ADDRESSES.START]) {
+            useDeviceStore.getState().spawnSyncMaterial('blue');
+          }
+          */
+        }
+      } catch (error) {
+        console.error('轮询控制信号失败:', error);
+      }
+    };
+
+    // 每100ms轮询一次
+    const timer = setInterval(poll, 100);
+    pollTimerRef.current = timer as unknown as number;
+    poll(); // 立即执行一次
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [step, conveyorRunning, cylinders, startConveyor, stopConveyor, extendCylinder, retractCylinder]);
+
+  // 写入传感器信号到Modbus
+  useEffect(() => {
+    if (step !== 'SYNCING' || !modbusStatus.connected) return;
+
+    const writeSensors = async () => {
+      try {
+        // 写入传感器状态
+        await modbusService.writeFeedSensor(sensors.feed);
+        await modbusService.writeColorSensor(sensors.color);
+        await modbusService.writeMaterialSensor(sensors.material);
+      } catch (error) {
+        console.error('写入传感器信号失败:', error);
+      }
+    };
+
+    writeSensors();
+  }, [step, sensors, modbusStatus.connected]);
 
   // 处理校准阶段的传感器信号
   useEffect(() => {
@@ -136,68 +227,26 @@ export function useSyncMode() {
     prevSensorsRef.current = sensors;
   }, [step, phase, round, sensors, calibration.t1, calibration.t2]);
 
-  // 处理MQTT消息
-  const handleMqttMessage = useCallback((topic: string, message: ValidatedMqttMessage) => {
-    console.log('MQTT Message:', topic, message);
-    
-    // 同步模式下处理消息
-    if (step === 'SYNCING') {
-      if (message.type === 'sensor') {
-        const validSensorNames = ['feed', 'color', 'material'] as const;
-        const name = message.name as string;
-        if (validSensorNames.includes(name as typeof validSensorNames[number])) {
-          setSensor(name as typeof validSensorNames[number], message.value as boolean);
-        }
-      } else if (message.type === 'cylinder') {
-        const validCylinderNames = ['feed', 'sorting1', 'sorting2'] as const;
-        const name = message.name as string;
-        if (validCylinderNames.includes(name as typeof validCylinderNames[number])) {
-          if (message.value as boolean) {
-            extendCylinder(name as typeof validCylinderNames[number]);
-          } else {
-            retractCylinder(name as typeof validCylinderNames[number]);
-          }
-        }
-      } else if (message.type === 'conveyor') {
-        if (message.value as boolean) {
-          startConveyor();
-        } else {
-          stopConveyor();
-        }
-      } else if (message.type === 'material') {
-        // 同步模式下处理物料生成消息
-        if (message.value === true || message.value === 1 || message.value === 'spawn') {
-          const color = typeof message.value === 'string' && message.value.includes('black') ? 'black' : 'blue';
-          useDeviceStore.getState().spawnSyncMaterial(color);
-        } else if (message.value === false || message.value === 0 || message.value === 'clear') {
-          useDeviceStore.getState().clearSyncMaterial();
-        }
-      }
-    }
-  }, [step, setSensor, extendCylinder, retractCylinder, startConveyor, stopConveyor]);
-
-  // 连接MQTT
-  const connect = useCallback((host: string, port: number, topic: string) => {
+  // 连接Modbus
+  const connect = useCallback(async (host: string, port: number) => {
     setStep('CONNECTING');
-    setMqttConfig({ host, port, topic });
+    setModbusConfig({ host, port });
     
-    mqttService.connect(
-      { host, port, topic },
-      {
-        onConnect: () => {
-          setStep('CONNECTED');
-        },
-        onDisconnect: () => {
-          setStep('IDLE');
-        },
-        onError: (error) => {
-          console.error('MQTT Connection Error:', error);
-          setStep('IDLE');
-        },
-        onMessage: handleMqttMessage,
+    try {
+      const result = await modbusService.connect(host, port);
+      if (result.success) {
+        const status = await modbusService.getStatus();
+        setModbusStatus(status);
+        setStep('CONNECTED');
+      } else {
+        setStep('IDLE');
+        console.error('Modbus连接失败:', result.error);
       }
-    );
-  }, [handleMqttMessage]);
+    } catch (error) {
+      console.error('Modbus连接异常:', error);
+      setStep('IDLE');
+    }
+  }, []);
 
   // 开始校准
   const startCalibrate = useCallback(() => {
@@ -252,8 +301,8 @@ export function useSyncMode() {
   }, []);
 
   // 断开连接
-  const disconnect = useCallback(() => {
-    mqttService.disconnect();
+  const disconnect = useCallback(async () => {
+    await modbusService.disconnect();
     setStep('IDLE');
     setPhase('WAIT_MATERIAL');
     setRound(1);
@@ -265,15 +314,20 @@ export function useSyncMode() {
       t3: null,
     });
     setCurrentMaterialColor('unknown');
+    setModbusStatus({ connected: false, host: '', port: 0 });
   }, []);
 
   // 当模式切换时断开连接
   useEffect(() => {
     if (mode !== 'sync') {
-      mqttService.disconnect();
+      modbusService.disconnect();
       setStep('IDLE');
       setPhase('WAIT_MATERIAL');
       setRound(1);
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
     }
   }, [mode]);
 
@@ -282,7 +336,8 @@ export function useSyncMode() {
     phase,
     round,
     currentMaterialColor,
-    mqttConfig,
+    modbusConfig,
+    modbusStatus,
     calibration,
     connect,
     startCalibrate,
