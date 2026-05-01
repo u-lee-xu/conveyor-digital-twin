@@ -77,9 +77,9 @@ const initialState = {
   showLabels: true,
   conveyorRunning: false,
   cylinders: {
-    feed: { extended: false, currentExtension: 0.0 },
-    sorting1: { extended: false, currentExtension: -0.5 },
-    sorting2: { extended: false, currentExtension: -0.5 },
+    feed: { extended: false, currentExtension: -0.41 },
+    sorting1: { extended: false, currentExtension: -0.32 },
+    sorting2: { extended: false, currentExtension: -0.32 },
   },
   sensors: {
     feed: false,

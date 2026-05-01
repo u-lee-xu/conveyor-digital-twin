@@ -21,12 +21,12 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
   const targetPositionRef = useRef(0);
   const animationIdRef = useRef<number>(0);
 
-  // 气缸参数配置
+  // 气缸参数配置 (上料与分拣区分尺寸)
   const isFeed = name === 'feed';
-  const bodyGeom = isFeed ? geometries.cylinderBody : geometries.cylinderBodyLong;
-  const rodGeom = isFeed ? geometries.cylinderRodShort : geometries.cylinderRod;
-  const rodLen = isFeed ? 0.75 : 0.8;
-  const bodyHalfLen = isFeed ? 0.4 : 0.6;
+  const bodyGeom = isFeed ? geometries.cylinderBodyLong : geometries.cylinderBody;
+  const rodGeom = isFeed ? geometries.cylinderRodLong : geometries.cylinderRod;
+  const rodLen = isFeed ? 1.1 : 0.7; 
+  const bodyHalfLen = isFeed ? 0.65 : 0.4;
 
   useEffect(() => {
     if (!scene) return;
@@ -89,35 +89,35 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
 
     // --- 活塞杆组件 ---
     const rodGroup = new THREE.Group();
-    // 头部在世界坐标 Z = position.z - (rodGroup.y + rodLen)
+    // 头部世界 Z = pos.z - (ext + rodLen + plateOffset)
     let initialY: number;
     if (isFeed) {
-      // 目标 Z: 0.75 (缩回), 0.1 (伸出)
-      initialY = extended ? (1.2 - 0.1 - rodLen) : (1.2 - 0.75 - rodLen);
+      // Base Z=1.5, Rod=1.1, Offset=0.01
+      // Retracted (Z=0.8): 1.5 - (ext + 1.11) = 0.8 => ext = -0.41
+      // Extended (Z=0.075): 1.5 - (ext + 1.11) = 0.075 => ext = 0.315
+      initialY = extended ? 0.315 : -0.41;
     } else {
-      // 目标 Z: 0.4 (缩回), -0.2 (伸出)
-      initialY = extended ? (1.2 - (-0.2) - rodLen) : (1.2 - 0.4 - rodLen);
+      // Base Z=0.8, Rod=0.7, Offset=0.02
+      // Retracted (Z=0.4): 0.8 - (ext + 0.72) = 0.4 => ext = -0.32
+      // Extended (Z=-0.25): 0.8 - (ext + 0.72) = -0.25 => ext = 0.33
+      initialY = extended ? 0.33 : -0.32;
     }
     
     rodGroup.position.set(0, initialY, 0);
     group.add(rodGroup);
     rodRef.current = rodGroup;
 
-    // 活塞杆网格 (将几何体底部对齐到父组件原点)
     const rodMesh = new THREE.Mesh(rodGeom, materials.cylinderRod);
     rodMesh.position.y = rodLen / 2;
     rodMesh.castShadow = true;
     rodGroup.add(rodMesh);
 
-    // 推杆头
     if (!isFeed) {
-      // 分拣气缸保留推板
       const head = new THREE.Mesh(geometries.cylinderPushPlate, materials.endCap);
       head.position.set(0, rodLen, 0);
       head.castShadow = true;
       rodGroup.add(head);
     } else {
-      // 上料气缸去掉灰色推板，改为微小的固定头
       const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 16), materials.endCap);
       tip.position.set(0, rodLen, 0);
       rodGroup.add(tip);
@@ -130,13 +130,14 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
   // 动画逻辑
   useEffect(() => {
     if (!rodRef.current) return;
-    let target: number;
+    
+    let targetValue: number;
     if (isFeed) {
-      target = extended ? (1.2 - 0.1 - rodLen) : (1.2 - 0.75 - rodLen);
+      targetValue = extended ? 0.315 : -0.41;
     } else {
-      target = extended ? (1.2 - (-0.2) - rodLen) : (1.2 - 0.4 - rodLen);
+      targetValue = extended ? 0.33 : -0.32;
     }
-    targetPositionRef.current = target;
+    targetPositionRef.current = targetValue;
 
     const animate = () => {
       if (!rodRef.current) return;
@@ -144,7 +145,7 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
       const target = targetPositionRef.current;
       const diff = target - current;
       if (Math.abs(diff) > 0.001) {
-        const nextPos = current + diff * 0.2;
+        const nextPos = current + diff * 0.15;
         rodRef.current.position.y = nextPos;
         updateCylinderExtension(name, nextPos);
         animationIdRef.current = requestAnimationFrame(animate);
