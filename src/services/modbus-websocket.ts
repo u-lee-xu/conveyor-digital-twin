@@ -203,21 +203,22 @@ export class ModbusService {
    * 批量写入反馈信号（地址 2 到 10）
    */
   async writeFeedbackBatch(values: {
-    magnetic: { feed: boolean, sort1: boolean, sort2: boolean },
+    magneticExtend: { feed: boolean, sort1: boolean, sort2: boolean },
+    magneticRetract: { feed: boolean, sort1: boolean, sort2: boolean },
     sensors: { feed: boolean, color: boolean, material: boolean }
   }): Promise<ModbusResult> {
     // 构造连续地址 2-10 的布尔数组
-    // 地址: 2, 3, 4, 5, 6, 7, 8, 9, 10
+    // 地址: 2,       3,       4,        5,        6,        7,        8,   9,   10
     const data = [
-      !values.magnetic.feed, // 2: 缩回
-      values.magnetic.feed,  // 3: 伸出
-      !values.magnetic.sort1, // 4: 缩回
-      values.magnetic.sort1,  // 5: 伸出
-      !values.magnetic.sort2, // 6: 缩回
-      values.magnetic.sort2,  // 7: 伸出
-      values.sensors.feed,    // 8
-      values.sensors.color,   // 9
-      values.sensors.material // 10
+      values.magneticRetract.feed,  // 2: 上料缩回限位
+      values.magneticExtend.feed,   // 3: 上料伸出限位
+      values.magneticRetract.sort1, // 4: 分拣1缩回限位
+      values.magneticExtend.sort1,  // 5: 分拣1伸出限位
+      values.magneticRetract.sort2, // 6: 分拣2缩回限位
+      values.magneticExtend.sort2,  // 7: 分拣2伸出限位
+      values.sensors.feed,          // 8: 上料传感器
+      values.sensors.color,         // 9: 色标传感器
+      values.sensors.material       // 10: 物料传感器
     ];
     
     return this.writeCoils(2, data);

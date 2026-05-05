@@ -33,6 +33,13 @@ export const useModbusService = (config: { host: string; port: number; unitId?: 
         return 0;
     },
 
+    // 批量写入反馈信号
+    writeFeedbackBatch: (values: {
+      magneticExtend: { feed: boolean, sort1: boolean, sort2: boolean },
+      magneticRetract: { feed: boolean, sort1: boolean, sort2: boolean },
+      sensors: { feed: boolean, color: boolean, material: boolean }
+    }) => modbusService.writeFeedbackBatch(values),
+
     // 批量读取线圈
     readCoils: (address: number, length: number) => modbusService.readCoils(address, length),
   };

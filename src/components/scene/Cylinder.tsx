@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useScene } from './Scene';
-import { geometries, materials } from './shared';
+import { geometries, materials, CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT, CYLINDER_LIMIT_ZONE } from './shared';
 import { useDeviceStore } from '../../stores';
 import type { CylinderName } from '../../types';
 
@@ -106,6 +106,15 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
     group.add(rodGroup);
     rodRef.current = rodGroup;
 
+    // 立即设置初始LED状态（基于位置的限位逻辑，必须在 initialY 声明之后）
+    {
+      const initExtendPos = isFeed ? CYLINDER_EXTEND_POS_FEED : CYLINDER_EXTEND_POS_SORT;
+      const initAtRetract = initialY <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
+      const initAtExtend  = initialY >= initExtendPos - CYLINDER_LIMIT_ZONE;
+      swExt.led.material = initAtExtend  ? materials.ledActive.clone() : materials.ledInactive.clone();
+      swRet.led.material = initAtRetract ? materials.ledActive.clone() : materials.ledInactive.clone();
+    }
+
     const rodMesh = new THREE.Mesh(rodGeom, materials.cylinderRod);
     rodMesh.position.y = rodLen / 2;
     rodMesh.castShadow = true;
@@ -121,7 +130,7 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
     return () => { scene.remove(group); };
   }, [scene, position, name, isFeed, bodyGeom, rodGeom, rodLen, bodyHalfLen]);
 
-  // 动画逻辑
+  // 动画逻辑（含基于物理位置的磁性开关LED更新）
   useEffect(() => {
     if (!rodRef.current) return;
     
@@ -133,6 +142,17 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
     }
     targetPositionRef.current = targetValue;
 
+    const extendPos = isFeed ? CYLINDER_EXTEND_POS_FEED : CYLINDER_EXTEND_POS_SORT;
+
+    // 根据活塞杆实际位置更新磁性开关LED
+    const setLEDs = (pos: number) => {
+      if (!led1Ref.current || !led2Ref.current) return;
+      const atRetract = pos <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
+      const atExtend  = pos >= extendPos - CYLINDER_LIMIT_ZONE;
+      led1Ref.current.material = atExtend  ? materials.ledActive.clone() : materials.ledInactive.clone();
+      led2Ref.current.material = atRetract ? materials.ledActive.clone() : materials.ledInactive.clone();
+    };
+
     const animate = () => {
       if (!rodRef.current) return;
       const current = rodRef.current.position.y;
@@ -142,27 +162,17 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
         const nextPos = current + diff * 0.15;
         rodRef.current.position.y = nextPos;
         updateCylinderExtension(name, nextPos);
+        setLEDs(nextPos);
         animationIdRef.current = requestAnimationFrame(animate);
       } else {
         rodRef.current.position.y = target;
         updateCylinderExtension(name, target);
+        setLEDs(target);
       }
     };
     animate();
     return () => cancelAnimationFrame(animationIdRef.current);
-  }, [extended, name, isFeed, rodLen, updateCylinderExtension]);
-
-  // LED 状态同步
-  useEffect(() => {
-    if (!led1Ref.current || !led2Ref.current) return;
-    if (extended) {
-      led1Ref.current.material = materials.ledActive.clone();
-      led2Ref.current.material = materials.ledInactive.clone();
-    } else {
-      led1Ref.current.material = materials.ledInactive.clone();
-      led2Ref.current.material = materials.ledActive.clone();
-    }
-  }, [extended]);
+  }, [extended, name, isFeed, updateCylinderExtension]);
 
   return null;
 };
