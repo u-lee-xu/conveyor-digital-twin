@@ -38,6 +38,10 @@ npm run websocket:start
 npm run dev
 ```
 
+### 3. 停止服务
+- 在终端中按 `Ctrl + C` 即可停止正在运行的服务。
+- 如果使用了 `npm run start:all`，它会同时尝试终止前端和代理服务器进程。
+
 ## 通信架构
 网页前端 <--WebSocket (8081)--> Node.js 代理服务器 <--ModbusTCP (502)--> PLC
 
