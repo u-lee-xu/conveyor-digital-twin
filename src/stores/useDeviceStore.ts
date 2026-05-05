@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import type { Mode, CylinderName, SensorName, MaterialColor } from '../types';
 
+export interface TraceEntry {
+  timestamp: number;
+  coils: boolean[];
+}
+
 interface DeviceStore {
   // 状态
   mode: Mode;
@@ -23,7 +28,34 @@ interface DeviceStore {
     conveyorDelay: number; 
   };
   
-  // 操作
+  // 录制相关
+  isRecording: boolean;
+  recordedTrace: TraceEntry[];
+  
+  // 评分系统
+  score: number;
+  penalties: { id: string; message: string; points: number; time: number }[];
+  passedItems: { id: string; message: string; time: number }[];
+  isScoringRunning: boolean;
+  
+  // 连接状态
+  isConnected: boolean;
+  setConnected: (connected: boolean) => void;
+  
+  // 录制操作
+  startRecording: () => void;
+  stopRecording: () => void;
+  addTraceEntry: (coils: boolean[]) => void;
+  clearTrace: () => void;
+  
+  // 评分操作
+  addPenalty: (message: string, points: number) => void;
+  addPassedItem: (message: string) => void;
+  resetScore: () => void;
+  setScoringRunning: (running: boolean) => void;
+  randomizeState: () => void;
+  
+  // 基础设备操作
   setMode: (mode: Mode) => void;
   toggleConveyor: () => void;
   startConveyor: () => void;
@@ -65,12 +97,32 @@ const initialState = {
     onConveyor: false,
     conveyorDelay: 0,
   },
+  isRecording: false,
+  recordedTrace: [],
+  score: 100,
+  penalties: [],
+  passedItems: [],
+  isScoringRunning: false,
+  isConnected: false,
 };
 
 export const useDeviceStore = create<DeviceStore>((set) => ({
   ...initialState,
 
-  setMode: (mode) => set({ mode }),
+  setMode: (mode: Mode) => set({ mode }),
+  
+  setConnected: (connected: boolean) => set({ isConnected: connected }),
+
+  setScoringRunning: (running: boolean) => set({ isScoringRunning: running }),
+
+  randomizeState: () => set((state) => ({
+    conveyorRunning: true,
+    cylinders: {
+      feed: { extended: true, currentExtension: state.cylinders.feed.currentExtension },
+      sorting1: { extended: true, currentExtension: state.cylinders.sorting1.currentExtension },
+      sorting2: { extended: true, currentExtension: state.cylinders.sorting2.currentExtension },
+    }
+  })),
 
   toggleConveyor: () => set((state) => ({ 
     conveyorRunning: !state.conveyorRunning 
@@ -80,49 +132,49 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
 
   stopConveyor: () => set({ conveyorRunning: false }),
 
-  extendCylinder: (name) => set((state) => ({
+  extendCylinder: (name: CylinderName) => set((state) => ({
     cylinders: {
       ...state.cylinders,
       [name]: { ...state.cylinders[name], extended: true },
     },
   })),
 
-  retractCylinder: (name) => set((state) => ({
+  retractCylinder: (name: CylinderName) => set((state) => ({
     cylinders: {
       ...state.cylinders,
       [name]: { ...state.cylinders[name], extended: false },
     },
   })),
 
-  updateCylinderExtension: (name, extension) => set((state) => ({
+  updateCylinderExtension: (name: CylinderName, extension: number) => set((state) => ({
     cylinders: {
       ...state.cylinders,
       [name]: { ...state.cylinders[name], currentExtension: extension },
     },
   })),
 
-  setSensor: (name, active) => set((state) => ({
+  setSensor: (name: SensorName, active: boolean) => set((state) => ({
     sensors: {
       ...state.sensors,
       [name]: active,
     },
   })),
 
-  updateMaterialPosition: (position) => set((state) => ({
+  updateMaterialPosition: (position: [number, number, number]) => set((state) => ({
     material: {
       ...state.material,
       position,
     },
   })),
 
-  setMaterialOnConveyor: (onConveyor) => set((state) => ({
+  setMaterialOnConveyor: (onConveyor: boolean) => set((state) => ({
     material: {
       ...state.material,
       onConveyor,
     },
   })),
 
-  setMaterialConveyorDelay: (delay) => set((state) => ({
+  setMaterialConveyorDelay: (delay: number) => set((state) => ({
     material: {
       ...state.material,
       conveyorDelay: delay,
@@ -149,6 +201,40 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   })),
 
   reset: () => set(initialState),
-  
+
   toggleLabels: () => set((state) => ({ showLabels: !state.showLabels })),
+
+  startRecording: () => set({ isRecording: true, recordedTrace: [] }),
+
+  stopRecording: () => set({ isRecording: false }),
+
+  addTraceEntry: (coils: boolean[]) => set((state) => {
+    if (!state.isRecording && !state.isScoringRunning) return state;
+    return {
+      recordedTrace: [...state.recordedTrace, { timestamp: Date.now(), coils }]
+    };
+  }),
+
+  clearTrace: () => set({ recordedTrace: [] }),
+
+  addPenalty: (message: string, points: number) => set((state) => {
+    const now = Date.now();
+    const isDuplicate = state.penalties.some(p => p.message === message && (now - p.time < 3000));
+    if (isDuplicate) return state;
+
+    return {
+      score: Math.max(0, state.score - points),
+      penalties: [...state.penalties, { id: Math.random().toString(36).substr(2, 9), message, points, time: now }]
+    };
+  }),
+
+  addPassedItem: (message: string) => set((state) => {
+    const isDuplicate = state.passedItems.some(item => item.message === message);
+    if (isDuplicate) return state;
+    return {
+      passedItems: [...state.passedItems, { id: Math.random().toString(36).substr(2, 9), message, time: Date.now() }]
+    };
+  }),
+
+  resetScore: () => set({ score: 100, penalties: [], passedItems: [] }),
 }));

@@ -65,7 +65,7 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;

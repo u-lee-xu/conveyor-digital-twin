@@ -15,8 +15,8 @@ export function usePhysics() {
   });
 
   useEffect(() => {
-    // 启用物理模拟：手动模式、自动模式和仿真模式
-    if (mode !== 'manual' && mode !== 'auto' && mode !== 'sim') {
+    // 启用物理模拟：手动模式、自动模式、仿真模式和评分模式
+    if (mode !== 'manual' && mode !== 'auto' && mode !== 'sim' && mode !== 'scoring') {
       console.log('[物理模拟] 模式为', mode, '，已禁用物理模拟');
       return;
     }
