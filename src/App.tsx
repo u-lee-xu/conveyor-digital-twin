@@ -7,6 +7,7 @@ import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
 import { useDemoMode } from './hooks/useDemoMode';
 import { useSimMode } from './hooks/useSimMode';
+import { useScoring } from './hooks/useScoring';
 
 function App() {
   const { 
@@ -20,7 +21,6 @@ function App() {
 
   // 移动端适配状态
   const [isMobile, setIsMobile] = useState(false);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [showLabels, setShowLabels] = useState(true);
 
   // 检测是否为移动端
@@ -38,6 +38,9 @@ function App() {
 
   // 启用物理模拟
   usePhysics();
+
+  // 启用评分逻辑
+  useScoring();
 
   // 演示模式
   const { state: demoState } = useDemoMode();

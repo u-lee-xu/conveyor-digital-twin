@@ -9,17 +9,12 @@ export type SimStep = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RUNNING' | 
 
 export const useSimMode = () => {
   const { 
-    conveyorRunning, 
-    cylinders, 
-    sensors,
     spawnMaterial,
-    startConveyor,
-    stopConveyor,
-    extendCylinder,
-    retractCylinder,
+    isConnected,
+    setConnected
   } = useDeviceStore();
 
-  // 用 useRef 稳定 modbusService 引用，防止每次渲染都创建新对象导致定时器失效
+  // 用 useRef 稳定 modbusService 引用
   const modbusServiceRef = useRef(useModbusService({
     host: MODBUS_CONFIG.host,
     port: MODBUS_CONFIG.port,
@@ -51,7 +46,6 @@ export const useSimMode = () => {
 
   const connect = useCallback(async () => {
     if (step === 'CONNECTING') return;
-
     setStep('CONNECTING');
     setErrorMessage('');
 
@@ -59,27 +53,37 @@ export const useSimMode = () => {
       const result = await modbusService.connect();
       if (result.success) {
         setStep('CONNECTED');
+        setConnected(true);
         console.log('[仿真模式] 连接成功');
       } else {
         throw new Error(result.error || '连接失败');
       }
     } catch (error) {
       setStep('ERROR');
+      setConnected(false);
       setErrorMessage(error instanceof Error ? error.message : '连接失败');
-      console.error('[仿真模式] 连接失败:', error);
     }
-  }, [step]);
+  }, [step, setConnected]);
 
   const disconnect = useCallback(async () => {
     try {
       await modbusService.disconnect();
       setStep('DISCONNECTED');
+      setConnected(false);
       setIsSimulationRunning(false);
-      console.log('[仿真模式] 已断开连接');
     } catch (error) {
       console.error('[仿真模式] 断开连接失败:', error);
     }
-  }, [modbusService]);
+  }, [modbusService, setConnected]);
+
+  // 同步外部连接状态
+  useEffect(() => {
+    if (isConnected && step === 'DISCONNECTED') {
+      setStep('CONNECTED');
+    } else if (!isConnected && step === 'CONNECTED') {
+      setStep('DISCONNECTED');
+    }
+  }, [isConnected, step]);
 
   const publishAllFeedback = useCallback(async () => {
     if (step !== 'CONNECTED') return;
@@ -88,8 +92,6 @@ export const useSimMode = () => {
       // 获取最新状态
       const { sensors, cylinders } = useDeviceStore.getState();
       
-      // 基于实际活塞杆位置（currentExtension）计算限位开关状态
-      // 行程中两个限位均为OFF，只有到达行程末端区域才触发ON
       const feedExt  = cylinders.feed.currentExtension;
       const s1Ext    = cylinders.sorting1.currentExtension;
       const s2Ext    = cylinders.sorting2.currentExtension;
@@ -113,10 +115,9 @@ export const useSimMode = () => {
 
       setStats(prev => ({ ...prev, writeCount: prev.writeCount + 9 }));
     } catch (error) {
-      console.error('[仿真模式] 发布反馈失败:', error);
       setStats(prev => ({ ...prev, errorCount: prev.errorCount + 1 }));
     }
-  }, [step]); // 使用全局单例和getState，无需额外依赖
+  }, [step]);
 
   const onSimulationStart = useCallback(async (signal: boolean) => {
     if (step === 'CONNECTED') {
@@ -144,17 +145,21 @@ export const useSimMode = () => {
     }
   }, [step, modbusService]);
 
-  // 只要已连接就持续轮询PLC控制信号（不需要等启动按钮）
   useEffect(() => {
     if (step !== 'CONNECTED') return;
 
     const poll = async () => {
       try {
-        // 单次批量读取所有地址(0-103)，彻底避免多请求并发竞态
         const result = await globalModbus.readCoils(0, 104);
         if (!result.success || !result.values) return;
 
-        const v = result.values; // v[地址] = 该线圈状态
+        const v = result.values; 
+
+        // 录制逻辑 (包括自动化评分运行期间)
+        const { isRecording, isScoringRunning, addTraceEntry } = useDeviceStore.getState();
+        if (isRecording || isScoringRunning) {
+          addTraceEntry(v);
+        }
 
         const startVal    = v[MODBUS_ADDRESSES.START]                   ?? false;
         const resetVal    = v[MODBUS_ADDRESSES.RESET]                   ?? false;
@@ -172,7 +177,6 @@ export const useSimMode = () => {
           conveyor: conveyorVal,
         });
 
-        // 通过 getState 获取最新状态，避免闭包依赖导致轮询失效
         const { conveyorRunning, startConveyor, stopConveyor, extendCylinder, retractCylinder } =
           useDeviceStore.getState();
 
@@ -185,23 +189,19 @@ export const useSimMode = () => {
 
         setStats(prev => ({ ...prev, readCount: prev.readCount + 1 }));
       } catch (error) {
-        console.error('[仿真模式] 轮询失败:', error);
         setStats(prev => ({ ...prev, errorCount: prev.errorCount + 1 }));
       }
     };
 
     const interval = setInterval(poll, 200);
     return () => clearInterval(interval);
-  }, [step]); // modbusService 和 store action 已通过全局单例/getState 稳定
+  }, [step]); 
 
-  // 只要已连接就持续同步反馈（不需要等启动按钮）
   useEffect(() => {
     if (step !== 'CONNECTED') return;
-
     const interval = setInterval(() => {
       publishAllFeedback();
-    }, 200); // 提高频率到200ms，保证实时性
-
+    }, 200);
     return () => clearInterval(interval);
   }, [step, publishAllFeedback]);
 
@@ -211,21 +211,21 @@ export const useSimMode = () => {
     }
   }, [step, spawnMaterial]);
 
-  // 定期更新连接状态
   useEffect(() => {
     const updateStatus = async () => {
       try {
         const status = await modbusService.getStatus();
         setModbusStatus(status);
+        if (status.connected !== isConnected) {
+          setConnected(status.connected);
+        }
       } catch (e) {
-        setModbusStatus({ connected: false, host: '', port: 0 });
+        setConnected(false);
       }
     };
-    
     const timer = setInterval(updateStatus, 1000);
-    updateStatus();
     return () => clearInterval(timer);
-  }, [modbusService]);
+  }, [modbusService, isConnected, setConnected]);
 
   return {
     step,

@@ -23,7 +23,6 @@
     "@tailwindcss/postcss": "^4.2.1",
     "@types/three": "^0.183.1",
     "autoprefixer": "^10.4.27",
-    "modbus-serial": "^8.0.16",
     "postcss": "^8.5.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -33,6 +32,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "modbus-serial": "^8.0.16",
     "@electron-toolkit/preload": "^3.0.1",
     "@eslint/js": "^9.39.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -66,9 +66,12 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "docs/**/*"
     ],
+    "cscLink": null,
     "win": {
+      "signingHashAlgorithms": [],
       "target": [
         {
           "target": "nsis",
@@ -76,15 +79,11 @@
             "x64"
           ]
         }
-      ],
-      "icon": "build/icon.ico"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
