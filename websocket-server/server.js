@@ -185,7 +185,7 @@ class SimpleModbusTCP {
 
     return new Promise((resolve) => {
       try {
-        this.transactionId++;
+        this.transactionId = (this.transactionId + 1) % 65536;
         const tid = this.transactionId;
         const count = values.length;
         const byteCount = Math.ceil(count / 8);
