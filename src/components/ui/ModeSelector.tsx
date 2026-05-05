@@ -9,7 +9,7 @@ interface ModeSelectorProps {
 const modes: { id: Mode; label: string; icon: string; color: string }[] = [
   { id: 'manual', label: '手动', icon: '🎮', color: 'from-blue-500 to-cyan-500' },
   { id: 'auto', label: '自动', icon: '🤖', color: 'from-purple-500 to-pink-500' },
-  { id: 'sync', label: '同步', icon: '🔗', color: 'from-green-500 to-emerald-500' },
+  { id: 'scoring', label: '评分', icon: '🏆', color: 'from-green-500 to-emerald-500' },
   { id: 'sim', label: '仿真', icon: '🧪', color: 'from-orange-500 to-yellow-500' },
 ];
 

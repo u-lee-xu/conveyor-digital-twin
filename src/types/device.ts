@@ -1,5 +1,5 @@
 // 运行模式类型
-export type Mode = 'manual' | 'auto' | 'sync' | 'sim';
+export type Mode = 'manual' | 'auto' | 'scoring' | 'sim';
 
 // 气缸状态
 export interface CylinderState {

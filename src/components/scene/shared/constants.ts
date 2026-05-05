@@ -43,3 +43,10 @@ export const SENSOR_POSITIONS = {
 
 // 物料台位置 - Z=0.6
 export const MATERIAL_TABLE_POSITION: [number, number, number] = [-1.3, 0.98, 0.6];
+
+// 磁性开关（限位开关）阈值 - 活塞杆Y坐标
+// 只有在行程两端的 LIMIT_ZONE 范围内，对应限位信号才为 ON
+export const CYLINDER_RETRACT_POS = -0.22;       // 完全缩回时活塞杆Y坐标
+export const CYLINDER_EXTEND_POS_FEED = 0.405;   // 上料气缸完全伸出Y坐标
+export const CYLINDER_EXTEND_POS_SORT = 0.33;    // 分拣气缸完全伸出Y坐标
+export const CYLINDER_LIMIT_ZONE = 0.04;          // 限位触发区域宽度（约行程的6%）

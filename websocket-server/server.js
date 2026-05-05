@@ -29,6 +29,7 @@ class SimpleModbusTCP {
     this.connected = false;
     this.transactionId = 0;
     this.pendingRequests = new Map(); // 存储待处理的请求
+    this.receiveBuffer = Buffer.alloc(0); // TCP粘包处理缓冲区
   }
 
   async connect(host, port) {
@@ -39,25 +40,38 @@ class SimpleModbusTCP {
         this.connected = true;
         console.log(`ModbusTCP连接成功: ${host}:${port}`);
         
-        // 设置持久化data监听器
+        // 设置持久化数据处理器（正确处理TCP粘包和分包）
         this.client.on('data', (data) => {
-          if (data.length >= 8) {
-            const respTransactionId = data.readUInt16BE(0);
-            
-            // 查找对应的Promise
+          // 将新数据追加到缓冲区
+          this.receiveBuffer = Buffer.concat([this.receiveBuffer, data]);
+
+          // 循环解析所有完整的Modbus TCP帧
+          while (this.receiveBuffer.length >= 8) {
+            const msgLength = this.receiveBuffer.readUInt16BE(4); // 6字节头之后的数据长度
+            const totalPacketSize = 6 + msgLength;
+
+            // 等待更多数据（分包情况）
+            if (this.receiveBuffer.length < totalPacketSize) break;
+
+            // 取出一个完整帧
+            const packet = this.receiveBuffer.slice(0, totalPacketSize);
+            this.receiveBuffer = this.receiveBuffer.slice(totalPacketSize);
+
+            const respTransactionId = packet.readUInt16BE(0);
             const pendingRequest = this.pendingRequests.get(respTransactionId);
+
             if (pendingRequest) {
               clearTimeout(pendingRequest.timeout);
               this.pendingRequests.delete(respTransactionId);
-              
+
               try {
-                const functionCode = data.readUInt8(7);
+                const functionCode = packet.readUInt8(7);
                 if (functionCode === 0x01) {
                   // 读取线圈响应
-                  const byteCount = data.readUInt8(8);
+                  const byteCount = packet.readUInt8(8);
                   const values = [];
                   for (let i = 0; i < byteCount; i++) {
-                    const byte = data.readUInt8(9 + i);
+                    const byte = packet.readUInt8(9 + i);
                     for (let j = 0; j < 8; j++) {
                       if (values.length < pendingRequest.length) {
                         values.push(((byte >> j) & 0x01) === 1);
@@ -69,7 +83,7 @@ class SimpleModbusTCP {
                   // 写入响应
                   pendingRequest.resolve({ success: true });
                 } else if (functionCode >= 0x80) {
-                  const errorCode = data.readUInt8(8);
+                  const errorCode = packet.readUInt8(8);
                   pendingRequest.resolve({ success: false, error: `Modbus错误码: ${errorCode}` });
                 } else {
                   pendingRequest.resolve({ success: false, error: `意外的功能码: ${functionCode}` });
@@ -80,13 +94,18 @@ class SimpleModbusTCP {
             }
           }
         });
-        
+
         resolve({ success: true });
       });
 
       this.client.on('error', (error) => {
         console.error('ModbusTCP连接失败:', error);
+        this.receiveBuffer = Buffer.alloc(0); // 重置缓冲区
         reject({ success: false, error: error.message });
+      });
+
+      this.client.on('close', () => {
+        this.receiveBuffer = Buffer.alloc(0); // 断开时清空缓冲区
       });
 
       this.client.connect(port, host);

@@ -1,6 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
 import { MODBUS_ADDRESSES, MODBUS_CONFIG, useModbusService } from '../services/modbus';
+import { modbusService as globalModbus } from '../services/modbus-websocket';
+import { CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT, CYLINDER_LIMIT_ZONE } from '../components/scene/shared';
 import type { ModbusStatus } from '../services/modbus-websocket';
 
 export type SimStep = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RUNNING' | 'ERROR';
@@ -17,11 +19,13 @@ export const useSimMode = () => {
     retractCylinder,
   } = useDeviceStore();
 
-  const modbusService = useModbusService({
+  // 用 useRef 稳定 modbusService 引用，防止每次渲染都创建新对象导致定时器失效
+  const modbusServiceRef = useRef(useModbusService({
     host: MODBUS_CONFIG.host,
     port: MODBUS_CONFIG.port,
     unitId: MODBUS_CONFIG.unitId,
-  });
+  }));
+  const modbusService = modbusServiceRef.current;
 
   const [step, setStep] = useState<SimStep>('DISCONNECTED');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -64,7 +68,7 @@ export const useSimMode = () => {
       setErrorMessage(error instanceof Error ? error.message : '连接失败');
       console.error('[仿真模式] 连接失败:', error);
     }
-  }, [modbusService, step]);
+  }, [step]);
 
   const disconnect = useCallback(async () => {
     try {
@@ -81,28 +85,38 @@ export const useSimMode = () => {
     if (step !== 'CONNECTED') return;
 
     try {
-      const feedbacks = [
-        { address: MODBUS_ADDRESSES.SENSOR_FEED, value: sensors.feed },
-        { address: MODBUS_ADDRESSES.SENSOR_COLOR, value: sensors.color },
-        { address: MODBUS_ADDRESSES.SENSOR_MATERIAL, value: sensors.material },
-        { address: MODBUS_ADDRESSES.MAGNETIC_FEED_RETRACT, value: !cylinders.feed.extended },
-        { address: MODBUS_ADDRESSES.MAGNETIC_FEED_EXTEND, value: cylinders.feed.extended },
-        { address: MODBUS_ADDRESSES.MAGNETIC_SORTING1_RETRACT, value: !cylinders.sorting1.extended },
-        { address: MODBUS_ADDRESSES.MAGNETIC_SORTING1_EXTEND, value: cylinders.sorting1.extended },
-        { address: MODBUS_ADDRESSES.MAGNETIC_SORTING2_RETRACT, value: !cylinders.sorting2.extended },
-        { address: MODBUS_ADDRESSES.MAGNETIC_SORTING2_EXTEND, value: cylinders.sorting2.extended },
-      ];
+      // 获取最新状态
+      const { sensors, cylinders } = useDeviceStore.getState();
+      
+      // 基于实际活塞杆位置（currentExtension）计算限位开关状态
+      // 行程中两个限位均为OFF，只有到达行程末端区域才触发ON
+      const feedExt  = cylinders.feed.currentExtension;
+      const s1Ext    = cylinders.sorting1.currentExtension;
+      const s2Ext    = cylinders.sorting2.currentExtension;
 
-      for (const feedback of feedbacks) {
-        await modbusService.writeCoil(feedback.address, feedback.value);
-      }
+      const feedAtExtend  = feedExt >= CYLINDER_EXTEND_POS_FEED - CYLINDER_LIMIT_ZONE;
+      const feedAtRetract = feedExt <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
+      const s1AtExtend    = s1Ext  >= CYLINDER_EXTEND_POS_SORT - CYLINDER_LIMIT_ZONE;
+      const s1AtRetract   = s1Ext  <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
+      const s2AtExtend    = s2Ext  >= CYLINDER_EXTEND_POS_SORT - CYLINDER_LIMIT_ZONE;
+      const s2AtRetract   = s2Ext  <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
 
-      setStats(prev => ({ ...prev, writeCount: prev.writeCount + feedbacks.length }));
+      await globalModbus.writeFeedbackBatch({
+        magneticExtend:  { feed: feedAtExtend,  sort1: s1AtExtend,  sort2: s2AtExtend  },
+        magneticRetract: { feed: feedAtRetract, sort1: s1AtRetract, sort2: s2AtRetract },
+        sensors: {
+          feed:     sensors.feed,
+          color:    sensors.color,
+          material: sensors.material,
+        }
+      });
+
+      setStats(prev => ({ ...prev, writeCount: prev.writeCount + 9 }));
     } catch (error) {
       console.error('[仿真模式] 发布反馈失败:', error);
       setStats(prev => ({ ...prev, errorCount: prev.errorCount + 1 }));
     }
-  }, [step, sensors, cylinders, modbusService]);
+  }, [step]); // 使用全局单例和getState，无需额外依赖
 
   const onSimulationStart = useCallback(async (signal: boolean) => {
     if (step === 'CONNECTED') {
@@ -130,40 +144,46 @@ export const useSimMode = () => {
     }
   }, [step, modbusService]);
 
-  // 轮询控制信号
+  // 只要已连接就持续轮询PLC控制信号（不需要等启动按钮）
   useEffect(() => {
-    if (step !== 'CONNECTED' || !isSimulationRunning) return;
+    if (step !== 'CONNECTED') return;
 
     const poll = async () => {
       try {
-        const start = await modbusService.readCoil(MODBUS_ADDRESSES.START);
-        const reset = await modbusService.readCoil(MODBUS_ADDRESSES.RESET);
-        const feedValve = await modbusService.readCoil(MODBUS_ADDRESSES.FEED_CYLINDER_VALVE);
-        const sorting1Valve = await modbusService.readCoil(MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE);
-        const sorting2Valve = await modbusService.readCoil(MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE);
-        const conveyor = await modbusService.readCoil(MODBUS_ADDRESSES.CONVEYOR);
+        // 单次批量读取所有地址(0-103)，彻底避免多请求并发竞态
+        const result = await globalModbus.readCoils(0, 104);
+        if (!result.success || !result.values) return;
+
+        const v = result.values; // v[地址] = 该线圈状态
+
+        const startVal    = v[MODBUS_ADDRESSES.START]                   ?? false;
+        const resetVal    = v[MODBUS_ADDRESSES.RESET]                   ?? false;
+        const feedValve   = v[MODBUS_ADDRESSES.FEED_CYLINDER_VALVE]     ?? false;
+        const s1Valve     = v[MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE] ?? false;
+        const s2Valve     = v[MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE] ?? false;
+        const conveyorVal = v[MODBUS_ADDRESSES.CONVEYOR]                ?? false;
 
         setControlSignals({
-          start: start === 1,
-          reset: reset === 1,
-          feedCylinderValve: feedValve === 1,
-          sorting1CylinderValve: sorting1Valve === 1,
-          sorting2CylinderValve: sorting2Valve === 1,
-          conveyor: conveyor === 1,
+          start: startVal,
+          reset: resetVal,
+          feedCylinderValve: feedValve,
+          sorting1CylinderValve: s1Valve,
+          sorting2CylinderValve: s2Valve,
+          conveyor: conveyorVal,
         });
 
-        // 同步到设备状态
-        if (conveyor === 1) {
-            if (!conveyorRunning) startConveyor();
-        } else {
-            if (conveyorRunning) stopConveyor();
-        }
+        // 通过 getState 获取最新状态，避免闭包依赖导致轮询失效
+        const { conveyorRunning, startConveyor, stopConveyor, extendCylinder, retractCylinder } =
+          useDeviceStore.getState();
 
-        if (feedValve === 1) extendCylinder('feed'); else retractCylinder('feed');
-        if (sorting1Valve === 1) extendCylinder('sorting1'); else retractCylinder('sorting1');
-        if (sorting2Valve === 1) extendCylinder('sorting2'); else retractCylinder('sorting2');
+        if (conveyorVal) { if (!conveyorRunning) startConveyor(); }
+        else             { if (conveyorRunning)  stopConveyor();  }
 
-        setStats(prev => ({ ...prev, readCount: prev.readCount + 6 }));
+        if (feedValve) extendCylinder('feed');    else retractCylinder('feed');
+        if (s1Valve)   extendCylinder('sorting1'); else retractCylinder('sorting1');
+        if (s2Valve)   extendCylinder('sorting2'); else retractCylinder('sorting2');
+
+        setStats(prev => ({ ...prev, readCount: prev.readCount + 1 }));
       } catch (error) {
         console.error('[仿真模式] 轮询失败:', error);
         setStats(prev => ({ ...prev, errorCount: prev.errorCount + 1 }));
@@ -172,17 +192,18 @@ export const useSimMode = () => {
 
     const interval = setInterval(poll, 200);
     return () => clearInterval(interval);
-  }, [step, isSimulationRunning, modbusService, conveyorRunning, startConveyor, stopConveyor, extendCylinder, retractCylinder]);
+  }, [step]); // modbusService 和 store action 已通过全局单例/getState 稳定
 
+  // 只要已连接就持续同步反馈（不需要等启动按钮）
   useEffect(() => {
-    if (isSimulationRunning && step === 'CONNECTED') {
-      const interval = setInterval(() => {
-        publishAllFeedback();
-      }, 500);
+    if (step !== 'CONNECTED') return;
 
-      return () => clearInterval(interval);
-    }
-  }, [isSimulationRunning, step, publishAllFeedback]);
+    const interval = setInterval(() => {
+      publishAllFeedback();
+    }, 200); // 提高频率到200ms，保证实时性
+
+    return () => clearInterval(interval);
+  }, [step, publishAllFeedback]);
 
   const onSpawnMaterial = useCallback(() => {
     if (step === 'CONNECTED') {
@@ -208,6 +229,7 @@ export const useSimMode = () => {
 
   return {
     step,
+    isSimulationRunning,
     errorMessage,
     modbusConfig: MODBUS_CONFIG,
     modbusStatus,

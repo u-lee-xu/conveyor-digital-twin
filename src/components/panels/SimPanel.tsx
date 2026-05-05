@@ -10,6 +10,7 @@ const MODBUS_PRESETS = [
 
 interface SimPanelProps {
   step: SimStep;
+  isSimulationRunning: boolean;
   errorMessage: string | null;
   modbusConfig: {
     host: string;
@@ -48,8 +49,53 @@ interface SimPanelProps {
   onSpawnMaterial: () => void;
 }
 
+// 通用信号行组件
+const SignalRow: React.FC<{
+  addr: number;
+  label: string;
+  val: boolean;
+  color: 'cyan' | 'green' | 'purple';
+}> = ({ addr, label, val, color }) => {
+  const dotColor = {
+    cyan: val ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.7)]' : 'bg-gray-700',
+    green: val ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.7)]' : 'bg-gray-700',
+    purple: val ? 'bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.7)]' : 'bg-gray-700',
+  }[color];
+
+  return (
+    <div className="flex items-center justify-between px-2 py-1 rounded bg-gray-800/60 border border-gray-700/30">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-gray-500 font-mono text-[10px] shrink-0 w-12">Addr {addr}</span>
+        <span className="text-gray-300 text-[11px] truncate">{label}</span>
+      </div>
+      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ml-1 ${dotColor} transition-all duration-200`} />
+    </div>
+  );
+};
+
+// 分栏标题
+const SectionHeader: React.FC<{
+  title: string;
+  subtitle: string;
+  color: 'cyan' | 'green' | 'purple';
+}> = ({ title, subtitle, color }) => {
+  const colors = {
+    cyan: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10',
+    green: 'text-green-400 border-green-500/40 bg-green-500/10',
+    purple: 'text-purple-400 border-purple-500/40 bg-purple-500/10',
+  }[color];
+
+  return (
+    <div className={`px-2 py-1.5 rounded-lg border mb-2 ${colors}`}>
+      <div className="text-[11px] font-semibold">{title}</div>
+      <div className="text-[9px] opacity-70 mt-0.5">{subtitle}</div>
+    </div>
+  );
+};
+
 export const SimPanel: React.FC<SimPanelProps> = ({
   step,
+  isSimulationRunning,
   errorMessage,
   modbusConfig,
   stats,
@@ -141,39 +187,12 @@ export const SimPanel: React.FC<SimPanelProps> = ({
             </button>
             
             {showHelp && (
-              <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700/50 space-y-3">
-                <div className="text-xs text-gray-400 font-medium">仿真模式说明</div>
-                
-                <div className="text-xs text-gray-300 space-y-2">
-                  <p>仿真模式用于PLC程序调试与验证，无需实物设备。</p>
-                  <p><span className="text-cyan-400">PLC控制信号</span> → 虚拟产线执行动作</p>
-                  <p><span className="text-green-400">虚拟产线反馈</span> → PLC读取传感器状态</p>
-                </div>
-                
-                <div className="border-t border-gray-700/50 pt-3">
-                  <div className="text-xs text-gray-400 font-medium mb-2">Modbus地址映射</div>
-                  <div className="space-y-2">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">控制信号 (PLC写入, 网页读取):</div>
-                      <code className="text-xs text-cyan-400 bg-gray-900/50 px-2 py-1 rounded block overflow-x-auto">
-                        0:启动 | 1:复位 | 100:上料气缸 | 101:分拣1 | 102:分拣2 | 103:传送带
-                      </code>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">反馈信号 (网页写入, PLC读取):</div>
-                      <code className="text-xs text-green-400 bg-gray-900/50 px-2 py-1 rounded block overflow-x-auto">
-                        2-7: 气缸磁性开关 | 8:上料传感器 | 9:色标传感器 | 10:物料传感器
-                      </code>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-700/50 pt-3">
-                  <div className="text-xs text-amber-400 font-medium mb-2">注意</div>
-                  <div className="text-xs text-gray-300">
-                    仿真模式下所有通信均通过线圈(Coil)进行。地址编号直接对应PLC的M地址编号。
-                  </div>
-                </div>
+              <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-700/50 space-y-2 text-xs text-gray-300">
+                <p>仿真模式用于PLC程序调试，无需实物设备。</p>
+                <p><span className="text-purple-400">主令信号</span>：仿真系统写入 → PLC读取（M0/M1）</p>
+                <p><span className="text-cyan-400">控制信号</span>：PLC写入 → 仿真系统读取（M100-M103）</p>
+                <p><span className="text-green-400">反馈信号</span>：仿真系统写入 → PLC读取（M2-M10）</p>
+                <p className="text-amber-400 pt-1">所有地址均使用线圈(Coil)。</p>
               </div>
             )}
           </div>
@@ -210,23 +229,23 @@ export const SimPanel: React.FC<SimPanelProps> = ({
       {/* 已连接 */}
       {step === 'CONNECTED' && (
         <>
-          {/* 连接状态 */}
+          {/* 连接状态 & 操作按钮 */}
           <div className="device-card">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-gray-200">仿真模式</span>
-              <span className="status-badge status-badge-active pulse-indicator">
-                运行中
-              </span>
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">服务器:</span>
-                <code className="text-cyan-400">{modbusConfig.host}:{modbusConfig.port}</code>
+              <div>
+                <span className="text-sm font-medium text-gray-200">仿真模式</span>
+                <code className="ml-2 text-[10px] text-cyan-400">{modbusConfig.host}:{modbusConfig.port}</code>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="status-badge status-badge-active pulse-indicator text-[10px]">已连接</span>
+                {isSimulationRunning && (
+                  <span className="text-[9px] text-green-400">运行中</span>
+                )}
               </div>
             </div>
 
-            {/* 启动/复位按钮 */}
-            <div className="grid grid-cols-3 gap-2 mt-4">
+            {/* 启动/复位/生料 */}
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onMouseDown={() => onSimulationStart(true)}
                 onMouseUp={() => onSimulationStart(false)}
@@ -258,73 +277,72 @@ export const SimPanel: React.FC<SimPanelProps> = ({
 
           {/* 通信统计 */}
           <div className="device-card">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">通信统计</div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">通信统计</div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                <div className="text-lg font-medium text-cyan-400">{stats.readCount}</div>
-                <div className="text-xs text-gray-400">读取</div>
+              <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-center">
+                <div className="text-base font-medium text-cyan-400">{stats.readCount}</div>
+                <div className="text-[10px] text-gray-400">读取</div>
               </div>
-              <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30">
-                <div className="text-lg font-medium text-green-400">{stats.writeCount}</div>
-                <div className="text-xs text-gray-400">写入</div>
+              <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                <div className="text-base font-medium text-green-400">{stats.writeCount}</div>
+                <div className="text-[10px] text-gray-400">写入</div>
               </div>
-              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30">
-                <div className="text-lg font-medium text-red-400">{stats.errorCount}</div>
-                <div className="text-xs text-gray-400">错误</div>
+              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-center">
+                <div className="text-base font-medium text-red-400">{stats.errorCount}</div>
+                <div className="text-[10px] text-gray-400">错误</div>
               </div>
             </div>
           </div>
 
-          {/* Modbus地址映射 */}
-          <div className="device-card">
-            <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Modbus地址映射 (线圈)</div>
-            
-            {/* 1. 控制信号 (0, 1, 100-103) */}
-            <div className="mb-4">
-              <div className="text-xs text-cyan-400/70 mb-2 font-medium">控制信号 (PLC写入 → 网页读取)</div>
-              <div className="space-y-1 text-xs">
-                {[
-                  { addr: 0, label: '启动控制', val: controlSignals.start },
-                  { addr: 1, label: '复位控制', val: controlSignals.reset },
-                  { addr: 100, label: '上料气缸阀', val: controlSignals.feedCylinderValve },
-                  { addr: 101, label: '分拣1气缸阀', val: controlSignals.sorting1CylinderValve },
-                  { addr: 102, label: '分拣2气缸阀', val: controlSignals.sorting2CylinderValve },
-                  { addr: 103, label: '传送带运行', val: controlSignals.conveyor },
-                ].map(item => (
-                  <div key={item.addr} className="flex items-center justify-between p-1.5 rounded bg-gray-800/50 border border-gray-700/30">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500 w-16 font-mono">Addr {item.addr}</span>
-                      <span className="text-gray-200">{item.label}</span>
-                    </div>
-                    <div className={`w-2.5 h-2.5 rounded-full ${item.val ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-gray-700'}`}></div>
-                  </div>
-                ))}
+          {/* ── 信号地址表：三栏 ── */}
+          <div className="device-card space-y-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider">Modbus 信号地址</div>
+
+            {/* 栏 1：主令信号（仿真→PLC） */}
+            <div>
+              <SectionHeader
+                title="主令信号"
+                subtitle="仿真系统 → PLC"
+                color="purple"
+              />
+              <div className="space-y-1">
+                <SignalRow addr={0} label="启动控制" val={controlSignals.start} color="purple" />
+                <SignalRow addr={1} label="复位控制" val={controlSignals.reset} color="purple" />
               </div>
             </div>
 
-            {/* 2. 反馈信号 (2-10) */}
+            {/* 栏 2：控制信号（PLC→仿真） */}
             <div>
-              <div className="text-xs text-green-400/70 mb-2 font-medium">反馈信号 (网页写入 → PLC读取)</div>
-              <div className="space-y-1 text-xs">
-                {[
-                  { addr: 2, label: '上料缩回限位', val: !cylinders.feed.extended },
-                  { addr: 3, label: '上料伸出限位', val: cylinders.feed.extended },
-                  { addr: 4, label: '分拣1缩回限位', val: !cylinders.sorting1.extended },
-                  { addr: 5, label: '分拣1伸出限位', val: cylinders.sorting1.extended },
-                  { addr: 6, label: '分拣2缩回限位', val: !cylinders.sorting2.extended },
-                  { addr: 7, label: '分拣2伸出限位', val: cylinders.sorting2.extended },
-                  { addr: 8, label: '上料传感器', val: sensors.feed },
-                  { addr: 9, label: '色标传感器', val: sensors.color },
-                  { addr: 10, label: '物料传感器', val: sensors.material },
-                ].map(item => (
-                  <div key={item.addr} className="flex items-center justify-between p-1.5 rounded bg-gray-800/50 border border-gray-700/30">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500 w-16 font-mono">Addr {item.addr}</span>
-                      <span className="text-gray-200">{item.label}</span>
-                    </div>
-                    <div className={`w-2.5 h-2.5 rounded-full ${item.val ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]' : 'bg-gray-700'}`}></div>
-                  </div>
-                ))}
+              <SectionHeader
+                title="控制信号"
+                subtitle="PLC → 仿真系统"
+                color="cyan"
+              />
+              <div className="space-y-1">
+                <SignalRow addr={100} label="上料气缸电磁阀" val={controlSignals.feedCylinderValve} color="cyan" />
+                <SignalRow addr={101} label="分拣1气缸电磁阀" val={controlSignals.sorting1CylinderValve} color="cyan" />
+                <SignalRow addr={102} label="分拣2气缸电磁阀" val={controlSignals.sorting2CylinderValve} color="cyan" />
+                <SignalRow addr={103} label="传送带运行" val={controlSignals.conveyor} color="cyan" />
+              </div>
+            </div>
+
+            {/* 栏 3：反馈信号（仿真→PLC） */}
+            <div>
+              <SectionHeader
+                title="反馈信号"
+                subtitle="仿真系统 → PLC"
+                color="green"
+              />
+              <div className="space-y-1">
+                <SignalRow addr={2}  label="上料缩回限位"  val={!cylinders.feed.extended}     color="green" />
+                <SignalRow addr={3}  label="上料伸出限位"  val={cylinders.feed.extended}      color="green" />
+                <SignalRow addr={4}  label="分拣1缩回限位" val={!cylinders.sorting1.extended} color="green" />
+                <SignalRow addr={5}  label="分拣1伸出限位" val={cylinders.sorting1.extended}  color="green" />
+                <SignalRow addr={6}  label="分拣2缩回限位" val={!cylinders.sorting2.extended} color="green" />
+                <SignalRow addr={7}  label="分拣2伸出限位" val={cylinders.sorting2.extended}  color="green" />
+                <SignalRow addr={8}  label="上料传感器"    val={sensors.feed}                 color="green" />
+                <SignalRow addr={9}  label="色标传感器"    val={sensors.color}                color="green" />
+                <SignalRow addr={10} label="物料传感器"    val={sensors.material}             color="green" />
               </div>
             </div>
           </div>
