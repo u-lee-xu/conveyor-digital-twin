@@ -218,6 +218,7 @@ export function useConveyorScoring() {
   const mode             = useDeviceStore(s => s.mode);
   const isScoringRunning = useDeviceStore(s => s.isScoringRunning);
   const setScoringRunning= useDeviceStore(s => s.setScoringRunning);
+  const setScoringComplete= useDeviceStore(s => s.setScoringComplete);
   const markScoringItem  = useDeviceStore(s => s.markScoringItem);
   const markItemsSkipped = useDeviceStore(s => s.markItemsSkipped);
   const resetScore       = useDeviceStore(s => s.resetScore);
@@ -291,6 +292,13 @@ export function useConveyorScoring() {
   }, [markItemsSkipped]);
 
   const coilsRef = useRef<{ cur: boolean[] | null, prev: boolean[] | null }>({ cur: null, prev: null });
+  const stepEntryCoilsRef = useRef<boolean[] | null>(null);
+
+  const captureStepEntry = () => {
+    if (coilsRef.current.cur) {
+      stepEntryCoilsRef.current = [...coilsRef.current.cur];
+    }
+  };
 
   const readCoilsOnce = async (): Promise<boolean[] | null> => {
     try {
@@ -360,9 +368,13 @@ export function useConveyorScoring() {
     return { cur, prev };
   };
 
-  const rising  = (cur: boolean[], prev: boolean[], addr: number) => cur[addr] && !prev[addr];
-  const falling = (cur: boolean[], prev: boolean[], addr: number) => !cur[addr] && prev[addr];
   const active  = (cur: boolean[], addr: number) => !!cur[addr];
+
+  const becameInactive = (cur: boolean[], addr: number): boolean => {
+    const entry = stepEntryCoilsRef.current;
+    if (!entry) return !active(cur, addr);
+    return entry[addr] && !cur[addr];
+  };
 
   const writeCoilWithRetry = async (addr: number, value: boolean, retries = 3): Promise<boolean> => {
     for (let i = 0; i < retries; i++) {
@@ -424,8 +436,8 @@ export function useConveyorScoring() {
       }
     };
 
-    const publishInterval = setInterval(publishFeedback, 150);
-    const processInterval = setInterval(tick, 100);
+    const publishInterval = setInterval(publishFeedback, 200);
+    const processInterval = setInterval(tick, 200);
     return () => { clearInterval(publishInterval); clearInterval(processInterval); clearAllTimeouts(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScoringRunning, publishFeedback]);
@@ -436,6 +448,7 @@ export function useConveyorScoring() {
     s === 'M4_INJECT_BLUE' || s === 'FINISHED' || s === 'IDLE';
 
   async function processStep() {
+    if (useDeviceStore.getState().scoringComplete) return;
     const step = stepRef.current;
     const now = Date.now();
 
@@ -503,6 +516,8 @@ export function useConveyorScoring() {
       }
 
       case 'M1_SEND_RESET': {
+        await updateCoils();
+        captureStepEntry();
         const ok = await sendPulse(A.RESET);
         if (ok) {
           pass('m1_btn', '【复位测试】复位按钮检测', 2);
@@ -515,10 +530,9 @@ export function useConveyorScoring() {
           setScoringPrompt('⏳ 模块2/4：上料流程 — 发送启动信号...');
           break;
         }
-        await updateCoils();
-        setScoringPrompt('⏳ 模块1/4：复位测试 — 检测PLC响应中...');
         stepRef.current = 'M1_WAIT_CYLINDERS';
         timerRef.current = now;
+        setScoringPrompt('⏳ 模块1/4：复位测试 — 检测PLC响应中...');
         break;
       }
 
@@ -538,7 +552,7 @@ export function useConveyorScoring() {
           pass('m1_s2_ctrl', '【复位测试】分拣2气缸缩回控制信号(单电控失电)', 2);
         if (active(cur, A.SORT2_IN))
           pass('m1_s2_in', '【复位测试】分拣2气缸缩回磁性开关到位', 1);
-        if (rising(cur, prev, A.CONVEYOR))
+        if (active(cur, A.CONVEYOR))
           pass('m1_conv_start', '【复位测试】传送带清料运行启动', 3);
         if (active(cur, A.CONVEYOR))
           pass('m1_conv_run', '【复位测试】传送带清料持续运行', 2);
@@ -570,6 +584,8 @@ export function useConveyorScoring() {
             });
             stepRef.current = 'M1_WAIT_CONVEYOR_STOP';
             timerRef.current = now;
+            await updateCoils();
+            captureStepEntry();
             setScoringPrompt('⏳ 模块1/4：等待传送带定时停止...');
           }
           break;
@@ -578,6 +594,8 @@ export function useConveyorScoring() {
         if (m1ReadyForTimer) {
           stepRef.current = 'M1_WAIT_CONVEYOR_STOP';
           timerRef.current = now;
+          await updateCoils();
+          captureStepEntry();
           setScoringPrompt('⏳ 模块1/4：等待传送带定时停止...');
         }
         break;
@@ -585,8 +603,8 @@ export function useConveyorScoring() {
 
       case 'M1_WAIT_CONVEYOR_STOP': {
         if (!f) break;
-        const { cur, prev } = f;
-        if (falling(cur, prev, A.CONVEYOR)) {
+        const { cur } = f;
+        if (becameInactive(cur, A.CONVEYOR)) {
           pass('m1_timer_stop', '【复位测试】传送带5秒定时器自动停止', 3);
           pass('m1_timer_hold', '【复位测试】传送带停止状态确认', 2);
           stepRef.current = 'M2_SEND_START';
@@ -603,6 +621,8 @@ export function useConveyorScoring() {
       }
 
       case 'M2_SEND_START': {
+        await updateCoils();
+        captureStepEntry();
         const ok = await sendPulse(A.START);
         if (ok) {
           pass('m2_btn', '【上料流程】启动按钮检测', 2);
@@ -615,7 +635,6 @@ export function useConveyorScoring() {
           setScoringPrompt('⏳ 模块3/4：黑色物料分拣 — 准备中...');
           break;
         }
-        await updateCoils();
         setScoringPrompt('⏳ 模块2/4：上料流程 — 检测PLC响应中...');
         useDeviceStore.setState(s => ({
           material: { ...s.material, visible: true, color: 'black', position: [-1.3, 1.06, 0.6] }
@@ -627,13 +646,14 @@ export function useConveyorScoring() {
 
       case 'M2_WAIT_FEED_EXTEND': {
         if (!f) break;
-        const { cur, prev } = f;
-        if (rising(cur, prev, A.FEED_CTRL))
+        const { cur } = f;
+        if (active(cur, A.FEED_CTRL))
           pass('m2_feed_ctrl', '【上料流程】上料气缸伸出控制信号', 3);
         if (active(cur, A.FEED_OUT)) {
           pass('m2_feed_out', '【上料流程】上料气缸伸出磁性开关到位', 3);
           stepRef.current = 'M2_WAIT_FEED_RETRACT';
           timerRef.current = now;
+          captureStepEntry();
         }
         if (now - timerRef.current > 10000) {
           const feedCtrlPassed = useDeviceStore.getState().scoringStatus['m2_feed_ctrl'] === 'passed';
@@ -661,6 +681,7 @@ export function useConveyorScoring() {
           pass('m2_feed_in', '【上料流程】上料气缸缩回磁性开关到位', 4);
           stepRef.current = 'M2_WAIT_CONVEYOR';
           timerRef.current = now;
+          captureStepEntry();
         }
         if (now - timerRef.current > 8000) {
           const retCtrlPassed = useDeviceStore.getState().scoringStatus['m2_feed_ret_ctrl'] === 'passed';
@@ -681,10 +702,10 @@ export function useConveyorScoring() {
 
       case 'M2_WAIT_CONVEYOR': {
         if (!f) break;
-        const { cur, prev } = f;
-        if (active(cur, A.FEED_SENSOR))
+        const { cur } = f;
+        if (active(cur, A.FEED_SENSOR) || useDeviceStore.getState().sensors.feed)
           pass('m2_sensor', '【上料流程】上料传感器检测到物料', 4);
-        if (rising(cur, prev, A.CONVEYOR))
+        if (active(cur, A.CONVEYOR))
           pass('m2_conv_start', '【上料流程】传送带联动启动', 3);
         if (active(cur, A.CONVEYOR))
           pass('m2_conv_run', '【上料流程】传送带持续运行', 2);
@@ -707,27 +728,30 @@ export function useConveyorScoring() {
       }
 
       case 'M3_INJECT_BLACK': {
+        await updateCoils();
         useDeviceStore.setState(s => ({
-          material: { ...s.material, visible: true, color: 'black', position: [-0.3, 1.06, 0.6] }
+          material: { ...s.material, visible: true, color: 'black', position: [-0.3, 1.06, 0] }
         }));
         stepRef.current = 'M3_WAIT_COLOR_SENSOR';
         timerRef.current = now;
+        captureStepEntry();
         setScoringPrompt('⏳ 模块3/4：黑色物料分拣 — 等待色标传感器...');
         break;
       }
 
       case 'M3_WAIT_COLOR_SENSOR': {
         if (!f) break;
-        const { cur, prev } = f;
-        if (active(cur, A.COLOR_SENSOR))
+        const { cur } = f;
+        if (active(cur, A.COLOR_SENSOR) || useDeviceStore.getState().sensors.color)
           pass('m3_color', '【黑色分拣】色标传感器触发检测', 4);
-        if (falling(cur, prev, A.CONVEYOR))
+        if (becameInactive(cur, A.CONVEYOR))
           pass('m3_conv_stop', '【黑色分拣】传送带在色标传感器触发后停止', 4);
         if (!active(cur, A.CONVEYOR) && useDeviceStore.getState().scoringStatus['m3_conv_stop'] === 'passed')
           pass('m3_conv_hold', '【黑色分拣】传送带停止状态确认', 3);
         if (useDeviceStore.getState().scoringStatus['m3_conv_hold'] === 'passed') {
           stepRef.current = 'M3_WAIT_SORT1_EXTEND';
           timerRef.current = now;
+          captureStepEntry();
           setScoringPrompt('⏳ 模块3/4：黑色物料分拣 — 等待分拣1气缸动作...');
         }
         if (now - timerRef.current > 12000) {
@@ -754,13 +778,14 @@ export function useConveyorScoring() {
 
       case 'M3_WAIT_SORT1_EXTEND': {
         if (!f) break;
-        const { cur, prev } = f;
-        if (rising(cur, prev, A.SORT1_CTRL))
+        const { cur } = f;
+        if (active(cur, A.SORT1_CTRL))
           pass('m3_s1_ctrl', '【黑色分拣】分拣1气缸伸出控制信号', 4);
         if (active(cur, A.SORT1_OUT)) {
           pass('m3_s1_out', '【黑色分拣】分拣1气缸伸出磁性开关到位', 4);
           stepRef.current = 'M3_WAIT_SORT1_RETRACT';
           timerRef.current = now;
+          captureStepEntry();
         }
         if (now - timerRef.current > 8000) {
           const s1CtrlPassed = useDeviceStore.getState().scoringStatus['m3_s1_ctrl'] === 'passed';
@@ -805,6 +830,8 @@ export function useConveyorScoring() {
       }
 
       case 'M4_SEND_START': {
+        await updateCoils();
+        captureStepEntry();
         const ok = await sendPulse(A.START);
         if (ok) {
           pass('m4_btn', '【蓝色分拣】启动按钮检测（第二轮）', 1);
@@ -816,7 +843,6 @@ export function useConveyorScoring() {
           setScoringPrompt('🏁 评分结束');
           break;
         }
-        await updateCoils();
         setScoringPrompt('⏳ 模块4/4：蓝色物料分拣 — 检测PLC响应中...');
         useDeviceStore.setState(s => ({
           material: { ...s.material, visible: true, color: 'blue', position: [-1.3, 1.06, 0.6] }
@@ -829,21 +855,22 @@ export function useConveyorScoring() {
       case 'M4_WAIT_LOAD': {
         if (!f) break;
         const { cur, prev } = f;
-        if (rising(cur, prev, A.FEED_CTRL))
+        if (active(cur, A.FEED_CTRL))
           pass('m4_feed_ctrl', '【蓝色分拣】上料气缸伸出控制（重复）', 1);
         if (isSingleCoilRetractCommandSatisfied(cur, prev, A.FEED_CTRL))
           pass('m4_feed_ret', '【蓝色分拣】上料气缸缩回控制（重复）', 1);
-        if (active(cur, A.FEED_SENSOR))
+        if (active(cur, A.FEED_SENSOR) || useDeviceStore.getState().sensors.feed)
           pass('m4_sensor', '【蓝色分拣】上料传感器检测（重复）', 1);
-        if (rising(cur, prev, A.CONVEYOR))
+        if (active(cur, A.CONVEYOR))
           pass('m4_conv', '【蓝色分拣】传送带启动（重复）', 1);
         const m4LoadReady = ['m4_feed_ctrl', 'm4_feed_ret', 'm4_sensor', 'm4_conv'].every(hasPassed);
         if (m4LoadReady) {
           useDeviceStore.setState(s => ({
-            material: { ...s.material, position: [-0.3, 1.06, 0.6] }
+            material: { ...s.material, position: [-0.3, 1.06, 0] }
           }));
           stepRef.current = 'M4_WAIT_COLOR_PASS';
           timerRef.current = now;
+          captureStepEntry();
           setScoringPrompt('⏳ 模块4/4：蓝色物料运输中...');
         }
         if (now - timerRef.current > 12000) {
@@ -860,11 +887,13 @@ export function useConveyorScoring() {
       }
 
       case 'M4_INJECT_BLUE': {
+        await updateCoils();
         useDeviceStore.setState(s => ({
-          material: { ...s.material, visible: true, color: 'blue', position: [-0.3, 1.06, 0.6] }
+          material: { ...s.material, visible: true, color: 'blue', position: [-0.3, 1.06, 0] }
         }));
         stepRef.current = 'M4_WAIT_COLOR_PASS';
         timerRef.current = now;
+        captureStepEntry();
         setScoringPrompt('⏳ 模块4/4：蓝色物料运输中...');
         break;
       }
@@ -872,12 +901,13 @@ export function useConveyorScoring() {
       case 'M4_WAIT_COLOR_PASS': {
         if (!f) break;
         const { cur } = f;
-        if (!active(cur, A.COLOR_SENSOR))
+        const storeSensors = useDeviceStore.getState().sensors;
+        if (!active(cur, A.COLOR_SENSOR) && !storeSensors.color)
           pass('m4_no_color', '【蓝色分拣】色标传感器未触发验证（互锁正确）', 2);
-        if (active(cur, A.MATERIAL_SENSOR)) {
+        if (active(cur, A.MATERIAL_SENSOR) || storeSensors.material) {
           pass('m4_mat_sensor', '【蓝色分拣】物料传感器检测到蓝色物料', 3);
           useDeviceStore.setState(s => ({
-            material: { ...s.material, position: [0.6, 1.06, 0.6] }
+            material: { ...s.material, position: [0.6, 1.06, 0] }
           }));
         }
         if (useDeviceStore.getState().scoringStatus['m4_mat_sensor'] === 'passed' && !active(cur, A.CONVEYOR)) {
@@ -885,6 +915,7 @@ export function useConveyorScoring() {
           pass('m4_conv_hold', '【蓝色分拣】传送带停止状态确认', 2);
           stepRef.current = 'M4_WAIT_SORT2_EXTEND';
           timerRef.current = now;
+          captureStepEntry();
           setScoringPrompt('⏳ 模块4/4：等待分拣2气缸动作...');
         }
         if (now - timerRef.current > 15000) {
@@ -907,15 +938,16 @@ export function useConveyorScoring() {
 
       case 'M4_WAIT_SORT2_EXTEND': {
         if (!f) break;
-        const { cur, prev } = f;
+        const { cur } = f;
         if (!active(cur, A.SORT1_OUT))
           pass('m4_no_s1', '【蓝色分拣】分拣1气缸未误触发（互锁正确）', 1);
-        if (rising(cur, prev, A.SORT2_CTRL))
+        if (active(cur, A.SORT2_CTRL))
           pass('m4_s2_ctrl', '【蓝色分拣】分拣2气缸伸出控制信号', 4);
         if (active(cur, A.SORT2_OUT)) {
           pass('m4_s2_out', '【蓝色分拣】分拣2气缸伸出磁性开关到位', 3);
           stepRef.current = 'M4_WAIT_SORT2_RETRACT';
           timerRef.current = now;
+          captureStepEntry();
         }
         if (now - timerRef.current > 8000) {
           const s2CtrlPassed = useDeviceStore.getState().scoringStatus['m4_s2_ctrl'] === 'passed';
@@ -948,7 +980,13 @@ export function useConveyorScoring() {
       }
 
       case 'FINISHED': {
-        setScoringRunning(false);
+        const st = useDeviceStore.getState().scoringStatus;
+        const allItems = SCORING_MODULES.flatMap(m => m.subModules.flatMap(sm => sm.items));
+        const pendingItems = allItems.filter(i => !st[i.id] || st[i.id] === 'pending');
+        if (pendingItems.length > 0) {
+          markItemsSkipped(pendingItems.map(i => ({ itemId: i.id, label: i.name, points: i.points })));
+        }
+        setScoringComplete(true);
         setScoringPrompt('🏁 评分结束');
         break;
       }

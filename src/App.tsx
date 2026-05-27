@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable, Label } from './components/scene';
 import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
-import { ControlPanel, StatusPanel, DemoPanel, PlcConnectionPanel, ScoringPanel, SimPanel } from './components/panels';
+import { ControlPanel, StatusPanel, DemoPanel, PlcConnectionPanel, ScoringPanel, SimPanel, ViewControlPanel } from './components/panels';
 import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
 import { useDemoMode } from './hooks/useDemoMode';
@@ -18,15 +18,14 @@ function App() {
   const cylinders = useDeviceStore((s) => s.cylinders);
   const sensors = useDeviceStore((s) => s.sensors);
   const material = useDeviceStore((s) => s.material);
+  const showLabels = useDeviceStore((s) => s.showLabels);
 
   const [isMobile, setIsMobile] = useState(false);
-  const [showLabels, setShowLabels] = useState(true);
   const prevModeRef = useRef(mode);
 
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 640);
-      setShowLabels(window.innerWidth >= 640);
     };
 
     checkMobile();
@@ -78,6 +77,7 @@ function App() {
     onSimulationStop: simStop,
     onSimulationReset: simReset,
     onSpawnMaterial: simSpawnMaterial,
+    onInitialize: simInitialize,
   } = useSimMode();
 
   const desktopModePanel = (() => {
@@ -127,6 +127,7 @@ function App() {
             onSimulationStop={simStop}
             onSimulationReset={simReset}
             onSpawnMaterial={simSpawnMaterial}
+            onInitialize={simInitialize}
           />
         </div>
       </>
@@ -193,7 +194,6 @@ function App() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white">数字孪生传送带系统</h1>
-                <p className="text-xs text-slate-400">V3 / React + Three.js</p>
               </div>
             </div>
           </div>
@@ -202,6 +202,8 @@ function App() {
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">运行模式</div>
             <ModeSelector currentMode={mode} onModeChange={setMode} />
           </div>
+
+          <ViewControlPanel />
 
           {desktopModePanel}
         </div>
@@ -226,7 +228,7 @@ function App() {
         </div>
       )}
 
-      <div className="absolute bottom-4 right-4 text-xs text-gray-600">Digital Twin V3</div>
+      <div className="absolute bottom-4 right-4 text-xs text-gray-600">Digital Twin</div>
     </div>
   );
 }

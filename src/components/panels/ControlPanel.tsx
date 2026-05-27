@@ -185,22 +185,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
           </Button>
         </div>
       </div>
-
-      {/* 视图控制 */}
-      <div className="device-card">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-semibold text-white">视图控制</span>
-        </div>
-        <Button 
-          onClick={useDeviceStore.getState().toggleLabels}
-          variant={useDeviceStore(s => s.showLabels) ? 'primary' : 'default'}
-          size="md"
-          className="w-full btn-hover-lift"
-          glow
-        >
-          {useDeviceStore(s => s.showLabels) ? '👁 隐藏标签' : '👁 显示标签'}
-        </Button>
-      </div>
     </div>
   );
 };

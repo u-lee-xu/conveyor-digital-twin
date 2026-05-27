@@ -51,6 +51,7 @@ interface DeviceStore {
   scoringLog: ScoringLogEntry[];
   passedItems: { id: string; message: string; points: number; time: number }[];
   isScoringRunning: boolean;
+  scoringComplete: boolean;
   scoringPrompt: string;
 
   isConnected: boolean;
@@ -67,6 +68,7 @@ interface DeviceStore {
   addPassedItem: (message: string, points?: number) => void;
   resetScore: () => void;
   setScoringRunning: (running: boolean) => void;
+  setScoringComplete: (complete: boolean) => void;
   setScoringPrompt: (prompt: string) => void;
   randomizeState: () => void;
 
@@ -117,6 +119,7 @@ const initialState = {
   scoringLog: [],
   passedItems: [],
   isScoringRunning: false,
+  scoringComplete: false,
   scoringPrompt: '',
   isConnected: false,
 };
@@ -164,7 +167,8 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     persistPlcConfig(nextConfig);
     return { plcConfig: nextConfig };
   }),
-  setScoringRunning: (running: boolean) => set({ isScoringRunning: running }),
+  setScoringRunning: (running: boolean) => set({ isScoringRunning: running, scoringComplete: false }),
+  setScoringComplete: (complete: boolean) => set({ scoringComplete: complete }),
 
   randomizeState: () => set((state) => ({
     conveyorRunning: true,
@@ -350,6 +354,7 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     scoringStatus: {},
     scoringLog: [],
     passedItems: [],
+    scoringComplete: false,
     scoringPrompt: '',
   }),
 

@@ -116,6 +116,7 @@ export class ModbusService {
   private static readonly HEARTBEAT_MAX_FAILS = 3;
   private static readonly MAX_RECONNECT_ATTEMPTS = 20;
   private static readonly MAX_CONSECUTIVE_ERRORS = 5;
+  private static readonly MAX_PENDING_MESSAGES = 50;
 
   setOnPlcDisconnected(callback: (() => void) | null) {
     this.onPlcDisconnected = callback;
@@ -135,12 +136,22 @@ export class ModbusService {
     this.consecutiveErrors = 0;
   }
 
+  private clearAllMessageHandlers() {
+    const error = new Error('WebSocket连接已断开');
+    this.messageHandlers.forEach(handler => {
+      try {
+        handler({ success: false, error: error.message });
+      } catch {}
+    });
+    this.messageHandlers.clear();
+  }
+
   startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatFailCount = 0;
     this.heartbeatTimer = setInterval(async () => {
       try {
-        const result = await this.readCoils(0, 1);
+        const result = await this.readCoilsWithoutRecord(0, 1);
         if (result.success) {
           this.heartbeatFailCount = 0;
         } else {
@@ -217,6 +228,7 @@ export class ModbusService {
         this.connected = false;
         this.reconnecting = false;
         this.reconnectAttempts++;
+        this.clearAllMessageHandlers();
         if (this.reconnectAttempts <= ModbusService.MAX_RECONNECT_ATTEMPTS) {
           this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
@@ -248,6 +260,10 @@ export class ModbusService {
    */
   private sendMessage(message: WSMessage): Promise<any> {
     return new Promise((resolve, reject) => {
+      if (this.messageHandlers.size >= ModbusService.MAX_PENDING_MESSAGES) {
+        reject(new Error('请求队列已满，请稍后重试'));
+        return;
+      }
       if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
         if (message.type === 'get-status') {
             resolve({ success: false, connected: false, error: 'WebSocket未连接' });
@@ -428,6 +444,23 @@ export class ModbusService {
       };
     } catch (error) {
       this.recordError();
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  private async readCoilsWithoutRecord(address: number, length: number): Promise<ModbusReadResult> {
+    try {
+      const result = await this.sendMessage({
+        type: 'read-coils',
+        address,
+        length,
+      });
+      return {
+        success: result.success,
+        values: result.values,
+        error: result.error,
+      };
+    } catch (error) {
       return { success: false, error: (error as Error).message };
     }
   }
