@@ -1,0 +1,194 @@
+import React, { useEffect, useRef } from 'react';
+import { useDeviceStore } from '../../stores';
+import { Button } from '../ui';
+import { MODBUS_CONFIG, useModbusService } from '../../services/modbus';
+
+export const ScoringPanel: React.FC = () => {
+  const { 
+    isScoringRunning, 
+    setScoringRunning,
+    recordedTrace, 
+    score,
+    penalties,
+    passedItems,
+    resetScore,
+    clearTrace,
+    isConnected,
+    setConnected
+  } = useDeviceStore();
+
+  const modbusService = useModbusService({
+    host: MODBUS_CONFIG.host,
+    port: MODBUS_CONFIG.port,
+    unitId: MODBUS_CONFIG.unitId,
+  });
+
+  const passedItemsEndRef = useRef<HTMLDivElement>(null);
+  const penaltiesEndRef = useRef<HTMLDivElement>(null);
+
+  // 自动滚动到列表底部
+  useEffect(() => {
+    passedItemsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [passedItems]);
+
+  useEffect(() => {
+    penaltiesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [penalties]);
+
+  const handleStartAutoTest = async () => {
+    if (!isConnected) {
+      const result = await modbusService.connect();
+      if (!result.success) {
+        alert('无法连接 Modbus 代理服务器: ' + result.error);
+        return;
+      }
+      setConnected(true);
+    }
+    resetScore();
+    clearTrace();
+    setScoringRunning(true);
+  };
+
+  const handleStopAutoTest = () => {
+    setScoringRunning(false);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+      {/* 标题与得分 */}
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <span className="text-white text-xl">🎓</span>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">自动评分系统</h2>
+            <p className="text-xs text-slate-400 uppercase tracking-wider">Automated Assessment</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className={`text-3xl font-black font-mono transition-colors ${
+            score >= 80 ? 'text-green-400' : score >= 50 ? 'text-yellow-400' : 'text-slate-400'
+          }`}>
+            {score}
+          </div>
+          <div className="text-[10px] text-slate-500 uppercase">/ 100 pts</div>
+        </div>
+      </div>
+
+      {/* 连接状态 */}
+      <div className={`px-4 py-2 rounded-xl border flex items-center justify-between ${isConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <span className="text-xs font-medium text-slate-300">
+            {isConnected ? `已连接: ${MODBUS_CONFIG.host}:${MODBUS_CONFIG.port}` : 'Modbus 未连接'}
+          </span>
+        </div>
+        {!isConnected && (
+          <Button onClick={() => handleStartAutoTest()} size="sm" variant="neon" className="h-6 px-2 text-[10px]">建立连接</Button>
+        )}
+      </div>
+
+      {/* 控制逻辑 */}
+      <div className="bg-slate-900/50 rounded-xl p-5 border border-slate-700/50">
+        {!isScoringRunning ? (
+          <Button 
+            onClick={handleStartAutoTest} 
+            variant="primary" 
+            className="w-full mb-4 h-12 text-base font-bold"
+            glow
+          >
+            🏁 开始自动测评
+          </Button>
+        ) : (
+          <Button 
+            onClick={handleStopAutoTest} 
+            variant="danger" 
+            className="w-full mb-4 h-12 text-base font-bold animate-pulse"
+            glow
+          >
+            ⏹ 停止当前测评
+          </Button>
+        )}
+
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs text-slate-400">
+            <span>测评状态:</span>
+            <span className={isScoringRunning ? 'text-blue-400' : 'text-slate-500'}>
+              {isScoringRunning ? '序列执行中...' : '待命'}
+            </span>
+          </div>
+          <div className="flex justify-between text-xs text-slate-400">
+            <span>采样深度:</span>
+            <span className="text-white font-mono">{recordedTrace.length}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 测评报告 (通过项 + 扣分项) */}
+      <div className="space-y-5">
+        {/* 通过项 */}
+        <div className="space-y-3">
+          <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest px-1 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            通过项目 / Passed Items
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+            {passedItems.length === 0 ? (
+              <div className="text-[10px] text-slate-600 italic px-1">等待流程触发...</div>
+            ) : (
+              <>
+                {passedItems.map((item) => (
+                  <div key={item.id} className="bg-green-500/5 border border-green-500/10 rounded-lg p-2 flex items-start gap-3 animate-in slide-in-from-bottom-2 duration-300">
+                    <div className="mt-0.5 text-green-400 text-xs text-shadow-glow">✓</div>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] text-green-100/90">{item.message}</span>
+                      <span className="text-[8px] text-slate-500">{new Date(item.time).toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                ))}
+                <div ref={passedItemsEndRef} />
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 扣分项 */}
+        <div className="space-y-3">
+          <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest px-1 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+            扣分记录 / Penalties
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+            {penalties.length === 0 ? (
+              <div className="text-[10px] text-slate-600 italic px-1">暂无违规动作</div>
+            ) : (
+              <>
+                {penalties.map((p) => (
+                  <div key={p.id} className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 flex justify-between items-center group animate-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] text-red-100 font-medium">{p.message}</span>
+                      <span className="text-[8px] text-slate-500">{new Date(p.time).toLocaleTimeString()}</span>
+                    </div>
+                    <div className="text-xs font-bold text-red-400">-{p.points}</div>
+                  </div>
+                ))}
+                <div ref={penaltiesEndRef} />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 底部说明 */}
+      <div className="p-4 bg-indigo-500/5 rounded-xl border border-indigo-500/10 opacity-60">
+        <div className="text-[10px] text-indigo-300 font-bold mb-1 italic">测试提示:</div>
+        <p className="text-[9px] text-slate-500 leading-relaxed">
+          测评结束后，得分将作为最终实训成绩。可以通过“停止”按钮随时中断流程并重新开始。
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default ScoringPanel;

@@ -37,14 +37,16 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     if (!containerRef.current) return;
     
     // 初始化性能监控
-    const stats = new Stats();
-    stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
-    stats.dom.style.position = 'absolute';
-    stats.dom.style.top = '0px';
-    stats.dom.style.left = '0px';
-    stats.dom.style.zIndex = '100';
-    containerRef.current.appendChild(stats.dom);
-    statsRef.current = stats;
+    if (import.meta.env.DEV) {
+      const stats = new Stats();
+      stats.showPanel(0);
+      stats.dom.style.position = 'absolute';
+      stats.dom.style.top = '0px';
+      stats.dom.style.left = '0px';
+      stats.dom.style.zIndex = '100';
+      containerRef.current.appendChild(stats.dom);
+      statsRef.current = stats;
+    }
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e293b);
@@ -93,8 +95,8 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
     directionalLight.position.set(5, 10, 7);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
     directionalLight.shadow.camera.near = 0.5;
     directionalLight.shadow.camera.far = 50;
     directionalLight.shadow.camera.left = -10;
@@ -136,10 +138,14 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationIdRef.current);
       controls.dispose();
-      if (containerRef.current) {
-        if (renderer.domElement) containerRef.current.removeChild(renderer.domElement);
-        if (stats.dom) containerRef.current.removeChild(stats.dom);
+      const container = containerRef.current;
+      if (container) {
+        if (renderer.domElement) container.removeChild(renderer.domElement);
+        if (css2DRenderer.domElement) container.removeChild(css2DRenderer.domElement);
+        if (statsRef.current?.dom) container.removeChild(statsRef.current.dom);
       }
+      groundGeometry.dispose();
+      groundMaterial.dispose();
       renderer.dispose();
     };
   }, []);

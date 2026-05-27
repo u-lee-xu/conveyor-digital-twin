@@ -111,8 +111,26 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
       const initExtendPos = isFeed ? CYLINDER_EXTEND_POS_FEED : CYLINDER_EXTEND_POS_SORT;
       const initAtRetract = initialY <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
       const initAtExtend  = initialY >= initExtendPos - CYLINDER_LIMIT_ZONE;
-      swExt.led.material = initAtExtend  ? materials.ledActive.clone() : materials.ledInactive.clone();
-      swRet.led.material = initAtRetract ? materials.ledActive.clone() : materials.ledInactive.clone();
+      const led1Mat = swExt.led.material as THREE.MeshStandardMaterial;
+      const led2Mat = swRet.led.material as THREE.MeshStandardMaterial;
+      if (initAtExtend) {
+        led1Mat.color.set(0x10B981);
+        led1Mat.emissive.set(0x10B981);
+        led1Mat.emissiveIntensity = 2.0;
+      } else {
+        led1Mat.color.set(0x1F2937);
+        led1Mat.emissive.set(0x000000);
+        led1Mat.emissiveIntensity = 0;
+      }
+      if (initAtRetract) {
+        led2Mat.color.set(0x10B981);
+        led2Mat.emissive.set(0x10B981);
+        led2Mat.emissiveIntensity = 2.0;
+      } else {
+        led2Mat.color.set(0x1F2937);
+        led2Mat.emissive.set(0x000000);
+        led2Mat.emissiveIntensity = 0;
+      }
     }
 
     const rodMesh = new THREE.Mesh(rodGeom, materials.cylinderRod);
@@ -149,8 +167,26 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
       if (!led1Ref.current || !led2Ref.current) return;
       const atRetract = pos <= CYLINDER_RETRACT_POS + CYLINDER_LIMIT_ZONE;
       const atExtend  = pos >= extendPos - CYLINDER_LIMIT_ZONE;
-      led1Ref.current.material = atExtend  ? materials.ledActive.clone() : materials.ledInactive.clone();
-      led2Ref.current.material = atRetract ? materials.ledActive.clone() : materials.ledInactive.clone();
+      const led1Mat = led1Ref.current.material as THREE.MeshStandardMaterial;
+      const led2Mat = led2Ref.current.material as THREE.MeshStandardMaterial;
+      if (atExtend) {
+        led1Mat.color.set(0x10B981);
+        led1Mat.emissive.set(0x10B981);
+        led1Mat.emissiveIntensity = 2.0;
+      } else {
+        led1Mat.color.set(0x1F2937);
+        led1Mat.emissive.set(0x000000);
+        led1Mat.emissiveIntensity = 0;
+      }
+      if (atRetract) {
+        led2Mat.color.set(0x10B981);
+        led2Mat.emissive.set(0x10B981);
+        led2Mat.emissiveIntensity = 2.0;
+      } else {
+        led2Mat.color.set(0x1F2937);
+        led2Mat.emissive.set(0x000000);
+        led2Mat.emissiveIntensity = 0;
+      }
     };
 
     const animate = () => {
@@ -159,7 +195,7 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
       const target = targetPositionRef.current;
       const diff = target - current;
       if (Math.abs(diff) > 0.001) {
-        const nextPos = current + diff * 0.15;
+        const nextPos = current + diff * 0.25;
         rodRef.current.position.y = nextPos;
         updateCylinderExtension(name, nextPos);
         setLEDs(nextPos);

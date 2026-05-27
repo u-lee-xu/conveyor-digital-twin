@@ -1,49 +1,65 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useDeviceStore } from '../../stores';
 import { Button } from '../ui';
-import { MODBUS_CONFIG, useModbusService } from '../../services/modbus';
+import { SCORING_MODULES } from '../../hooks/useConveyorScoring';
+import type { ScoringItemStatus } from '../../stores/useDeviceStore';
+
+const STATUS_ICON: Record<ScoringItemStatus, string> = {
+  pending: '·',
+  passed: '✓',
+  failed: '✕',
+  skipped: '○',
+};
+
+const STATUS_COLOR: Record<ScoringItemStatus, string> = {
+  pending: 'text-slate-500',
+  passed: 'text-green-400',
+  failed: 'text-red-400',
+  skipped: 'text-slate-600',
+};
+
+const STATUS_BG: Record<ScoringItemStatus, string> = {
+  pending: 'bg-slate-500/5 border-slate-500/10',
+  passed: 'bg-green-500/5 border-green-500/10',
+  failed: 'bg-red-500/10 border-red-500/20',
+  skipped: 'bg-slate-800/30 border-slate-700/20',
+};
 
 export const ScoringPanel: React.FC = () => {
-  const { 
-    isScoringRunning, 
+  const {
+    isScoringRunning,
     setScoringRunning,
-    recordedTrace, 
     score,
-    penalties,
-    passedItems,
+    scoringStatus,
+    scoringLog,
+    scoringPrompt,
     resetScore,
     clearTrace,
     isConnected,
-    setConnected
   } = useDeviceStore();
 
-  const modbusService = useModbusService({
-    host: MODBUS_CONFIG.host,
-    port: MODBUS_CONFIG.port,
-    unitId: MODBUS_CONFIG.unitId,
-  });
-
-  const passedItemsEndRef = useRef<HTMLDivElement>(null);
-  const penaltiesEndRef = useRef<HTMLDivElement>(null);
-
-  // 自动滚动到列表底部
-  useEffect(() => {
-    passedItemsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [passedItems]);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    penaltiesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [penalties]);
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [scoringLog]);
 
-  const handleStartAutoTest = async () => {
-    if (!isConnected) {
-      const result = await modbusService.connect();
-      if (!result.success) {
-        alert('无法连接 Modbus 代理服务器: ' + result.error);
-        return;
-      }
-      setConnected(true);
-    }
+  const moduleScores = useMemo(() => {
+    return SCORING_MODULES.map(mod => {
+      const allItems = mod.subModules.flatMap(sm => sm.items);
+      const earned = allItems.reduce((sum, item) => {
+        return sum + (scoringStatus[item.id] === 'passed' ? item.points : 0);
+      }, 0);
+      const passed = allItems.filter(i => scoringStatus[i.id] === 'passed').length;
+      const failed = allItems.filter(i => scoringStatus[i.id] === 'failed').length;
+      const skipped = allItems.filter(i => scoringStatus[i.id] === 'skipped').length;
+      const pending = allItems.filter(i => !scoringStatus[i.id] || scoringStatus[i.id] === 'pending').length;
+      return { ...mod, earned, passed, failed, skipped, pending };
+    });
+  }, [scoringStatus]);
+
+  const handleStartAutoTest = () => {
+    if (!isConnected) return;
     resetScore();
     clearTrace();
     setScoringRunning(true);
@@ -54,12 +70,11 @@ export const ScoringPanel: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-      {/* 标题与得分 */}
+    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <span className="text-white text-xl">🎓</span>
+            <span className="text-white text-xl">T</span>
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">自动评分系统</h2>
@@ -67,123 +82,175 @@ export const ScoringPanel: React.FC = () => {
           </div>
         </div>
         <div className="text-right">
-          <div className={`text-3xl font-black font-mono transition-colors ${score > 80 ? 'text-green-400' : score > 60 ? 'text-yellow-400' : 'text-red-400'}`}>
+          <div className={`text-3xl font-black font-mono transition-colors ${
+            score >= 80 ? 'text-green-400' : score >= 50 ? 'text-yellow-400' : 'text-slate-400'
+          }`}>
             {score}
           </div>
-          <div className="text-[10px] text-slate-500 uppercase">Total Score</div>
+          <div className="text-[10px] text-slate-500 uppercase">/ 100 pts</div>
         </div>
       </div>
 
-      {/* 连接状态 */}
-      <div className={`px-4 py-2 rounded-xl border flex items-center justify-between ${isConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+      <div className={`px-4 py-2 rounded-xl border flex items-center justify-between ${isConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`}></div>
           <span className="text-xs font-medium text-slate-300">
-            {isConnected ? `已连接: ${MODBUS_CONFIG.host}:${MODBUS_CONFIG.port}` : 'Modbus 未连接'}
+            {isConnected ? 'PLC 已连接，可开始评分' : '请先在上方连接 PLC'}
           </span>
         </div>
-        {!isConnected && (
-          <Button onClick={() => handleStartAutoTest()} size="sm" variant="neon" className="h-6 px-2 text-[10px]">建立连接</Button>
-        )}
+        {!isConnected && <span className="text-[10px] text-amber-300">评分模式需手动连接</span>}
       </div>
 
-      {/* 控制逻辑 */}
       <div className="bg-slate-900/50 rounded-xl p-5 border border-slate-700/50">
         {!isScoringRunning ? (
-          <Button 
-            onClick={handleStartAutoTest} 
-            variant="primary" 
-            className="w-full mb-4 h-12 text-base font-bold"
+          <Button
+            onClick={handleStartAutoTest}
+            variant="primary"
+            className="w-full mb-4 h-12 text-base font-bold disabled:opacity-50"
+            disabled={!isConnected}
             glow
           >
-            🏁 开始自动测评
+            开始自动评分
           </Button>
         ) : (
-          <Button 
-            onClick={handleStopAutoTest} 
-            variant="danger" 
+          <Button
+            onClick={handleStopAutoTest}
+            variant="danger"
             className="w-full mb-4 h-12 text-base font-bold animate-pulse"
             glow
           >
-            ⏹ 停止当前测评
+            停止当前评分
           </Button>
+        )}
+
+        {isScoringRunning && scoringPrompt && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
+            <p className="text-sm text-indigo-200 font-medium">{scoringPrompt}</p>
+          </div>
         )}
 
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-slate-400">
-            <span>测评状态:</span>
+            <span>测评状态</span>
             <span className={isScoringRunning ? 'text-blue-400' : 'text-slate-500'}>
               {isScoringRunning ? '序列执行中...' : '待命'}
             </span>
           </div>
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>采样深度:</span>
-            <span className="text-white font-mono">{recordedTrace.length}</span>
-          </div>
         </div>
       </div>
 
-      {/* 测评报告 (通过项 + 扣分项) */}
-      <div className="space-y-5">
-        {/* 通过项 */}
-        <div className="space-y-3">
-          <div className="text-[10px] font-bold text-green-500 uppercase tracking-widest px-1 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-            通过项目 / Passed Items
-          </div>
-          <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
-            {passedItems.length === 0 ? (
-              <div className="text-[10px] text-slate-600 italic px-1">等待流程触发...</div>
-            ) : (
-              <>
-                {passedItems.map((item) => (
-                  <div key={item.id} className="bg-green-500/5 border border-green-500/10 rounded-lg p-2 flex items-start gap-3 animate-in slide-in-from-bottom-2 duration-300">
-                    <div className="mt-0.5 text-green-400 text-xs text-shadow-glow">✓</div>
-                    <div className="flex flex-col">
-                      <span className="text-[11px] text-green-100/90">{item.message}</span>
-                      <span className="text-[8px] text-slate-500">{new Date(item.time).toLocaleTimeString()}</span>
-                    </div>
-                  </div>
-                ))}
-                <div ref={passedItemsEndRef} />
-              </>
-            )}
-          </div>
+      <div className="space-y-3">
+        <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest px-1 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+          模块评分 / Module Scores
         </div>
-
-        {/* 扣分项 */}
-        <div className="space-y-3">
-          <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest px-1 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-            扣分记录 / Penalties
-          </div>
-          <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-            {penalties.length === 0 ? (
-              <div className="text-[10px] text-slate-600 italic px-1">暂无违规动作</div>
-            ) : (
-              <>
-                {penalties.map((p) => (
-                  <div key={p.id} className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 flex justify-between items-center group animate-in slide-in-from-bottom-2 duration-300">
-                    <div className="flex flex-col">
-                      <span className="text-[11px] text-red-100 font-medium">{p.message}</span>
-                      <span className="text-[8px] text-slate-500">{new Date(p.time).toLocaleTimeString()}</span>
-                    </div>
-                    <div className="text-xs font-bold text-red-400">-{p.points}</div>
+        {moduleScores.map((mod, idx) => (
+          <div key={mod.id} className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-indigo-300">{idx + 1}</span>
+                <span className="text-sm font-semibold text-white">{mod.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-bold font-mono ${
+                  mod.earned >= mod.maxPoints * 0.8 ? 'text-green-400' :
+                  mod.earned >= mod.maxPoints * 0.5 ? 'text-yellow-400' :
+                  mod.earned > 0 ? 'text-orange-400' : 'text-slate-500'
+                }`}>
+                  {mod.earned}
+                </span>
+                <span className="text-[10px] text-slate-500">/ {mod.maxPoints}</span>
+              </div>
+            </div>
+            <div className="h-1 bg-slate-800">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  mod.earned >= mod.maxPoints * 0.8 ? 'bg-green-500' :
+                  mod.earned >= mod.maxPoints * 0.5 ? 'bg-yellow-500' :
+                  mod.earned > 0 ? 'bg-orange-500' : 'bg-slate-700'
+                }`}
+                style={{ width: `${(mod.earned / mod.maxPoints) * 100}%` }}
+              />
+            </div>
+            <div className="px-4 py-2 space-y-1">
+              {mod.subModules.map(sm => (
+                <div key={sm.id}>
+                  <div className="flex items-center gap-1 mt-1 mb-0.5">
+                    <span className="text-[9px] text-slate-500 uppercase tracking-wider">{sm.name}</span>
+                    {sm.isPrerequisite && (
+                      <span className="text-[8px] px-1 py-0 rounded bg-indigo-500/20 text-indigo-300">前置</span>
+                    )}
                   </div>
-                ))}
-                <div ref={penaltiesEndRef} />
-              </>
-            )}
+                  {sm.items.map(item => {
+                    const status: ScoringItemStatus = scoringStatus[item.id] || 'pending';
+                    return (
+                      <div key={item.id} className={`flex items-center justify-between px-2 py-1 rounded border ${STATUS_BG[status]} mb-0.5`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs ${STATUS_COLOR[status]}`}>{STATUS_ICON[status]}</span>
+                          <span className={`text-[10px] ${status === 'skipped' ? 'text-slate-600 line-through' : status === 'failed' ? 'text-red-200' : 'text-slate-300'}`}>
+                            {item.name}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-mono ${
+                          status === 'passed' ? 'text-green-400' :
+                          status === 'failed' ? 'text-red-400' :
+                          status === 'skipped' ? 'text-slate-600' : 'text-slate-500'
+                        }`}>
+                          {status === 'passed' ? `+${item.points}` : status === 'pending' ? `${item.points}` : '0'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+          评分日志 / Scoring Log
+        </div>
+        <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+          {scoringLog.length === 0 ? (
+            <div className="text-[10px] text-slate-600 italic px-1">等待流程触发...</div>
+          ) : (
+            <>
+              {scoringLog.map((entry) => (
+                <div key={entry.id} className={`rounded-lg px-2 py-1.5 flex items-start gap-2 border ${STATUS_BG[entry.status]}`}>
+                  <span className={`text-xs mt-0.5 ${STATUS_COLOR[entry.status]}`}>{STATUS_ICON[entry.status]}</span>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <span className={`text-[10px] ${entry.status === 'passed' ? 'text-green-100/90' : entry.status === 'failed' ? 'text-red-200' : 'text-slate-500'}`}>
+                      {entry.label}
+                    </span>
+                    <span className="text-[8px] text-slate-600">{new Date(entry.time).toLocaleTimeString()}</span>
+                  </div>
+                  <span className={`text-[10px] font-mono ${
+                    entry.status === 'passed' ? 'text-green-400' : 'text-slate-600'
+                  }`}>
+                    {entry.status === 'passed' ? `+${entry.points}` : ''}
+                  </span>
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </>
+          )}
         </div>
       </div>
 
-      {/* 底部说明 */}
       <div className="p-4 bg-indigo-500/5 rounded-xl border border-indigo-500/10 opacity-60">
-        <div className="text-[10px] text-indigo-300 font-bold mb-1 italic">测试提示:</div>
+        <div className="text-[10px] text-indigo-300 font-bold mb-1 italic">评分说明:</div>
         <p className="text-[9px] text-slate-500 leading-relaxed">
-          测评结束后，得分将作为最终实训成绩。可以通过“停止”按钮随时中断流程并重新开始。
+          纯累加制评分，初始 0 分，通过评分项累计至满分 100。前置子模块失败则后续子模块自动跳过，功能失败则跳过本模块剩余项。全自动测试流程，无需手动操作。
         </p>
+        <div className="flex gap-3 mt-2 text-[9px] text-slate-500">
+          <span><span className="text-green-400">✓</span> 通过</span>
+          <span><span className="text-red-400">✕</span> 失败</span>
+          <span><span className="text-slate-600">○</span> 跳过</span>
+          <span><span className="text-slate-500">·</span> 待评</span>
+        </div>
       </div>
     </div>
   );

@@ -34,7 +34,7 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
     group.add(sensorBody);
 
     // LED指示灯
-    const led = new THREE.Mesh(geometries.led, materials.ledInactive.clone());
+    const led = new THREE.Mesh(geometries.led, materials.ledInactive);
     led.position.set(0, 0.06, 0.04);
     led.scale.set(1.5, 1.5, 1.5);
     group.add(led);
@@ -62,12 +62,16 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
 
   // 更新LED状态
   useEffect(() => {
-    if (ledRef.current) {
-      if (active) {
-        ledRef.current.material = materials.sensorDetected.clone();
-      } else {
-        ledRef.current.material = materials.ledInactive.clone();
-      }
+    if (!ledRef.current) return;
+    const mat = ledRef.current.material as THREE.MeshStandardMaterial;
+    if (active) {
+      mat.color.set(0x22C55E);
+      mat.emissive.set(0x22C55E);
+      mat.emissiveIntensity = 1.5;
+    } else {
+      mat.color.set(0x1F2937);
+      mat.emissive.set(0x000000);
+      mat.emissiveIntensity = 0;
     }
   }, [active]);
 

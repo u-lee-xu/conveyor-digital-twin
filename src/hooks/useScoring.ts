@@ -1,17 +1,56 @@
+/**
+ * ================================================
+ * 文件名: useScoring.ts
+ * 功能: 数字孪生传送带分拣系统 - 评分模式Hook
+ * ================================================
+ * 
+ * 【文件关联关系】
+ * - 依赖: react (useEffect, useRef, useCallback), ../stores/useDeviceStore, ../services/modbus
+ * @deprecated 已被 useConveyorScoring.ts 替代，保留仅供参考
+ * - 数据流向: Modbus数据 -> 评分逻辑 -> 更新评分状态
+ * 
+ * 【功能说明】
+ * 本Hook实现评分模式的核心逻辑，用于测试和评估PLC程序：
+ * 1. 自动测试流程控制（状态机）
+ * 2. 实时评分监控（检测错误操作）
+ * 3. 与PLC的Modbus通信
+ * 4. 记录测试结果（通过项和扣分项）
+ * 
+ * 【评分规则】
+ * - 初始满分: 100分
+ * - 复位超时: -20分
+ * - 分拣超时: -15分
+ * - 空推气缸: -10分
+ * - 分拣逻辑错误（推错颜色）: -20分
+ * 
+ * 【测试流程】
+ * 1. 安全性校验 - 注入随机扰乱状态
+ * 2. 复位流程 - 检测PLC是否能正确复位
+ * 3. 黑色物料分拣测试
+ * 4. 蓝色物料分拣测试
+ */
+
 import { useEffect, useRef, useCallback } from 'react';
 import { useDeviceStore } from '../stores';
 import { MODBUS_ADDRESSES, MODBUS_CONFIG, useModbusService } from '../services/modbus';
 
-type ScoringStep = 
-  | 'IDLE' 
-  | 'RANDOMIZING' 
-  | 'TRIGGER_RESET' 
-  | 'WAITING_RESET_DONE' 
-  | 'PREPARING_CYCLE'
-  | 'TRIGGER_START' 
-  | 'RUNNING' 
-  | 'FINISHED';
+/**
+ * 评分模式状态机步骤定义
+ */
+type ScoringStep =
+  | 'IDLE'               // 待机状态
+  | 'RANDOMIZING'        // 注入随机扰乱状态
+  | 'TRIGGER_RESET'      // 触发复位指令
+  | 'WAITING_RESET_DONE' // 等待复位完成
+  | 'PREPARING_CYCLE'    // 准备测试循环
+  | 'TRIGGER_START'      // 触发启动指令
+  | 'RUNNING'            // 运行中（等待物料处理完成）
+  | 'FINISHED';          // 测试完成
 
+/**
+ * 评分模式Hook
+ * 实现PLC程序的自动测试和评分逻辑
+ */
 export function useScoring() {
   const mode = useDeviceStore((state) => state.mode);
   const isScoringRunning = useDeviceStore((state) => state.isScoringRunning);
@@ -19,7 +58,7 @@ export function useScoring() {
   const randomizeState = useDeviceStore((state) => state.randomizeState);
   const spawnMaterial = useDeviceStore((state) => state.spawnMaterial);
   const clearMaterial = useDeviceStore((state) => state.clearMaterial);
-  const addPenalty = useDeviceStore((state) => state.addPenalty);
+  const markScoringItem = useDeviceStore((state) => state.markScoringItem);
   const addPassedItem = useDeviceStore((state) => state.addPassedItem);
   const resetScore = useDeviceStore((state) => state.resetScore);
 
@@ -36,9 +75,6 @@ export function useScoring() {
   // 测试循环控制：0=测试黑色, 1=测试蓝色
   const cycleRef = useRef<number>(0);
   
-  // 传感器计时器（用于消除误报）
-  const feedSensorActiveTimeRef = useRef<number>(0);
-
   const safeTimeout = useCallback((fn: () => void, delay: number) => {
     const id = window.setTimeout(fn, delay);
     activeTimeoutsRef.current.push(id);
@@ -113,7 +149,7 @@ export function useScoring() {
               addPassedItem('阶段 1/3：复位成功 - 设备已处于安全初始位');
               stepRef.current = 'PREPARING_CYCLE';
             } else if (Date.now() - stateTimerRef.current > 15000) {
-              addPenalty('复位逻辑超时（15秒内未完成复位动作）', 20);
+              markScoringItem('reset_timeout', 'failed', '复位逻辑超时（15秒内未完成复位动作）', 0);
               stepRef.current = 'FINISHED';
               setScoringRunning(false);
             }
@@ -159,7 +195,7 @@ export function useScoring() {
                 safeTimeout(() => setScoringRunning(false), 2000);
               }
             } else if (Date.now() - stateTimerRef.current > 40000) {
-              addPenalty('分拣单环节超时（40秒未检测到物料离场）', 15);
+              markScoringItem('sort_timeout', 'failed', '分拣单环节超时（40秒未检测到物料离场）', 0);
               stepRef.current = 'FINISHED';
               setScoringRunning(false);
             }
@@ -177,7 +213,7 @@ export function useScoring() {
       clearInterval(interval);
       clearAllTimeouts();
     };
-  }, [isScoringRunning, randomizeState, resetScore, addPassedItem, modbusService, spawnMaterial, clearMaterial, setScoringRunning, addPenalty, safeTimeout, clearAllTimeouts]);
+  }, [isScoringRunning, randomizeState, resetScore, addPassedItem, modbusService, spawnMaterial, clearMaterial, setScoringRunning, markScoringItem, safeTimeout, clearAllTimeouts]);
 
   // 实时评分逻辑：处理联动、分拣正确性等
   useEffect(() => {
@@ -197,7 +233,7 @@ export function useScoring() {
 
       // --- 2. 空推检查 ---
       if (current[MODBUS_ADDRESSES.FEED_CYLINDER_VALVE] && !prev[MODBUS_ADDRESSES.FEED_CYLINDER_VALVE]) {
-        if (!material.visible) addPenalty('上料气缸异常空推（物料尚未就位）', 10);
+        if (!material.visible) markScoringItem('empty_push', 'failed', '上料气缸异常空推（物料尚未就位）', 0);
       }
 
       // --- 3. 颜色分拣逻辑监控 (纯逻辑：推错了颜色即扣分) ---
@@ -205,13 +241,13 @@ export function useScoring() {
         // 黑色物料判定
         if (material.color === 'black') {
           if (current[MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE] && !prev[MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE]) {
-            addPenalty('逻辑错误：黑色物料不应触发分拣气缸 2', 20);
+            markScoringItem('wrong_sort2_black', 'failed', '逻辑错误：黑色物料不应触发分拣气缸 2', 0);
           }
         }
         // 蓝色物料判定
         if (material.color === 'blue') {
           if (current[MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE] && !prev[MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE]) {
-            addPenalty('逻辑错误：蓝色物料不应触发分拣气缸 1', 20);
+            markScoringItem('wrong_sort1_blue', 'failed', '逻辑错误：蓝色物料不应触发分拣气缸 1', 0);
           }
         }
       }
@@ -219,7 +255,7 @@ export function useScoring() {
 
     const interval = setInterval(monitor, 100);
     return () => clearInterval(interval);
-  }, [mode, addPenalty]);
+  }, [mode, markScoringItem]);
 
   return null;
 }
