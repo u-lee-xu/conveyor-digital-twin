@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
+import type { CylinderName } from '../types';
 import { MODBUS_ADDRESSES } from '../services/modbus';
 import { modbusService as globalModbus } from '../services/modbus-websocket';
 import { CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT, CYLINDER_LIMIT_ZONE } from '../components/scene/shared';
@@ -234,6 +235,48 @@ export const useSimMode = () => {
     }
   }, [isConnected, mode, spawnMaterial]);
 
+  const onInitialize = useCallback(async () => {
+    if (mode !== 'sim' || !isConnected) return;
+
+    const { extendCylinder } = useDeviceStore.getState();
+
+    const colors: Array<'blue' | 'black'> = ['blue', 'black'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const randomX = -1.0 + Math.random() * 2.0;
+
+    useDeviceStore.setState({
+      material: {
+        visible: true,
+        color: randomColor,
+        position: [randomX, 1.06, 0],
+        onConveyor: true,
+        conveyorDelay: 0,
+      },
+    });
+
+    const cylinderNames: CylinderName[] = ['feed', 'sorting1', 'sorting2'];
+    const count = 1 + Math.floor(Math.random() * 3);
+    const shuffled = cylinderNames.sort(() => Math.random() - 0.5);
+    const toExtend = shuffled.slice(0, count);
+
+    for (const name of toExtend) {
+      extendCylinder(name);
+    }
+
+    try {
+      await globalModbus.writeCoil(MODBUS_ADDRESSES.FEED_CYLINDER_VALVE, toExtend.includes('feed'));
+      await globalModbus.writeCoil(MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE, toExtend.includes('sorting1'));
+      await globalModbus.writeCoil(MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE, toExtend.includes('sorting2'));
+    } catch {}
+
+    setControlSignals(prev => ({
+      ...prev,
+      feedCylinderValve: toExtend.includes('feed'),
+      sorting1CylinderValve: toExtend.includes('sorting1'),
+      sorting2CylinderValve: toExtend.includes('sorting2'),
+    }));
+  }, [isConnected, mode]);
+
   return {
     step,
     isSimulationRunning,
@@ -245,5 +288,6 @@ export const useSimMode = () => {
     onSimulationStop,
     onSimulationReset,
     onSpawnMaterial,
+    onInitialize,
   };
 };
