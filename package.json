@@ -32,7 +32,6 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "modbus-serial": "^8.0.16",
     "@electron-toolkit/preload": "^3.0.1",
     "@eslint/js": "^9.39.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -50,12 +49,13 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "jsdom": "^29.1.1",
+    "modbus-serial": "^8.0.16",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^5.4.0",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6",
-    "vitest": "^4.1.5"
+    "vitest": "^3.2.4"
   },
   "build": {
     "appId": "com.digital-twin.app",
@@ -66,8 +66,17 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "node_modules/**/*",
-      "docs/**/*"
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "websocket-server/server.js",
+        "to": "websocket-server/server.js"
+      },
+      {
+        "from": "websocket-server/node_modules",
+        "to": "websocket-server/node_modules"
+      }
     ],
     "cscLink": null,
     "win": {

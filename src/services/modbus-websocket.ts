@@ -1,64 +1,169 @@
-// Modbus地址定义（全部使用线圈）
-export const MODBUS_ADDRESSES = {
-  // 控制信号（PLC输出）- 线圈
-  START: 0,                      // 00001 启动 (M0)
-  RESET: 1,                      // 00002 复位 (M1)
-  FEED_CYLINDER_VALVE: 100,      // 00101 上料气缸伸出阀 (M100)
-  SORTING1_CYLINDER_VALVE: 101,  // 00102 推料1气缸伸出阀 (M101)
-  SORTING2_CYLINDER_VALVE: 102,  // 00103 推料2气缸伸出阀 (M102)
-  CONVEYOR: 103,                 // 00104 传送带 (M103)
+/**
+ * ================================================
+ * 文件名: modbus-websocket.ts
+ * 功能: 数字孪生传送带分拣系统 - Modbus WebSocket服务
+ * ================================================
+ * 
+ * 【文件关联关系】
+ * - 依赖: 浏览器WebSocket API
+ * - 被依赖: useSimMode.ts, useScoring.ts
+ * - 数据流向: WebSocket代理服务器 -> 本服务 -> 设备状态更新
+ *             传感器/磁性开关状态 -> 本服务 -> WebSocket代理服务器 -> PLC
+ * 
+ * 【功能说明】
+ * 本服务类实现通过WebSocket与Modbus代理服务器通信，桥接前端与PLC：
+ * 1. 自动连接到本地WebSocket服务器（端口8081）
+ * 2. 支持Modbus线圈读写操作
+ * 3. 批量写入传感器和磁性开关反馈
+ * 4. 自动重连机制（断开后5秒重试）
+ * 
+ * 【通信架构】
+ * 前端 <-> WebSocket(8081) <-> Node.js代理 <-> PLC(ModbusTCP:502)
+ */
 
-  // 传感器反馈（PLC输入）- 线圈
+/**
+ * Modbus地址定义（全部使用线圈）
+ * 
+ * 地址映射表：
+ * - 控制信号（PLC输出 -> 数字孪生输入）: 地址 0-1, 100-103
+ * - 反馈信号（数字孪生输出 -> PLC输入）: 地址 2-10
+ */
+export const MODBUS_ADDRESSES = {
+  // ============================================
+  // 控制信号（PLC输出）- 线圈
+  // ============================================
+  START: 0,                      // 00001 启动信号 (M0)
+  RESET: 1,                      // 00002 复位信号 (M1)
+  FEED_CYLINDER_VALVE: 100,      // 00101 上料气缸伸出阀 (M100)
+  SORTING1_CYLINDER_VALVE: 101,  // 00102 分拣气缸1伸出阀 (M101)
+  SORTING2_CYLINDER_VALVE: 102,  // 00103 分拣气缸2伸出阀 (M102)
+  CONVEYOR: 103,                 // 00104 传送带控制 (M103)
+
+  // ============================================
+  // 传感器反馈（数字孪生输出 -> PLC输入）- 线圈
+  // ============================================
   SENSOR_FEED: 8,                // 00009 上料传感器 (M8)
   SENSOR_COLOR: 9,               // 00010 色标传感器 (M9)
   SENSOR_MATERIAL: 10,           // 00011 物料传感器 (M10)
   MAGNETIC_FEED_RETRACT: 2,      // 00003 上料气缸缩回限位 (M2)
   MAGNETIC_FEED_EXTEND: 3,       // 00004 上料气缸伸出限位 (M3)
-  MAGNETIC_SORTING1_RETRACT: 4,  // 00005 推料1气缸缩回限位 (M4)
-  MAGNETIC_SORTING1_EXTEND: 5,   // 00006 推料1气缸伸出限位 (M5)
-  MAGNETIC_SORTING2_RETRACT: 6,  // 00007 推料2气缸缩回限位 (M6)
-  MAGNETIC_SORTING2_EXTEND: 7,   // 00008 推料2气缸伸出限位 (M7)
+  MAGNETIC_SORTING1_RETRACT: 4,  // 00005 分拣气缸1缩回限位 (M4)
+  MAGNETIC_SORTING1_EXTEND: 5,   // 00006 分拣气缸1伸出限位 (M5)
+  MAGNETIC_SORTING2_RETRACT: 6,  // 00007 分拣气缸2缩回限位 (M6)
+  MAGNETIC_SORTING2_EXTEND: 7,   // 00008 分拣气缸2伸出限位 (M7)
 } as const;
 
-// Modbus配置接口
+/**
+ * Modbus配置接口
+ */
 export interface ModbusConfig {
   host: string;
   port: number;
 }
 
-// Modbus连接状态
+/**
+ * Modbus连接状态接口
+ */
 export interface ModbusStatus {
   connected: boolean;
   host: string;
   port: number;
 }
 
-// Modbus操作结果
+/**
+ * Modbus操作结果接口
+ */
 export interface ModbusResult {
   success: boolean;
   error?: string;
 }
 
-// Modbus读取结果
+/**
+ * Modbus读取结果接口
+ */
 export interface ModbusReadResult {
   success: boolean;
   values?: boolean[];
   error?: string;
 }
 
-// WebSocket消息类型
+/**
+ * WebSocket消息类型
+ */
 type WSMessage = {
   type: string;
   id?: string;
   [key: string]: unknown;
 };
 
-// Modbus服务类（WebSocket版本）
+/**
+ * Modbus服务类（WebSocket版本）
+ * 通过WebSocket与Node.js代理服务器通信，实现与PLC的ModbusTCP通信
+ */
 export class ModbusService {
   private ws: WebSocket | null = null;
   private connected: boolean = false;
   private messageHandlers: Map<string, (result: any) => void> = new Map();
   private messageId: number = 0;
+  private onPlcDisconnected: (() => void) | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatFailCount: number = 0;
+  private reconnecting: boolean = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts: number = 0;
+  private consecutiveErrors: number = 0;
+  private static readonly HEARTBEAT_INTERVAL = 3000;
+  private static readonly HEARTBEAT_MAX_FAILS = 3;
+  private static readonly MAX_RECONNECT_ATTEMPTS = 20;
+  private static readonly MAX_CONSECUTIVE_ERRORS = 5;
+
+  setOnPlcDisconnected(callback: (() => void) | null) {
+    this.onPlcDisconnected = callback;
+  }
+
+  private recordError() {
+    this.consecutiveErrors++;
+    if (this.consecutiveErrors >= ModbusService.MAX_CONSECUTIVE_ERRORS) {
+      console.warn(`[Modbus] 连续 ${this.consecutiveErrors} 次通信失败，判定PLC断连`);
+      this.consecutiveErrors = 0;
+      this.stopHeartbeat();
+      this.onPlcDisconnected?.();
+    }
+  }
+
+  private recordSuccess() {
+    this.consecutiveErrors = 0;
+  }
+
+  startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatFailCount = 0;
+    this.heartbeatTimer = setInterval(async () => {
+      try {
+        const result = await this.readCoils(0, 1);
+        if (result.success) {
+          this.heartbeatFailCount = 0;
+        } else {
+          this.heartbeatFailCount++;
+        }
+      } catch {
+        this.heartbeatFailCount++;
+      }
+      if (this.heartbeatFailCount >= ModbusService.HEARTBEAT_MAX_FAILS) {
+        console.warn('[心跳检测] PLC 连续', this.heartbeatFailCount, '次无响应，判定断连');
+        this.stopHeartbeat();
+        this.onPlcDisconnected?.();
+      }
+    }, ModbusService.HEARTBEAT_INTERVAL);
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    this.heartbeatFailCount = 0;
+  }
 
   constructor() {
     // 默认连接到本地WebSocket服务器
@@ -69,12 +174,29 @@ export class ModbusService {
    * 连接WebSocket服务器
    */
   private connectWebSocket() {
+    if (this.reconnecting) {
+      return;
+    }
+    
+    this.reconnecting = true;
+    
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close();
+      }
+      this.ws = null;
+    }
+    
     try {
       this.ws = new WebSocket('ws://localhost:8081');
       
       this.ws.onopen = () => {
         console.log('WebSocket已连接');
         this.connected = true;
+        this.reconnecting = false;
+        this.reconnectAttempts = 0;
       };
 
       this.ws.onmessage = (event) => {
@@ -93,8 +215,16 @@ export class ModbusService {
       this.ws.onclose = () => {
         console.log('WebSocket已断开');
         this.connected = false;
-        // 5秒后尝试重新连接
-        setTimeout(() => this.connectWebSocket(), 5000);
+        this.reconnecting = false;
+        this.reconnectAttempts++;
+        if (this.reconnectAttempts <= ModbusService.MAX_RECONNECT_ATTEMPTS) {
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.connectWebSocket();
+          }, 5000);
+        } else {
+          console.warn('[WebSocket] 达到最大重连次数，停止重连');
+        }
       };
 
       this.ws.onerror = (error) => {
@@ -102,6 +232,14 @@ export class ModbusService {
       };
     } catch (error) {
       console.error('创建WebSocket连接时出错:', error);
+      this.reconnecting = false;
+      this.reconnectAttempts++;
+      if (this.reconnectAttempts <= ModbusService.MAX_RECONNECT_ATTEMPTS) {
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null;
+          this.connectWebSocket();
+        }, 5000);
+      }
     }
   }
 
@@ -111,7 +249,6 @@ export class ModbusService {
   private sendMessage(message: WSMessage): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        // 对于状态查询等非关键操作，直接返回失败而不是 reject，防止前端崩溃
         if (message.type === 'get-status') {
             resolve({ success: false, connected: false, error: 'WebSocket未连接' });
             return;
@@ -123,7 +260,16 @@ export class ModbusService {
       const id = `msg_${Date.now()}_${this.messageId++}`;
       const fullMessage = { ...message, id };
 
+      const timeout = setTimeout(() => {
+        if (this.messageHandlers.has(id)) {
+          this.messageHandlers.delete(id);
+          reject(new Error('请求超时'));
+        }
+      }, 5000);
+
       this.messageHandlers.set(id, (result) => {
+        clearTimeout(timeout);
+        this.messageHandlers.delete(id);
         if (result.success) {
           resolve(result);
         } else {
@@ -132,14 +278,6 @@ export class ModbusService {
       });
 
       this.ws!.send(JSON.stringify(fullMessage));
-
-      // 设置超时
-      setTimeout(() => {
-        if (this.messageHandlers.has(id)) {
-          this.messageHandlers.delete(id);
-          reject(new Error('请求超时'));
-        }
-      }, 10000);
     });
   }
 
@@ -160,9 +298,13 @@ export class ModbusService {
         host,
         port,
       });
+      if (result.success) {
+        this.consecutiveErrors = 0;
+        this.startHeartbeat();
+      }
       return { success: result.success, error: result.error };
     } catch (error) {
-      console.error('Modbus连接失败:', error);
+      this.recordError();
       return { success: false, error: (error as Error).message };
     }
   }
@@ -171,6 +313,12 @@ export class ModbusService {
    * 断开连接
    */
   async disconnect(): Promise<ModbusResult> {
+    this.stopHeartbeat();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnecting = false;
     try {
       const result = await this.sendMessage({
         type: 'disconnect',
@@ -192,9 +340,10 @@ export class ModbusService {
         address,
         values,
       });
+      this.recordSuccess();
       return { success: result.success, error: result.error };
     } catch (error) {
-      console.error('批量写入线圈失败:', error);
+      this.recordError();
       return { success: false, error: (error as Error).message };
     }
   }
@@ -234,9 +383,10 @@ export class ModbusService {
         address,
         value,
       });
+      this.recordSuccess();
       return { success: result.success, error: result.error };
     } catch (error) {
-      console.error('写入线圈失败:', error);
+      this.recordError();
       return { success: false, error: (error as Error).message };
     }
   }
@@ -247,16 +397,15 @@ export class ModbusService {
    */
   async writeSensorFeedback(address: number, value: boolean): Promise<ModbusResult> {
     try {
-      console.log(`[写入传感器反馈] 地址${address} 值${value}`);
       const result = await this.sendMessage({
         type: 'write-coil',
         address,
         value,
       });
-      console.log(`[写入传感器反馈] 结果:`, result.success, result.error);
+      this.recordSuccess();
       return { success: result.success, error: result.error };
     } catch (error) {
-      console.error('写入传感器反馈失败:', error);
+      this.recordError();
       return { success: false, error: (error as Error).message };
     }
   }
@@ -271,13 +420,14 @@ export class ModbusService {
         address,
         length,
       });
+      this.recordSuccess();
       return {
         success: result.success,
         values: result.values,
         error: result.error,
       };
     } catch (error) {
-      console.error('读取线圈失败:', error);
+      this.recordError();
       return { success: false, error: (error as Error).message };
     }
   }
@@ -375,7 +525,7 @@ export class ModbusService {
       }
       return { success: false, error: result.error || '批量读取失败' };
     } catch (error) {
-      console.error('批量读取控制信号时发生异常:', error);
+      this.recordError();
       return { success: false, error: (error as Error).message };
     }
   }

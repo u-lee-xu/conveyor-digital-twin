@@ -37,8 +37,8 @@ export const Material: React.FC<MaterialProps> = ({ position, color, visible }) 
       if (meshRef.current && scene) {
         try {
           scene.remove(meshRef.current);
-        } catch (e) {
-          // 忽略移除错误
+        } catch {
+          // scene.remove may throw if already removed
         }
         meshRef.current = null;
       }

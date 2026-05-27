@@ -1,0 +1,465 @@
+/**
+ * ================================================
+ * 文件名: useDeviceStore.ts
+ * 功能: 数字孪生传送带分拣系统 - 全局状态管理
+ * ================================================
+ * 
+ * 【文件关联关系】
+ * - 依赖: zustand (状态管理库), ../types (类型定义)
+ * - 被依赖: App.tsx, 所有自定义Hooks (usePhysics, useDemoMode, useScoring, useSimMode), 所有场景组件, 控制面板组件
+ * - 数据流向: 作为单一数据源，所有组件共享状态
+ * 
+ * 【功能说明】
+ * 本文件使用Zustand创建全局状态管理store，管理整个数字孪生系统的所有状态，
+ * 包括设备状态、运行模式、评分系统、录制功能等。
+ * 采用不可变更新模式，确保React正确重新渲染。
+ */
+
+import { create } from 'zustand';
+import type { Mode, CylinderName, SensorName, MaterialColor } from '../types';
+
+/**
+ * 追踪记录条目
+ * 用于录制模式下记录Modbus线圈状态变化
+ */
+export interface TraceEntry {
+  timestamp: number;  // 时间戳（毫秒）
+  coils: boolean[];   // 线圈状态数组
+}
+
+/**
+ * 设备状态Store接口
+ * 包含所有状态字段和操作方法
+ */
+interface DeviceStore {
+  // ============================================
+  // 基础状态
+  // ============================================
+
+  /** 当前运行模式 (manual/auto/scoring/sim) */
+  mode: Mode;
+
+  /** 传送带是否正在运行 */
+  conveyorRunning: boolean;
+
+  /** 所有气缸的状态 */
+  cylinders: {
+    feed: { extended: boolean; currentExtension: number };
+    sorting1: { extended: boolean; currentExtension: number };
+    sorting2: { extended: boolean; currentExtension: number };
+  };
+
+  /** 所有传感器的状态 */
+  sensors: {
+    feed: boolean;
+    color: boolean;
+    material: boolean;
+  };
+
+  /** 物料状态 */
+  material: {
+    visible: boolean;
+    color: MaterialColor;
+    position: [number, number, number];
+    onConveyor: boolean;
+    conveyorDelay: number;
+  };
+
+  // ============================================
+  // 录制相关状态
+  // ============================================
+
+  /** 是否正在录制Modbus追踪 */
+  isRecording: boolean;
+
+  /** 已录制的追踪记录数组 */
+  recordedTrace: TraceEntry[];
+
+  // ============================================
+  // 评分系统状态
+  // ============================================
+
+  /** 当前分数 (累加制，初始0，满分100) */
+  score: number;
+
+  /** 扣分项列表 */
+  penalties: { id: string; message: string; points: number; time: number }[];
+
+  /** 通过项列表 */
+  passedItems: { id: string; message: string; time: number }[];
+
+  /** 评分模式是否正在运行 */
+  isScoringRunning: boolean;
+
+  // ============================================
+  // 连接状态
+  // ============================================
+
+  /** Modbus连接状态 */
+  isConnected: boolean;
+
+  /**
+   * 设置Modbus连接状态
+   * @param connected 是否已连接
+   */
+  setConnected: (connected: boolean) => void;
+
+  // ============================================
+  // 录制操作
+  // ============================================
+
+  /** 开始录制Modbus追踪 */
+  startRecording: () => void;
+
+  /** 停止录制 */
+  stopRecording: () => void;
+
+  /**
+   * 添加追踪记录条目
+   * @param coils Modbus线圈状态数组
+   */
+  addTraceEntry: (coils: boolean[]) => void;
+
+  /** 清空录制的追踪记录 */
+  clearTrace: () => void;
+
+  // ============================================
+  // 评分操作
+  // ============================================
+
+  /**
+   * 添加扣分项 (3秒内重复的相同项会被忽略)
+   * @param message 扣分说明
+   * @param points 扣分数值
+   */
+  addPenalty: (message: string, points: number) => void;
+
+  /**
+   * 添加通过项并累加得分
+   * @param message 通过说明
+   * @param points 该项分值（默认0）
+   */
+  addPassedItem: (message: string, points?: number) => void;
+
+  /** 重置评分系统 (归零，清空记录) */
+  resetScore: () => void;
+
+  /**
+   * 设置评分模式运行状态
+   * @param running 是否运行评分
+   */
+  setScoringRunning: (running: boolean) => void;
+
+  /** 随机化设备状态 (用于测试) */
+  randomizeState: () => void;
+
+  // ============================================
+  // 基础设备操作
+  // ============================================
+
+  /**
+   * 设置系统运行模式
+   * @param mode 目标模式
+   */
+  setMode: (mode: Mode) => void;
+
+  /** 切换传送带运行状态 */
+  toggleConveyor: () => void;
+
+  /** 启动传送带 */
+  startConveyor: () => void;
+
+  /** 停止传送带 */
+  stopConveyor: () => void;
+
+  /**
+   * 伸出指定气缸
+   * @param name 气缸名称
+   */
+  extendCylinder: (name: CylinderName) => void;
+
+  /**
+   * 缩回指定气缸
+   * @param name 气缸名称
+   */
+  retractCylinder: (name: CylinderName) => void;
+
+  /**
+   * 更新气缸伸出位置 (用于动画)
+   * @param name 气缸名称
+   * @param extension 伸出位置数值
+   */
+  updateCylinderExtension: (name: CylinderName, extension: number) => void;
+
+  /**
+   * 设置传感器状态
+   * @param name 传感器名称
+   * @param active 是否激活
+   */
+  setSensor: (name: SensorName, active: boolean) => void;
+
+  /**
+   * 更新物料位置
+   * @param position 3D坐标数组 [x, y, z]
+   */
+  updateMaterialPosition: (position: [number, number, number]) => void;
+
+  /**
+   * 设置物料是否在传送带上
+   * @param onConveyor 是否在传送带上
+   */
+  setMaterialOnConveyor: (onConveyor: boolean) => void;
+
+  /**
+   * 设置传送带延迟
+   * @param delay 延迟值
+   */
+  setMaterialConveyorDelay: (delay: number) => void;
+
+  /** 生成新物料 (随机蓝色或黑色) */
+  spawnMaterial: () => void;
+
+  /** 清除当前物料 */
+  clearMaterial: () => void;
+
+  /** 重置所有设备状态到初始值 */
+  reset: () => void;
+
+  // ============================================
+  // 场景控制
+  // ============================================
+
+  /** 是否显示标签 */
+  showLabels: boolean;
+
+  /** 切换标签显示状态 */
+  toggleLabels: () => void;
+}
+
+/**
+ * 设备初始状态
+ * 所有字段都设置为默认值
+ */
+const initialState = {
+  mode: 'manual' as Mode,
+  showLabels: true,
+  conveyorRunning: false,
+  cylinders: {
+    feed: { extended: false, currentExtension: -0.22 },
+    sorting1: { extended: false, currentExtension: -0.22 },
+    sorting2: { extended: false, currentExtension: -0.22 },
+  },
+  sensors: {
+    feed: false,
+    color: false,
+    material: false,
+  },
+  material: {
+    visible: false,
+    color: 'blue' as MaterialColor,
+    position: [-1.3, 1.06, 0.6] as [number, number, number],
+    onConveyor: false,
+    conveyorDelay: 0,
+  },
+  isRecording: false,
+  recordedTrace: [],
+  score: 0,
+  penalties: [],
+  passedItems: [],
+  isScoringRunning: false,
+  isConnected: false,
+};
+
+/**
+ * Zustand设备状态Store创建
+ */
+export const useDeviceStore = create<DeviceStore>((set) => ({
+  ...initialState,
+
+  // ============================================
+  // 基础操作
+  // ============================================
+
+  /** 设置运行模式 */
+  setMode: (mode: Mode) => set({ mode }),
+
+  /** 设置连接状态 */
+  setConnected: (connected: boolean) => set({ isConnected: connected }),
+
+  /** 设置评分模式运行状态 */
+  setScoringRunning: (running: boolean) => set({ isScoringRunning: running }),
+
+  /** 随机化设备状态 (全部气缸伸出，传送带启动) */
+  randomizeState: () => set((state) => ({
+    conveyorRunning: true,
+    cylinders: {
+      feed: { extended: true, currentExtension: state.cylinders.feed.currentExtension },
+      sorting1: { extended: true, currentExtension: state.cylinders.sorting1.currentExtension },
+      sorting2: { extended: true, currentExtension: state.cylinders.sorting2.currentExtension },
+    }
+  })),
+
+  // ============================================
+  // 传送带控制
+  // ============================================
+
+  /** 切换传送带运行状态 */
+  toggleConveyor: () => set((state) => ({
+    conveyorRunning: !state.conveyorRunning
+  })),
+
+  /** 启动传送带 */
+  startConveyor: () => set({ conveyorRunning: true }),
+
+  /** 停止传送带 */
+  stopConveyor: () => set({ conveyorRunning: false }),
+
+  // ============================================
+  // 气缸控制
+  // ============================================
+
+  /** 伸出指定气缸 */
+  extendCylinder: (name: CylinderName) => set((state) => ({
+    cylinders: {
+      ...state.cylinders,
+      [name]: { ...state.cylinders[name], extended: true },
+    },
+  })),
+
+  /** 缩回指定气缸 */
+  retractCylinder: (name: CylinderName) => set((state) => ({
+    cylinders: {
+      ...state.cylinders,
+      [name]: { ...state.cylinders[name], extended: false },
+    },
+  })),
+
+  /** 更新气缸伸出位置 (用于平滑动画) */
+  updateCylinderExtension: (name: CylinderName, extension: number) => set((state) => ({
+    cylinders: {
+      ...state.cylinders,
+      [name]: { ...state.cylinders[name], currentExtension: extension },
+    },
+  })),
+
+  // ============================================
+  // 传感器控制
+  // ============================================
+
+  /** 设置指定传感器的激活状态 */
+  setSensor: (name: SensorName, active: boolean) => set((state) => ({
+    sensors: {
+      ...state.sensors,
+      [name]: active,
+    },
+  })),
+
+  // ============================================
+  // 物料控制
+  // ============================================
+
+  /** 更新物料3D位置 */
+  updateMaterialPosition: (position: [number, number, number]) => set((state) => ({
+    material: {
+      ...state.material,
+      position,
+    },
+  })),
+
+  /** 设置物料是否在传送带上 */
+  setMaterialOnConveyor: (onConveyor: boolean) => set((state) => ({
+    material: {
+      ...state.material,
+      onConveyor,
+    },
+  })),
+
+  /** 设置物料传送带延迟 */
+  setMaterialConveyorDelay: (delay: number) => set((state) => ({
+    material: {
+      ...state.material,
+      conveyorDelay: delay,
+    },
+  })),
+
+  /** 生成新物料 (50%概率蓝色，50%概率黑色) */
+  spawnMaterial: () => set({
+    material: {
+      visible: true,
+      color: Math.random() > 0.5 ? 'blue' : 'black',
+      position: [-1.3, 1.06, 0.6],
+      onConveyor: false,
+      conveyorDelay: 0,
+    },
+  }),
+
+  /** 清除物料 (隐藏并重置状态) */
+  clearMaterial: () => set((state) => ({
+    material: {
+      ...state.material,
+      visible: false,
+      onConveyor: false,
+      conveyorDelay: 0,
+    },
+  })),
+
+  // ============================================
+  // 重置和场景控制
+  // ============================================
+
+  /** 重置所有状态到初始值 */
+  reset: () => set(initialState),
+
+  /** 切换标签显示状态 */
+  toggleLabels: () => set((state) => ({ showLabels: !state.showLabels })),
+
+  // ============================================
+  // 录制功能
+  // ============================================
+
+  /** 开始录制Modbus追踪 (清空之前的记录) */
+  startRecording: () => set({ isRecording: true, recordedTrace: [] }),
+
+  /** 停止录制 */
+  stopRecording: () => set({ isRecording: false }),
+
+  /** 添加追踪记录条目 (仅在录制或评分模式运行时) */
+  addTraceEntry: (coils: boolean[]) => set((state) => {
+    if (!state.isRecording && !state.isScoringRunning) return state;
+    return {
+      recordedTrace: [...state.recordedTrace, { timestamp: Date.now(), coils }]
+    };
+  }),
+
+  /** 清空录制的追踪记录 */
+  clearTrace: () => set({ recordedTrace: [] }),
+
+  // ============================================
+  // 评分系统
+  // ============================================
+
+  /** 添加扣分项 (3秒内重复的相同项会被忽略，最低0分) */
+  addPenalty: (message: string, points: number) => set((state) => {
+    const now = Date.now();
+    const isDuplicate = state.penalties.some(p => p.message === message && (now - p.time < 3000));
+    if (isDuplicate) return state;
+
+    return {
+      score: Math.max(0, state.score - points),
+      penalties: [...state.penalties, { id: Math.random().toString(36).substr(2, 9), message, points, time: now }]
+    };
+  }),
+
+  /** 添加通过项并累加分值 (重复项会被忽略) */
+  addPassedItem: (message: string, points = 0) => set((state) => {
+    const isDuplicate = state.passedItems.some(item => item.message === message);
+    if (isDuplicate) return state;
+    return {
+      score: Math.min(100, state.score + points),
+      passedItems: [...state.passedItems, { id: Math.random().toString(36).substr(2, 9), message, points, time: Date.now() }]
+    };
+  }),
+
+  /** 重置评分系统 (归零，清空记录) */
+  resetScore: () => set({ score: 0, penalties: [], passedItems: [] }),
+}));

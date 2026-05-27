@@ -1,20 +1,50 @@
+/**
+ * ================================================
+ * 文件名: useDemoMode.ts
+ * 功能: 数字孪生传送带分拣系统 - 演示模式Hook
+ * ================================================
+ * 
+ * 【文件关联关系】
+ * - 依赖: react (useEffect, useRef, useCallback, useState), ../stores/useDeviceStore, ../components/scene/shared/constants
+ * - 被依赖: App.tsx, DemoPanel.tsx
+ * - 数据流向: 状态机驱动 -> 更新设备状态 -> 物理引擎响应 -> 状态机继续
+ * 
+ * 【功能说明】
+ * 本Hook实现演示模式的状态机控制逻辑，自动运行完整的分拣流程：
+ * 1. 生成随机颜色物料
+ * 2. 上料气缸推出，将物料推上传送带
+ * 3. 传送带运行，物料移动
+ * 4. 根据颜色自动选择分拣气缸
+ * 5. 分拣气缸推出，将物料推离传送带
+ * 6. 自动循环执行
+ * 
+ * 【状态机流程】
+ * IDLE -> SPAWN -> FEEDING -> FEED_RETRACT -> TRANSIT -> SORTING1/SORTING2 -> COMPLETE -> IDLE
+ */
+
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useDeviceStore } from '../stores';
 import { SENSORS, CYLINDERS } from '../components/scene/shared';
 
-// 状态机状态
-type DemoState = 
-  | 'IDLE'           // 待机
+/**
+ * 演示模式状态机状态定义
+ */
+type DemoState =
+  | 'IDLE'           // 待机状态
   | 'SPAWN'          // 生成物料
   | 'FEEDING'        // 上料气缸推出
   | 'FEED_RETRACT'   // 上料气缸缩回
-  | 'TRANSIT'        // 传送带运行
-  | 'SORTING1'       // 分拣1气缸推出
-  | 'SORTING1_RETRACT' // 分拣1气缸缩回
-  | 'SORTING2'       // 分拣2气缸推出
-  | 'SORTING2_RETRACT' // 分拣2气缸缩回
-  | 'COMPLETE';      // 完成
+  | 'TRANSIT'        // 传送带运行中
+  | 'SORTING1'       // 分拣气缸1推出
+  | 'SORTING1_RETRACT' // 分拣气缸1缩回
+  | 'SORTING2'       // 分拣气缸2推出
+  | 'SORTING2_RETRACT' // 分拣气缸2缩回
+  | 'COMPLETE';      // 完成一个分拣循环
 
+/**
+ * 演示模式Hook
+ * 实现自动分拣流程的状态机控制
+ */
 export function useDemoMode() {
   const mode = useDeviceStore((state) => state.mode);
   const extendCylinder = useDeviceStore((state) => state.extendCylinder);

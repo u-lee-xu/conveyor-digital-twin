@@ -1,14 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn, ChildProcess } from 'child_process';
 import { createModbusService } from './modbus';
 
-// Polyfill for __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let modbusService: ReturnType<typeof createModbusService> | null = null;
+let wsServerProcess: ChildProcess | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -16,6 +17,7 @@ function createWindow(): void {
     height: 720,
     minWidth: 800,
     minHeight: 600,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -25,22 +27,65 @@ function createWindow(): void {
     icon: path.join(__dirname, '../build/icon.ico'),
   });
 
-  // 开发模式下加载Vite开发服务器
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    // 生产模式下加载打包后的文件
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
-// 应用就绪时创建窗口
+function startWebSocketServer(): void {
+  if (process.env.NODE_ENV === 'development') return;
+
+  const serverPath = path.join(process.resourcesPath, 'websocket-server', 'server.js');
+  const wsPath = path.join(process.resourcesPath, 'websocket-server', 'node_modules', 'ws');
+  const modbusPath = path.join(process.resourcesPath, 'websocket-server', 'node_modules', 'modbus-serial');
+
+  wsServerProcess = spawn(process.execPath, [serverPath], {
+    env: {
+      ...process.env,
+      NODE_PATH: [wsPath, modbusPath, path.join(process.resourcesPath, 'websocket-server', 'node_modules')].join(path.delimiter),
+    },
+    stdio: 'pipe',
+    windowsHide: true,
+  });
+
+  wsServerProcess.stdout?.on('data', (data: Buffer) => {
+    console.log('[WS-Server]', data.toString().trim());
+  });
+
+  wsServerProcess.stderr?.on('data', (data: Buffer) => {
+    console.error('[WS-Server]', data.toString().trim());
+  });
+
+  wsServerProcess.on('error', (err) => {
+    console.error('WebSocket服务器启动失败:', err.message);
+  });
+
+  wsServerProcess.on('exit', (code) => {
+    console.log('WebSocket服务器已退出, code:', code);
+    wsServerProcess = null;
+  });
+}
+
+function stopWebSocketServer(): void {
+  if (wsServerProcess) {
+    wsServerProcess.kill();
+    wsServerProcess = null;
+  }
+}
+
 app.whenReady().then(() => {
+  startWebSocketServer();
   createWindow();
   setupModbusIPC();
 
@@ -51,7 +96,6 @@ app.whenReady().then(() => {
   });
 });
 
-// 所有窗口关闭时退出应用（macOS除外）
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -127,8 +171,8 @@ function setupModbusIPC(): void {
   });
 }
 
-// 应用退出前清理
 app.on('before-quit', () => {
+  stopWebSocketServer();
   if (modbusService) {
     modbusService.disconnect();
   }

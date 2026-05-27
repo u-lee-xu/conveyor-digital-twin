@@ -86,8 +86,9 @@ export const Label: React.FC<LabelProps> = React.memo(({
 
   useEffect(() => {
     if (!labelRef.current) return;
-    const newPos = new THREE.Vector3(...position).add(new THREE.Vector3(...offset));
-    labelRef.current.position.copy(newPos);
+    const [px, py, pz] = position;
+    const [ox, oy, oz] = offset;
+    labelRef.current.position.set(px + ox, py + oy, pz + oz);
   }, [position, offset]);
 
   return null;

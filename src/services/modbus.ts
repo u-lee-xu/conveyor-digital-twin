@@ -1,16 +1,46 @@
+/**
+ * ================================================
+ * 文件名: modbus.ts
+ * 功能: 数字孪生传送带分拣系统 - Modbus服务封装
+ * ================================================
+ * 
+ * 【文件关联关系】
+ * - 依赖: ./modbus-websocket
+ * - 被依赖: useSimMode.ts, useScoring.ts
+ * - 数据流向: 本模块作为modbus-websocket的封装层，提供统一的API接口
+ * 
+ * 【功能说明】
+ * 本文件提供Modbus服务的封装和配置：
+ * 1. 导出统一的Modbus地址定义
+ * 2. 定义默认的Modbus配置
+ * 3. 提供useModbusService Hook，适配现有代码使用习惯
+ * 4. 类型重导出，简化其他模块的导入
+ */
+
 import { modbusService } from './modbus-websocket';
 import type { ModbusConfig, ModbusStatus, ModbusResult, ModbusReadResult } from './modbus-websocket';
 
-// 统一地址定义 (从 modbus-websocket 重新导出以保持一致性)
+/**
+ * 统一地址定义 (从 modbus-websocket 重新导出以保持一致性)
+ */
 export { MODBUS_ADDRESSES } from './modbus-websocket';
 
+/**
+ * 默认Modbus配置
+ * - host: PLC或Modbus服务器地址（默认本地）
+ * - port: ModbusTCP端口（默认502）
+ * - unitId: 从站地址（默认1）
+ */
 export const MODBUS_CONFIG = {
   host: '127.0.0.1',
   port: 502,
   unitId: 1,
 };
 
-// 仿真模式专用的 Hook，适配现有的代码使用习惯
+/**
+ * 仿真模式专用的Hook，适配现有的代码使用习惯
+ * 提供统一的Modbus操作API，内部委托给modbus-websocket服务
+ */
 export const useModbusService = (config: { host: string; port: number; unitId?: number }) => {
   return {
     connect: () => modbusService.connect(config.host, config.port),

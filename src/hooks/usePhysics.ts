@@ -1,8 +1,36 @@
+/**
+ * ================================================
+ * 文件名: usePhysics.ts
+ * 功能: 数字孪生传送带分拣系统 - 物理模拟Hook
+ * ================================================
+ * 
+ * 【文件关联关系】
+ * - 依赖: react (useEffect, useRef), ../stores/useDeviceStore, ../types, ../components/scene/shared/constants
+ * - 被依赖: App.tsx
+ * - 数据流向: 读取设备状态 -> 执行物理计算 -> 更新设备状态
+ * 
+ * 【功能说明】
+ * 本Hook实现数字孪生系统的核心物理模拟，包括：
+ * 1. 物料在传送带上的运动
+ * 2. 气缸与物料的碰撞检测和推动
+ * 3. 传感器检测逻辑
+ * 4. 边界检查和物料清除
+ * 
+ * 【核心算法】
+ * - 时间归一化：以60fps为基准进行时间缩放，限制最大缩放防止突变
+ * - 惯性模拟：气缸推动后物料保持惯性，通过阻尼系数逐渐减速
+ * - 传感器检测：根据物料位置和颜色判断传感器状态
+ */
+
 import { useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
 import type { SensorName } from '../types';
 import { SENSORS, CYLINDERS, CONVEYOR_SPEED, CONVEYOR_END_X, CONVEYOR_Z_MIN, CONVEYOR_Z_MAX, SENSOR_RANGE, CYLINDER_POSITIONS } from '../components/scene/shared';
 
+/**
+ * 物理模拟Hook
+ * 负责处理物料运动、碰撞检测、传感器触发等物理逻辑
+ */
 export function usePhysics() {
   const mode = useDeviceStore((state) => state.mode);
   const animationIdRef = useRef<number>(0);
@@ -66,7 +94,8 @@ export function usePhysics() {
 
       // 物理运动逻辑
       if (material.visible) {
-        let [newX, newY, newZ] = material.position;
+        let [newX, constY, newZ] = material.position;
+        const newY = constY;
         let mvz = materialVelocityZRef.current;
 
         // 1. 传送带带动 X 轴

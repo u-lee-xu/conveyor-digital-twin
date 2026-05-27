@@ -6,9 +6,24 @@ export interface TraceEntry {
   coils: boolean[];
 }
 
+export type ScoringItemStatus = 'pending' | 'passed' | 'failed' | 'skipped';
+
+export interface ScoringLogEntry {
+  id: string;
+  itemId: string;
+  label: string;
+  status: ScoringItemStatus;
+  points: number;
+  time: number;
+}
+
 interface DeviceStore {
-  // 状态
   mode: Mode;
+  plcConfig: {
+    host: string;
+    port: number;
+    unitId: number;
+  };
   conveyorRunning: boolean;
   cylinders: {
     feed: { extended: boolean; currentExtension: number };
@@ -24,38 +39,37 @@ interface DeviceStore {
     visible: boolean;
     color: MaterialColor;
     position: [number, number, number];
-    onConveyor: boolean; 
-    conveyorDelay: number; 
+    onConveyor: boolean;
+    conveyorDelay: number;
   };
-  
-  // 录制相关
+
   isRecording: boolean;
   recordedTrace: TraceEntry[];
-  
-  // 评分系统
+
   score: number;
-  penalties: { id: string; message: string; points: number; time: number }[];
-  passedItems: { id: string; message: string; time: number }[];
+  scoringStatus: Record<string, ScoringItemStatus>;
+  scoringLog: ScoringLogEntry[];
+  passedItems: { id: string; message: string; points: number; time: number }[];
   isScoringRunning: boolean;
-  
-  // 连接状态
+  scoringPrompt: string;
+
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
-  
-  // 录制操作
+  setPlcConfig: (config: Partial<{ host: string; port: number; unitId: number }>) => void;
+
   startRecording: () => void;
   stopRecording: () => void;
   addTraceEntry: (coils: boolean[]) => void;
   clearTrace: () => void;
-  
-  // 评分操作
-  addPenalty: (message: string, points: number) => void;
-  addPassedItem: (message: string) => void;
+
+  markScoringItem: (itemId: string, status: ScoringItemStatus, label: string, points: number) => void;
+  markItemsSkipped: (items: { itemId: string; label: string; points: number }[]) => void;
+  addPassedItem: (message: string, points?: number) => void;
   resetScore: () => void;
   setScoringRunning: (running: boolean) => void;
+  setScoringPrompt: (prompt: string) => void;
   randomizeState: () => void;
-  
-  // 基础设备操作
+
   setMode: (mode: Mode) => void;
   toggleConveyor: () => void;
   startConveyor: () => void;
@@ -70,14 +84,13 @@ interface DeviceStore {
   spawnMaterial: () => void;
   clearMaterial: () => void;
   reset: () => void;
-  
-  // 场景控制
   showLabels: boolean;
   toggleLabels: () => void;
 }
 
 const initialState = {
   mode: 'manual' as Mode,
+  plcConfig: getInitialPlcConfig(),
   showLabels: true,
   conveyorRunning: false,
   cylinders: {
@@ -99,20 +112,58 @@ const initialState = {
   },
   isRecording: false,
   recordedTrace: [],
-  score: 100,
-  penalties: [],
+  score: 0,
+  scoringStatus: {} as Record<string, ScoringItemStatus>,
+  scoringLog: [],
   passedItems: [],
   isScoringRunning: false,
+  scoringPrompt: '',
   isConnected: false,
 };
+
+function getInitialPlcConfig() {
+  const fallback = {
+    host: '127.0.0.1',
+    port: 502,
+    unitId: 1,
+  };
+
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const raw = window.localStorage.getItem('plc-config');
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return {
+      host: typeof parsed.host === 'string' && parsed.host.trim() ? parsed.host : fallback.host,
+      port: Number.isInteger(parsed.port) ? parsed.port : fallback.port,
+      unitId: Number.isInteger(parsed.unitId) ? parsed.unitId : fallback.unitId,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function persistPlcConfig(config: { host: string; port: number; unitId: number }) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem('plc-config', JSON.stringify(config));
+}
 
 export const useDeviceStore = create<DeviceStore>((set) => ({
   ...initialState,
 
   setMode: (mode: Mode) => set({ mode }),
-  
   setConnected: (connected: boolean) => set({ isConnected: connected }),
-
+  setPlcConfig: (config) => set((state) => {
+    const nextConfig = {
+      ...state.plcConfig,
+      ...config,
+    };
+    persistPlcConfig(nextConfig);
+    return { plcConfig: nextConfig };
+  }),
   setScoringRunning: (running: boolean) => set({ isScoringRunning: running }),
 
   randomizeState: () => set((state) => ({
@@ -124,12 +175,10 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     }
   })),
 
-  toggleConveyor: () => set((state) => ({ 
-    conveyorRunning: !state.conveyorRunning 
+  toggleConveyor: () => set((state) => ({
+    conveyorRunning: !state.conveyorRunning
   })),
-
   startConveyor: () => set({ conveyorRunning: true }),
-
   stopConveyor: () => set({ conveyorRunning: false }),
 
   extendCylinder: (name: CylinderName) => set((state) => ({
@@ -138,49 +187,58 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
       [name]: { ...state.cylinders[name], extended: true },
     },
   })),
-
   retractCylinder: (name: CylinderName) => set((state) => ({
     cylinders: {
       ...state.cylinders,
       [name]: { ...state.cylinders[name], extended: false },
     },
   })),
+  updateCylinderExtension: (name: CylinderName, extension: number) => set((state) => {
+    if (Math.abs(state.cylinders[name].currentExtension - extension) < 0.0001) return state;
+    return {
+      cylinders: {
+        ...state.cylinders,
+        [name]: { ...state.cylinders[name], currentExtension: extension },
+      },
+    };
+  }),
 
-  updateCylinderExtension: (name: CylinderName, extension: number) => set((state) => ({
-    cylinders: {
-      ...state.cylinders,
-      [name]: { ...state.cylinders[name], currentExtension: extension },
-    },
-  })),
+  setSensor: (name: SensorName, active: boolean) => set((state) => {
+    if (state.sensors[name] === active) return state;
+    return {
+      sensors: {
+        ...state.sensors,
+        [name]: active,
+      },
+    };
+  }),
 
-  setSensor: (name: SensorName, active: boolean) => set((state) => ({
-    sensors: {
-      ...state.sensors,
-      [name]: active,
-    },
-  })),
-
-  updateMaterialPosition: (position: [number, number, number]) => set((state) => ({
-    material: {
-      ...state.material,
-      position,
-    },
-  })),
-
+  updateMaterialPosition: (position: [number, number, number]) => set((state) => {
+    const old = state.material.position;
+    if (
+      Math.abs(old[0] - position[0]) < 0.0001 &&
+      Math.abs(old[1] - position[1]) < 0.0001 &&
+      Math.abs(old[2] - position[2]) < 0.0001
+    ) return state;
+    return {
+      material: {
+        ...state.material,
+        position,
+      },
+    };
+  }),
   setMaterialOnConveyor: (onConveyor: boolean) => set((state) => ({
     material: {
       ...state.material,
       onConveyor,
     },
   })),
-
   setMaterialConveyorDelay: (delay: number) => set((state) => ({
     material: {
       ...state.material,
       conveyorDelay: delay,
     },
   })),
-
   spawnMaterial: () => set({
     material: {
       visible: true,
@@ -190,7 +248,6 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
       conveyorDelay: 0,
     },
   }),
-
   clearMaterial: () => set((state) => ({
     material: {
       ...state.material,
@@ -201,40 +258,102 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   })),
 
   reset: () => set(initialState),
-
   toggleLabels: () => set((state) => ({ showLabels: !state.showLabels })),
 
   startRecording: () => set({ isRecording: true, recordedTrace: [] }),
-
   stopRecording: () => set({ isRecording: false }),
-
   addTraceEntry: (coils: boolean[]) => set((state) => {
     if (!state.isRecording && !state.isScoringRunning) return state;
+    const newTrace = [...state.recordedTrace, { timestamp: Date.now(), coils }];
+    if (newTrace.length > 3000) newTrace.splice(0, newTrace.length - 3000);
     return {
-      recordedTrace: [...state.recordedTrace, { timestamp: Date.now(), coils }]
+      recordedTrace: newTrace,
     };
   }),
-
   clearTrace: () => set({ recordedTrace: [] }),
 
-  addPenalty: (message: string, points: number) => set((state) => {
+  markScoringItem: (itemId: string, status: ScoringItemStatus, label: string, points: number) => set((state) => {
+    const currentStatus = state.scoringStatus[itemId];
+    if (currentStatus && currentStatus !== 'pending') return state;
+
+    const logId = Math.random().toString(36).substr(2, 9);
     const now = Date.now();
-    const isDuplicate = state.penalties.some(p => p.message === message && (now - p.time < 3000));
-    if (isDuplicate) return state;
+
+    const newLogEntry: ScoringLogEntry = {
+      id: logId,
+      itemId,
+      label,
+      status,
+      points: status === 'passed' ? points : 0,
+      time: now,
+    };
+
+    const newPassedItem = status === 'passed'
+      ? [{ id: logId, message: label, points, time: now }]
+      : [];
 
     return {
-      score: Math.max(0, state.score - points),
-      penalties: [...state.penalties, { id: Math.random().toString(36).substr(2, 9), message, points, time: now }]
+      scoringStatus: { ...state.scoringStatus, [itemId]: status },
+      scoringLog: [...state.scoringLog, newLogEntry],
+      passedItems: [...state.passedItems, ...newPassedItem],
+      score: status === 'passed' ? Math.min(100, state.score + points) : state.score,
     };
   }),
 
-  addPassedItem: (message: string) => set((state) => {
+  markItemsSkipped: (items: { itemId: string; label: string; points: number }[]) => set((state) => {
+    const newStatus = { ...state.scoringStatus };
+    const newLog: ScoringLogEntry[] = [];
+    const now = Date.now();
+
+    for (const item of items) {
+      const currentStatus = newStatus[item.itemId];
+      if (currentStatus && currentStatus !== 'pending') continue;
+
+      newStatus[item.itemId] = 'skipped';
+      newLog.push({
+        id: Math.random().toString(36).substr(2, 9),
+        itemId: item.itemId,
+        label: item.label,
+        status: 'skipped',
+        points: 0,
+        time: now,
+      });
+    }
+
+    return {
+      scoringStatus: newStatus,
+      scoringLog: [...state.scoringLog, ...newLog],
+    };
+  }),
+
+  addPassedItem: (message: string, points = 0) => set((state) => {
     const isDuplicate = state.passedItems.some(item => item.message === message);
     if (isDuplicate) return state;
+    const id = Math.random().toString(36).substr(2, 9);
+    const now = Date.now();
     return {
-      passedItems: [...state.passedItems, { id: Math.random().toString(36).substr(2, 9), message, time: Date.now() }]
+      score: Math.min(100, state.score + points),
+      passedItems: [...state.passedItems, { id, message, points, time: now }],
+      scoringLog: [...state.scoringLog, {
+        id,
+        itemId: id,
+        label: message,
+        status: 'passed' as ScoringItemStatus,
+        points,
+        time: now,
+      }],
     };
   }),
 
-  resetScore: () => set({ score: 100, penalties: [], passedItems: [] }),
+  resetScore: () => set({
+    score: 0,
+    scoringStatus: {},
+    scoringLog: [],
+    passedItems: [],
+    scoringPrompt: '',
+  }),
+
+  setScoringPrompt: (prompt: string) => set({
+    scoringPrompt: prompt,
+  }),
 }));

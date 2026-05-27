@@ -1,0 +1,509 @@
+/**
+ * useConveyorScoring.ts
+ * 传送带分拣系统 - 自动评分Hook
+ *
+ * 评分规则：《分拣系统评分规则文档.md》/ 《分拣系统颗粒度评分表.csv》
+ * 硬件特性：双电控电磁阀（脉冲控制，阀自保持）
+ * 信号检测：控制信号 = 上升沿；磁性开关 = 电平持续
+ */
+
+import { useEffect, useRef, useCallback } from 'react';
+import { useDeviceStore } from '../stores';
+import { MODBUS_ADDRESSES, MODBUS_CONFIG, useModbusService } from '../services/modbus';
+
+// ── Modbus 地址常量 ─────────────────────────────────────────────
+const A = {
+  START:           0,   // M0  启动按钮
+  RESET:           1,   // M1  复位按钮
+  FEED_IN:         2,   // M2  上料气缸缩回磁性开关
+  FEED_OUT:        3,   // M3  上料气缸伸出磁性开关
+  SORT1_IN:        4,   // M4  分拣1气缸缩回磁性开关
+  SORT1_OUT:       5,   // M5  分拣1气缸伸出磁性开关
+  SORT2_IN:        6,   // M6  分拣2气缸缩回磁性开关
+  SORT2_OUT:       7,   // M7  分拣2气缸伸出磁性开关
+  FEED_SENSOR:     8,   // M8  上料传感器
+  COLOR_SENSOR:    9,   // M9  色标传感器
+  MATERIAL_SENSOR: 10,  // M10 物料传感器
+  FEED_CTRL:       MODBUS_ADDRESSES.FEED_CYLINDER_VALVE,   // M100
+  SORT1_CTRL:      MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE, // M101
+  SORT2_CTRL:      MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE, // M102
+  CONVEYOR:        MODBUS_ADDRESSES.CONVEYOR,              // M103
+};
+
+// ── 评分状态机步骤 ──────────────────────────────────────────────
+type Step =
+  | 'IDLE'
+  // 模块1：复位测试 (25分)
+  | 'M1_SEND_RESET'           // 写入复位信号
+  | 'M1_WAIT_CYLINDERS'       // 等待3个气缸缩回 + 传送带清料启动
+  | 'M1_WAIT_CONVEYOR_STOP'   // 等待5秒定时器停止传送带
+  // 模块2：上料流程 (25分)
+  | 'M2_SEND_START'           // 写入启动信号
+  | 'M2_WAIT_FEED_EXTEND'     // 等待上料气缸伸出
+  | 'M2_WAIT_FEED_RETRACT'    // 等待上料气缸缩回（磁性开关触发缩回）
+  | 'M2_WAIT_CONVEYOR'        // 等待上料传感器 + 传送带启动
+  // 模块3：黑色物料分拣 (25分)
+  | 'M3_INJECT_BLACK'         // 注入黑色物料
+  | 'M3_WAIT_COLOR_SENSOR'    // 等待色标传感器 + 传送带停止
+  | 'M3_WAIT_SORT1_EXTEND'    // 等待分拣1气缸伸出
+  | 'M3_WAIT_SORT1_RETRACT'   // 等待分拣1气缸缩回
+  // 模块4：蓝色物料分拣 (25分, 第二轮)
+  | 'M4_SEND_START'           // 写入启动信号（重复）
+  | 'M4_WAIT_LOAD'            // 等待上料序列（重复，低分）
+  | 'M4_INJECT_BLUE'          // 注入蓝色物料
+  | 'M4_WAIT_COLOR_PASS'      // 等待色标传感器不触发 + 物料传感器触发
+  | 'M4_WAIT_SORT2_EXTEND'    // 等待分拣2气缸伸出
+  | 'M4_WAIT_SORT2_RETRACT'   // 等待分拣2气缸缩回
+  | 'FINISHED';
+
+// ── Hook ───────────────────────────────────────────────────────
+export function useConveyorScoring() {
+  const mode            = useDeviceStore(s => s.mode);
+  const isScoringRunning = useDeviceStore(s => s.isScoringRunning);
+  const setScoringRunning = useDeviceStore(s => s.setScoringRunning);
+  const addPassedItem   = useDeviceStore(s => s.addPassedItem);
+  const addPenalty      = useDeviceStore(s => s.addPenalty);
+  const resetScore      = useDeviceStore(s => s.resetScore);
+  const clearTrace      = useDeviceStore(s => s.clearTrace);
+
+  const modbusRef = useRef(useModbusService({
+    host: MODBUS_CONFIG.host, port: MODBUS_CONFIG.port, unitId: MODBUS_CONFIG.unitId,
+  }));
+
+  const stepRef        = useRef<Step>('IDLE');
+  const timerRef       = useRef<number>(0);
+  const awardedRef     = useRef<Set<string>>(new Set());
+  const timeoutsRef    = useRef<number[]>([]);
+  const processingRef  = useRef(false);
+
+  // 安全的 setTimeout
+  const safeTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms);
+    timeoutsRef.current.push(id);
+    return id;
+  }, []);
+
+  const clearAllTimeouts = useCallback(() => {
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
+  }, []);
+
+  // 只获奖一次
+  const award = useCallback((id: string, msg: string, pts: number) => {
+    if (awardedRef.current.has(id)) return false;
+    awardedRef.current.add(id);
+    addPassedItem(msg, pts);
+    return true;
+  }, [addPassedItem]);
+
+  // 从 recordedTrace 取最新两帧 coils
+  const getFrames = () => {
+    const { recordedTrace } = useDeviceStore.getState();
+    if (recordedTrace.length < 2) return null;
+    return {
+      cur:  recordedTrace[recordedTrace.length - 1].coils,
+      prev: recordedTrace[recordedTrace.length - 2].coils,
+    };
+  };
+
+  // 信号检测辅助
+  const rising  = (cur: boolean[], prev: boolean[], addr: number) => cur[addr] && !prev[addr];
+  const falling = (cur: boolean[], prev: boolean[], addr: number) => !cur[addr] && prev[addr];
+  const active  = (cur: boolean[], addr: number) => !!cur[addr];
+
+  // 模式切换时停止评分
+  useEffect(() => {
+    if (mode !== 'scoring') {
+      setScoringRunning(false);
+      stepRef.current = 'IDLE';
+      clearAllTimeouts();
+    }
+  }, [mode, setScoringRunning, clearAllTimeouts]);
+
+  // 主评分循环
+  useEffect(() => {
+    if (!isScoringRunning) {
+      stepRef.current = 'IDLE';
+      processingRef.current = false;
+      awardedRef.current = new Set();
+      clearAllTimeouts();
+      return;
+    }
+
+    resetScore();
+    clearTrace();
+    awardedRef.current = new Set();
+    stepRef.current = 'M1_SEND_RESET';
+
+    const tick = async () => {
+      if (processingRef.current) return;
+      processingRef.current = true;
+      try {
+        await processStep();
+      } finally {
+        processingRef.current = false;
+      }
+    };
+
+    const interval = setInterval(tick, 200);
+    return () => { clearInterval(interval); clearAllTimeouts(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScoringRunning]);
+
+  // 实时安全监控（互锁失效检测）
+  useEffect(() => {
+    if (mode !== 'scoring') return;
+    const monitor = setInterval(() => {
+      const f = getFrames();
+      if (!f || !useDeviceStore.getState().isScoringRunning) return;
+      const { cur } = f;
+      // 双气缸同时伸出 = 致命错误
+      if (active(cur, A.SORT1_OUT) && active(cur, A.SORT2_OUT)) {
+        addPenalty('【致命】分拣1与分拣2气缸同时伸出，互锁失效', 25);
+      }
+    }, 300);
+    return () => clearInterval(monitor);
+  }, [mode, addPenalty]);
+
+  // ── 步骤处理核心 ──────────────────────────────────────────────
+  async function processStep() {
+    const step = stepRef.current;
+    const f = getFrames();
+    const now = Date.now();
+
+    switch (step) {
+
+      // ─── 模块1：复位测试 ───────────────────────────────────
+      case 'M1_SEND_RESET': {
+        await modbusRef.current.writeCoil(A.RESET, true);
+        award('m1_btn', '【复位测试】复位按钮检测', 2);
+        safeTimeout(() => modbusRef.current.writeCoil(A.RESET, false), 800);
+        stepRef.current = 'M1_WAIT_CYLINDERS';
+        timerRef.current = now;
+        break;
+      }
+
+      case 'M1_WAIT_CYLINDERS': {
+        if (!f) break;
+        const { cur, prev } = f;
+        // 上料气缸缩回控制信号（上升沿）
+        if (rising(cur, prev, A.FEED_CTRL))
+          award('m1_feed_ctrl', '【复位测试】上料气缸缩回控制信号', 4);
+        // 上料气缸缩回磁性开关到位
+        if (active(cur, A.FEED_IN))
+          award('m1_feed_in', '【复位测试】上料气缸缩回磁性开关到位', 3);
+        // 分拣1缩回控制
+        if (rising(cur, prev, A.SORT1_CTRL))
+          award('m1_s1_ctrl', '【复位测试】分拣1气缸缩回控制信号', 2);
+        if (active(cur, A.SORT1_IN))
+          award('m1_s1_in', '【复位测试】分拣1气缸缩回磁性开关到位', 1);
+        // 分拣2缩回控制
+        if (rising(cur, prev, A.SORT2_CTRL))
+          award('m1_s2_ctrl', '【复位测试】分拣2气缸缩回控制信号', 2);
+        if (active(cur, A.SORT2_IN))
+          award('m1_s2_in', '【复位测试】分拣2气缸缩回磁性开关到位', 1);
+        // 传送带清料启动
+        if (rising(cur, prev, A.CONVEYOR))
+          award('m1_conv_start', '【复位测试】传送带清料运行启动', 3);
+        if (active(cur, A.CONVEYOR))
+          award('m1_conv_run', '【复位测试】传送带清料持续运行', 2);
+
+        // 超时8秒判失败
+        if (now - timerRef.current > 8000) {
+          addPenalty('复位超时：气缸或传送带未响应', 5);
+          stepRef.current = 'M2_SEND_START';
+          timerRef.current = now;
+        } else if (awardedRef.current.has('m1_conv_run')) {
+          // 等待定时器停止
+          stepRef.current = 'M1_WAIT_CONVEYOR_STOP';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M1_WAIT_CONVEYOR_STOP': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (falling(cur, prev, A.CONVEYOR)) {
+          award('m1_timer_stop', '【复位测试】传送带5秒定时器自动停止', 3);
+          award('m1_timer_hold', '【复位测试】传送带停止状态确认', 2);
+          stepRef.current = 'M2_SEND_START';
+          timerRef.current = now;
+        } else if (now - timerRef.current > 8000) {
+          addPenalty('定时器未实现：传送带超时未停止', 5);
+          stepRef.current = 'M2_SEND_START';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      // ─── 模块2：上料流程 ───────────────────────────────────
+      case 'M2_SEND_START': {
+        // 稳定 1s 再发送启动
+        if (now - timerRef.current < 1000) break;
+        await modbusRef.current.writeCoil(A.START, true);
+        award('m2_btn', '【上料流程】启动按钮检测', 2);
+        safeTimeout(() => modbusRef.current.writeCoil(A.START, false), 800);
+        // 注入物料到物料台（黑色，第一轮）
+        useDeviceStore.setState(s => ({
+          material: { ...s.material, visible: true, color: 'black', position: [-1.3, 1.06, 0.6] }
+        }));
+        stepRef.current = 'M2_WAIT_FEED_EXTEND';
+        timerRef.current = now;
+        break;
+      }
+
+      case 'M2_WAIT_FEED_EXTEND': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (rising(cur, prev, A.FEED_CTRL))
+          award('m2_feed_ctrl', '【上料流程】上料气缸伸出控制信号', 3);
+        if (active(cur, A.FEED_OUT)) {
+          award('m2_feed_out', '【上料流程】上料气缸伸出磁性开关到位', 3);
+          stepRef.current = 'M2_WAIT_FEED_RETRACT';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 10000) {
+          addPenalty('上料气缸未伸出', 5);
+          stepRef.current = 'M3_INJECT_BLACK';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M2_WAIT_FEED_RETRACT': {
+        if (!f) break;
+        const { cur, prev } = f;
+        // 伸出磁性开关下降沿 = 缩回控制已触发
+        if (falling(cur, prev, A.FEED_OUT))
+          award('m2_feed_ret_ctrl', '【上料流程】上料气缸缩回控制信号（伸出到位触发）', 4);
+        if (active(cur, A.FEED_IN)) {
+          award('m2_feed_in', '【上料流程】上料气缸缩回磁性开关到位', 4);
+          stepRef.current = 'M2_WAIT_CONVEYOR';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 8000) {
+          addPenalty('上料气缸未自动缩回', 5);
+          stepRef.current = 'M2_WAIT_CONVEYOR';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M2_WAIT_CONVEYOR': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (active(cur, A.FEED_SENSOR))
+          award('m2_sensor', '【上料流程】上料传感器检测到物料', 4);
+        if (rising(cur, prev, A.CONVEYOR))
+          award('m2_conv_start', '【上料流程】传送带联动启动', 3);
+        if (active(cur, A.CONVEYOR))
+          award('m2_conv_run', '【上料流程】传送带持续运行', 2);
+        if (awardedRef.current.has('m2_conv_run')) {
+          stepRef.current = 'M3_INJECT_BLACK';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 10000) {
+          addPenalty('传送带未联动启动', 5);
+          stepRef.current = 'M3_INJECT_BLACK';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      // ─── 模块3：黑色物料分拣 ─────────────────────────────
+      case 'M3_INJECT_BLACK': {
+        // 确保黑色物料在传送带上运行
+        useDeviceStore.setState(s => ({
+          material: { ...s.material, visible: true, color: 'black', position: [-0.3, 1.06, 0.6] }
+        }));
+        stepRef.current = 'M3_WAIT_COLOR_SENSOR';
+        timerRef.current = now;
+        break;
+      }
+
+      case 'M3_WAIT_COLOR_SENSOR': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (active(cur, A.COLOR_SENSOR))
+          award('m3_color', '【黑色分拣】色标传感器触发检测', 4);
+        if (falling(cur, prev, A.CONVEYOR))
+          award('m3_conv_stop', '【黑色分拣】传送带在色标传感器触发后停止', 4);
+        if (!active(cur, A.CONVEYOR) && awardedRef.current.has('m3_conv_stop'))
+          award('m3_conv_hold', '【黑色分拣】传送带停止状态确认', 3);
+        if (awardedRef.current.has('m3_conv_hold')) {
+          stepRef.current = 'M3_WAIT_SORT1_EXTEND';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 12000) {
+          addPenalty('黑色物料：色标传感器未触发或传送带未停止', 5);
+          stepRef.current = 'M4_SEND_START';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M3_WAIT_SORT1_EXTEND': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (rising(cur, prev, A.SORT1_CTRL))
+          award('m3_s1_ctrl', '【黑色分拣】分拣1气缸伸出控制信号', 4);
+        if (active(cur, A.SORT1_OUT)) {
+          award('m3_s1_out', '【黑色分拣】分拣1气缸伸出磁性开关到位', 4);
+          stepRef.current = 'M3_WAIT_SORT1_RETRACT';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 8000) {
+          addPenalty('分拣1气缸未伸出', 5);
+          stepRef.current = 'M4_SEND_START';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M3_WAIT_SORT1_RETRACT': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (falling(cur, prev, A.SORT1_OUT))
+          award('m3_s1_ret_ctrl', '【黑色分拣】分拣1气缸缩回控制信号（伸出到位触发）', 3);
+        if (active(cur, A.SORT1_IN)) {
+          award('m3_s1_in', '【黑色分拣】分拣1气缸缩回磁性开关到位', 3);
+          // 第一轮结束
+          useDeviceStore.getState().clearMaterial();
+          stepRef.current = 'M4_SEND_START';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 8000) {
+          addPenalty('分拣1气缸未自动缩回', 5);
+          stepRef.current = 'M4_SEND_START';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      // ─── 模块4：蓝色物料分拣（第二轮）──────────────────────
+      case 'M4_SEND_START': {
+        if (now - timerRef.current < 1500) break;
+        await modbusRef.current.writeCoil(A.START, true);
+        award('m4_btn', '【蓝色分拣】启动按钮检测（第二轮）', 1);
+        safeTimeout(() => modbusRef.current.writeCoil(A.START, false), 800);
+        // 注入蓝色物料到物料台
+        useDeviceStore.setState(s => ({
+          material: { ...s.material, visible: true, color: 'blue', position: [-1.3, 1.06, 0.6] }
+        }));
+        stepRef.current = 'M4_WAIT_LOAD';
+        timerRef.current = now;
+        break;
+      }
+
+      case 'M4_WAIT_LOAD': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (rising(cur, prev, A.FEED_CTRL))
+          award('m4_feed_ctrl', '【蓝色分拣】上料气缸伸出控制（重复）', 1);
+        if (falling(cur, prev, A.FEED_OUT))
+          award('m4_feed_ret', '【蓝色分拣】上料气缸缩回控制（重复）', 1);
+        if (active(cur, A.FEED_SENSOR))
+          award('m4_sensor', '【蓝色分拣】上料传感器检测（重复）', 1);
+        if (rising(cur, prev, A.CONVEYOR))
+          award('m4_conv', '【蓝色分拣】传送带启动（重复）', 1);
+        if (awardedRef.current.has('m4_conv')) {
+          // 将蓝色物料推进传送带中段等待色标区
+          useDeviceStore.setState(s => ({
+            material: { ...s.material, position: [-0.3, 1.06, 0.6] }
+          }));
+          stepRef.current = 'M4_WAIT_COLOR_PASS';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 12000) {
+          stepRef.current = 'M4_INJECT_BLUE';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M4_INJECT_BLUE': {
+        useDeviceStore.setState(s => ({
+          material: { ...s.material, visible: true, color: 'blue', position: [-0.3, 1.06, 0.6] }
+        }));
+        stepRef.current = 'M4_WAIT_COLOR_PASS';
+        timerRef.current = now;
+        break;
+      }
+
+      case 'M4_WAIT_COLOR_PASS': {
+        if (!f) break;
+        const { cur } = f;
+        // 色标传感器不应触发
+        if (!active(cur, A.COLOR_SENSOR))
+          award('m4_no_color', '【蓝色分拣】色标传感器未触发验证（互锁正确）', 2);
+        // 物料传感器触发
+        if (active(cur, A.MATERIAL_SENSOR)) {
+          award('m4_mat_sensor', '【蓝色分拣】物料传感器检测到蓝色物料', 3);
+          // 推进物料到2号位
+          useDeviceStore.setState(s => ({
+            material: { ...s.material, position: [0.6, 1.06, 0.6] }
+          }));
+        }
+        // 传送带停止
+        if (awardedRef.current.has('m4_mat_sensor') && !active(cur, A.CONVEYOR)) {
+          award('m4_conv_stop', '【蓝色分拣】物料传感器触发后传送带停止', 3);
+          award('m4_conv_hold', '【蓝色分拣】传送带停止状态确认', 2);
+          stepRef.current = 'M4_WAIT_SORT2_EXTEND';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 15000) {
+          addPenalty('蓝色物料：物料传感器未触发或传送带未停止', 5);
+          stepRef.current = 'FINISHED';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M4_WAIT_SORT2_EXTEND': {
+        if (!f) break;
+        const { cur, prev } = f;
+        // 分拣1不应动作（互锁验证）
+        if (!active(cur, A.SORT1_OUT))
+          award('m4_no_s1', '【蓝色分拣】分拣1气缸未误触发（互锁正确）', 1);
+        if (rising(cur, prev, A.SORT2_CTRL))
+          award('m4_s2_ctrl', '【蓝色分拣】分拣2气缸伸出控制信号', 4);
+        if (active(cur, A.SORT2_OUT)) {
+          award('m4_s2_out', '【蓝色分拣】分拣2气缸伸出磁性开关到位', 3);
+          stepRef.current = 'M4_WAIT_SORT2_RETRACT';
+          timerRef.current = now;
+        }
+        if (now - timerRef.current > 8000) {
+          addPenalty('分拣2气缸未伸出', 5);
+          stepRef.current = 'FINISHED';
+          timerRef.current = now;
+        }
+        break;
+      }
+
+      case 'M4_WAIT_SORT2_RETRACT': {
+        if (!f) break;
+        const { cur, prev } = f;
+        if (falling(cur, prev, A.SORT2_OUT))
+          award('m4_s2_ret_ctrl', '【蓝色分拣】分拣2气缸缩回控制信号（伸出到位触发）', 2);
+        if (active(cur, A.SORT2_IN)) {
+          award('m4_s2_in', '【蓝色分拣】分拣2气缸缩回磁性开关到位（评分完成）', 0);
+          useDeviceStore.getState().clearMaterial();
+          stepRef.current = 'FINISHED';
+        }
+        if (now - timerRef.current > 8000) {
+          addPenalty('分拣2气缸未自动缩回', 5);
+          stepRef.current = 'FINISHED';
+        }
+        break;
+      }
+
+      case 'FINISHED': {
+        setScoringRunning(false);
+        break;
+      }
+    }
+  }
+
+  return null;
+}
