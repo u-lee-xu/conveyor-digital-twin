@@ -11,7 +11,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['ws'],
+              external: ['net'],
             },
           },
         },
