@@ -29,6 +29,7 @@
     "stats.js": "^0.17.0",
     "tailwindcss": "^4.2.1",
     "three": "^0.183.1",
+    "ws": "^8.21.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
@@ -67,16 +68,6 @@
       "dist/**/*",
       "dist-electron/**/*",
       "node_modules/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "websocket-server/server.js",
-        "to": "websocket-server/server.js"
-      },
-      {
-        "from": "websocket-server/node_modules",
-        "to": "websocket-server/node_modules"
-      }
     ],
     "cscLink": null,
     "win": {

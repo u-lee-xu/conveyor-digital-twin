@@ -11,7 +11,7 @@ export const ConveyorBelt: React.FC<ConveyorBeltProps> = ({ running }) => {
   const { scene } = useScene();
   const groupRef = useRef<THREE.Group | null>(null);
   const rollersRef = useRef<THREE.Mesh[]>([]);
-  const animationIdRef = useRef<number>(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!scene) return;
@@ -37,7 +37,6 @@ export const ConveyorBelt: React.FC<ConveyorBeltProps> = ({ running }) => {
         0
       );
       roller.rotation.x = Math.PI / 2;
-      roller.castShadow = true;
       roller.receiveShadow = true;
 
       group.add(roller);
@@ -70,7 +69,6 @@ export const ConveyorBelt: React.FC<ConveyorBeltProps> = ({ running }) => {
     legPositions.forEach((pos) => {
       const leg = new THREE.Mesh(geometries.leg, materials.darkMetal);
       leg.position.set(pos.x, conveyorHeight / 2, pos.z);
-      leg.castShadow = true;
       leg.receiveShadow = true;
       group.add(leg);
     });
@@ -91,21 +89,24 @@ export const ConveyorBelt: React.FC<ConveyorBeltProps> = ({ running }) => {
 
   useEffect(() => {
     if (!running) {
-      cancelAnimationFrame(animationIdRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
-    const animate = () => {
+    intervalRef.current = setInterval(() => {
       rollersRef.current.forEach((roller) => {
         roller.rotation.y -= 0.03;
       });
-      animationIdRef.current = requestAnimationFrame(animate);
-    };
-
-    animate();
+    }, 33);
 
     return () => {
-      cancelAnimationFrame(animationIdRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
   }, [running]);
 

@@ -35,6 +35,7 @@ export function usePhysics() {
   const mode = useDeviceStore((state) => state.mode);
   const animationIdRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const frameCountRef = useRef<number>(0);
   const materialVelocityZRef = useRef<number>(0);
   const lastExtensionsRef = useRef<Record<string, number>>({
     feed: -0.22,
@@ -54,6 +55,12 @@ export function usePhysics() {
     const animate = (time: number) => {
       const deltaTime = time - lastTimeRef.current;
       lastTimeRef.current = time;
+
+      frameCountRef.current++;
+      if (frameCountRef.current % 2 !== 0) {
+        animationIdRef.current = requestAnimationFrame(animate);
+        return;
+      }
 
       // 归一化系数（以 60fps 为基准，即 16.67ms 为 1.0）
       const timeScale = deltaTime / 16.666;

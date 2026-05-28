@@ -1,0 +1,885 @@
+import re
+from docx import Document
+from docx.shared import Pt, Cm, Emu
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml.ns import qn, nsdecls
+from docx.oxml import parse_xml
+
+OUTPUT_PATH = r"c:\Users\Mia\Documents\New project 2\论文-数字孪生PLC虚拟仿真平台.docx"
+
+FONT_SONG = "宋体"
+FONT_HEI = "黑体"
+FONT_KAI = "楷体"
+FONT_TNR = "Times New Roman"
+
+
+def set_cell_border(cell, **kwargs):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = parse_xml(f'<w:tcBorders {nsdecls("w")}></w:tcBorders>')
+    for edge, val in kwargs.items():
+        element = parse_xml(
+            f'<w:{edge} {nsdecls("w")} w:val="{val.get("val", "single")}" '
+            f'w:sz="{val.get("sz", "4")}" w:space="0" w:color="{val.get("color", "000000")}"/>'
+        )
+        tcBorders.append(element)
+    tcPr.append(tcBorders)
+
+
+def set_run_font(run, cn_font, en_font, size_pt, bold=False):
+    run.font.size = Pt(size_pt)
+    run.font.bold = bold
+    run.font.name = en_font
+    r = run._element
+    rPr = r.find(qn("w:rPr"))
+    if rPr is None:
+        rPr = parse_xml(f'<w:rPr {nsdecls("w")}></w:rPr>')
+        r.insert(0, rPr)
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = parse_xml(f'<w:rFonts {nsdecls("w")}></w:rFonts>')
+        rPr.insert(0, rFonts)
+    rFonts.set(qn("w:eastAsia"), cn_font)
+    rFonts.set(qn("w:ascii"), en_font)
+    rFonts.set(qn("w:hAnsi"), en_font)
+
+
+def set_paragraph_format(para, alignment=None, line_spacing_pt=None,
+                         line_spacing_rule=None, space_before_pt=None,
+                         space_after_pt=None, first_line_indent=None):
+    pf = para.paragraph_format
+    if alignment is not None:
+        pf.alignment = alignment
+    if line_spacing_pt is not None:
+        pf.line_spacing = Pt(line_spacing_pt)
+    if line_spacing_rule is not None:
+        pf.line_spacing_rule = line_spacing_rule
+    if space_before_pt is not None:
+        pf.space_before = Pt(space_before_pt)
+    if space_after_pt is not None:
+        pf.space_after = Pt(space_after_pt)
+    if first_line_indent is not None:
+        pf.first_line_indent = first_line_indent
+
+
+def add_run_with_superscripts(para, text, cn_font, en_font, size_pt, bold=False):
+    parts = re.split(r"(<sup>\[.*?\]</sup>)", text)
+    for part in parts:
+        sup_match = re.match(r"<sup>\[(.*?)\]</sup>", part)
+        if sup_match:
+            run = para.add_run(f"[{sup_match.group(1)}]")
+            set_run_font(run, cn_font, en_font, size_pt, bold=bold)
+            run.font.superscript = True
+        else:
+            cleaned = part.replace("`", "")
+            if not cleaned:
+                continue
+            run = para.add_run(cleaned)
+            set_run_font(run, cn_font, en_font, size_pt, bold=bold)
+
+
+def add_body_paragraph(doc, text, first_indent=True):
+    para = doc.add_paragraph()
+    set_paragraph_format(
+        para,
+        line_spacing_pt=15,
+        line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+        first_line_indent=Emu(226695) if first_indent else None,
+    )
+    add_run_with_superscripts(para, text, FONT_SONG, FONT_TNR, 10.5)
+    return para
+
+
+def add_heading_level1(doc, number, title):
+    para = doc.add_paragraph()
+    set_paragraph_format(
+        para,
+        space_before_pt=6,
+        space_after_pt=3,
+    )
+    run_num = para.add_run(f"{number}  ")
+    set_run_font(run_num, FONT_SONG, FONT_TNR, 12, bold=False)
+    run_title = para.add_run(title)
+    set_run_font(run_title, FONT_SONG, FONT_TNR, 10.5, bold=False)
+    return para
+
+
+def add_heading_level2(doc, number, title):
+    para = doc.add_paragraph()
+    set_paragraph_format(
+        para,
+        space_before_pt=4,
+        space_after_pt=2,
+    )
+    run_num = para.add_run(f"{number}  ")
+    set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5, bold=False)
+    run_title = para.add_run(title)
+    set_run_font(run_title, FONT_SONG, FONT_TNR, 10.5, bold=False)
+    return para
+
+
+def add_heading_level3(doc, number, title):
+    para = doc.add_paragraph()
+    set_paragraph_format(
+        para,
+        space_before_pt=3,
+        space_after_pt=2,
+    )
+    run_num = para.add_run(f"{number}  ")
+    set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5, bold=False)
+    run_title = para.add_run(title)
+    set_run_font(run_title, FONT_SONG, FONT_TNR, 10.5, bold=False)
+    return para
+
+
+def add_three_line_table(doc, caption, headers, rows):
+    cap_para = doc.add_paragraph()
+    set_paragraph_format(cap_para, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing_pt=12,
+                         line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run = cap_para.add_run(caption)
+    set_run_font(run, FONT_SONG, FONT_TNR, 9, bold=True)
+
+    table = doc.add_table(rows=1 + len(rows), cols=len(headers))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = True
+
+    for i, h in enumerate(headers):
+        cell = table.rows[0].cells[i]
+        cell.text = ""
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(h)
+        set_run_font(run, FONT_SONG, FONT_TNR, 9, bold=True)
+
+    for r_idx, row_data in enumerate(rows):
+        for c_idx, val in enumerate(row_data):
+            cell = table.rows[r_idx + 1].cells[c_idx]
+            cell.text = ""
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(val)
+            set_run_font(run, FONT_SONG, FONT_TNR, 9)
+
+    for row in table.rows:
+        for cell in row.cells:
+            set_cell_border(cell,
+                            top={"val": "none", "sz": "0", "color": "FFFFFF"},
+                            bottom={"val": "none", "sz": "0", "color": "FFFFFF"},
+                            start={"val": "none", "sz": "0", "color": "FFFFFF"},
+                            end={"val": "none", "sz": "0", "color": "FFFFFF"})
+
+    for cell in table.rows[0].cells:
+        set_cell_border(cell,
+                        top={"val": "single", "sz": "12", "color": "000000"},
+                        bottom={"val": "single", "sz": "6", "color": "000000"})
+
+    for cell in table.rows[-1].cells:
+        set_cell_border(cell,
+                        bottom={"val": "single", "sz": "12", "color": "000000"})
+
+    return table
+
+
+def build_document():
+    doc = Document()
+
+    section = doc.sections[0]
+    section.page_width = Cm(21.0)
+    section.page_height = Cm(29.7)
+    section.top_margin = Cm(2.54)
+    section.bottom_margin = Cm(2.54)
+    section.left_margin = Cm(3.17)
+    section.right_margin = Cm(3.17)
+
+    # === 中文标题 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, space_before_pt=12, space_after_pt=6)
+    run = p.add_run("面向PLC编程教学的数字孪生虚拟仿真平台设计与实现")
+    set_run_font(run, FONT_HEI, FONT_TNR, 18)
+
+    # === 作者 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, space_before_pt=3, space_after_pt=2)
+    run = p.add_run("XXX")
+    set_run_font(run, FONT_SONG, FONT_TNR, 12)
+
+    # === 单位 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=6)
+    run = p.add_run("XXX")
+    set_run_font(run, FONT_KAI, FONT_TNR, 9)
+
+    # === 摘要 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run_label = p.add_run("摘  要：")
+    set_run_font(run_label, FONT_HEI, FONT_TNR, 9)
+    abstract_text = (
+        "针对传统PLC编程课程实验依赖实体设备、实验工位有限、课外训练条件不足等问题，"
+        "设计了一种面向PLC编程教学的数字孪生虚拟仿真平台。平台以物料分拣实验为对象，"
+        "构建桌面端三维可视化场景，并设计ModbusTCP与WebSocket的协议桥接机制，"
+        "使PLC控制信号与虚拟产线动作之间形成双向映射。系统支持手动、自动、仿真和评分4种运行模式，"
+        "可分别面向设备认知、流程演示、程序联调和实验考核等分层次教学需求。"
+        "平台前端采用React + Three.js + TypeScript实现三维交互界面，"
+        "并新增三色信号灯塔与内置使用指南面板，提升教学场景的完整性与操作便利性。"
+        "系统以Electron桌面应用形式打包分发，学生安装后即可直接使用，无需网络服务器配置。"
+        "通信网关集成于Electron应用内，作为子进程运行，通过WebSocket与前端通信，"
+        "通过ModbusTCP与PLC或PLC仿真软件交互，实现了工业控制协议与Web消息协议的高效转换。"
+        "仿真模式支持汇川H5U、EASY系列实体PLC和AutoShop仿真以及支持ModbusTCP的PLC及仿真软件。"
+        "本文完成了平台总体架构设计、桌面端功能实现以及核心通信链路的联调验证，"
+        "可为PLC课程虚拟仿真教学提供一种桌面化、轻量化的实现思路。"
+    )
+    run_abs = p.add_run(abstract_text)
+    set_run_font(run_abs, FONT_SONG, FONT_TNR, 9)
+
+    # === 关键词 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run_label = p.add_run("关键词：")
+    set_run_font(run_label, FONT_HEI, FONT_TNR, 9)
+    run_kw = p.add_run("数字孪生；PLC编程；虚拟仿真；ModbusTCP；WebSocket；三维可视化")
+    set_run_font(run_kw, FONT_SONG, FONT_TNR, 9)
+
+    # === 中图分类号 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run1 = p.add_run("中图分类号：")
+    set_run_font(run1, FONT_HEI, FONT_TNR, 9)
+    run2 = p.add_run("TP391.7")
+    set_run_font(run2, FONT_SONG, FONT_TNR, 9)
+    run3 = p.add_run("      文献标识码：")
+    set_run_font(run3, FONT_HEI, FONT_TNR, 9)
+    run4 = p.add_run("A")
+    set_run_font(run4, FONT_SONG, FONT_TNR, 9)
+    run5 = p.add_run("            文章编号：")
+    set_run_font(run5, FONT_HEI, FONT_TNR, 9)
+    run6 = p.add_run("待补充")
+    set_run_font(run6, FONT_SONG, FONT_TNR, 9)
+
+    # === 英文标题 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, space_before_pt=12, space_after_pt=4)
+    run = p.add_run("Design and Implementation of a Digital Twin Virtual Simulation Platform for PLC Programming Teaching")
+    set_run_font(run, FONT_SONG, FONT_TNR, 14, bold=True)
+
+    # === 英文作者 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=2)
+    run = p.add_run("XXX")
+    set_run_font(run, FONT_SONG, FONT_TNR, 10.5)
+
+    # === 英文单位 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=6)
+    run = p.add_run("XXX")
+    set_run_font(run, FONT_SONG, FONT_TNR, 9)
+
+    # === Abstract ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run_label = p.add_run("Abstract：")
+    set_run_font(run_label, FONT_SONG, FONT_TNR, 9, bold=True)
+    abstract_en = (
+        "Aiming at the problems that traditional PLC programming course experiments rely on physical equipment, "
+        "limited experimental stations, and insufficient extracurricular training conditions, "
+        "a digital twin virtual simulation platform for PLC programming teaching is designed. "
+        "The platform takes the material sorting experiment as the object, "
+        "constructs a desktop 3D visualization scene, "
+        "and designs a protocol bridging mechanism between ModbusTCP and WebSocket, "
+        "forming a bidirectional mapping between PLC control signals and virtual production line actions. "
+        "The system supports four operation modes: manual, automatic, simulation, and scoring, "
+        "which can meet the hierarchical teaching needs of equipment cognition, "
+        "process demonstration, program debugging, and experimental assessment. "
+        "The platform frontend uses React + Three.js + TypeScript to implement the 3D interactive interface, "
+        "and adds a three-color signal tower and a built-in guide panel "
+        "to enhance the completeness of the teaching scene and operational convenience. "
+        "The system is packaged and distributed as an Electron desktop application. "
+        "Students can use it directly after installation without network server configuration. "
+        "The communication gateway is integrated into the Electron application as a subprocess, "
+        "communicating with the frontend through WebSocket and with PLC or PLC simulation software through ModbusTCP, "
+        "achieving efficient conversion between industrial control protocol and Web message protocol. "
+        "The simulation mode supports Inovance H5U, EASY series physical PLCs and AutoShop simulation, "
+        "as well as PLCs and simulation software that support ModbusTCP. "
+        "This paper completes the overall architecture design, desktop function implementation, "
+        "and core communication link verification of the platform, "
+        "providing a desktop-based and lightweight implementation approach for PLC course virtual simulation teaching."
+    )
+    run_abs = p.add_run(abstract_en)
+    set_run_font(run_abs, FONT_SONG, FONT_TNR, 9)
+
+    # === Keywords ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run_label = p.add_run("Keywords：")
+    set_run_font(run_label, FONT_SONG, FONT_TNR, 9, bold=True)
+    run_kw = p.add_run("digital twin; PLC programming; virtual simulation; ModbusTCP; WebSocket; 3D visualization")
+    set_run_font(run_kw, FONT_SONG, FONT_TNR, 9)
+
+    # ================================================================
+    # 正文部分
+    # ================================================================
+
+    # --- 0 引言 ---
+    add_heading_level1(doc, "0", "引言")
+
+    add_body_paragraph(doc,
+        "作为自动化、电气工程及智能制造等专业的支撑性实践环节，"
+        "PLC（可编程逻辑控制器）相关课程的教学成效在很大程度上取决于实验条件的完备性与开放度。"
+        "传统的PLC实验模式高度依赖实体主机、传感器及气缸执行机构等硬件设施，"
+        "虽然具备真实的工业物理感知，但在实际教学中面临着设备成本高昂、工位数量受限、"
+        "维护压力大以及课外实训时空局限等现实挑战。"
+        "近年来，虚拟仿真与数字孪生（Digital Twin）技术的兴起，"
+        "为破解上述实训教学困境、构建虚实结合的新型教学范式提供了重要契机<sup>[1-4]</sup>。"
+    )
+
+    add_body_paragraph(doc,
+        "纵观现有研究成果，数字孪生在PLC教学中的应用主要呈现出三类演进路径："
+        "其一，聚焦于高保真模型的构建与虚实联动机制。"
+        "李钰龙等、魏进等分别基于NX MCD、TIA Portal与硬件在环（HiL）架构，"
+        "探讨了数字孪生五维模型在智能制造实训中的应用，"
+        "强调了复杂机电对象与控制信号的精确映射<sup>[1-2]</sup>；"
+        "高志远等、崔久好等则从课程改革视角指出，"
+        "数字孪生系统能够显著提升学生对控制原理的直观理解<sup>[3-4]</sup>。"
+        "其二，侧重于商用虚拟工厂软件的教学集成。"
+        "陈蒙等、汤峰平等利用Factory IO结合TIA Portal开展联合仿真，"
+        "验证了虚拟实训在提升学生学习积极性与工程实践能力方面的有效性<sup>[5-6]</sup>；"
+        "靳雷等、吴昊等则进一步探讨了软件在环（SiL）虚拟调试系统在无硬件条件下的可行性<sup>[7-8]</sup>。"
+        "其三，关注工业物联网通信与协议转换。"
+        "邵康敏等验证了ModbusTCP在自动化实训装置技改中的应用价值<sup>[10]</sup>，"
+        "沈乾柄等探讨了物联网通信技术在自动化系统中的应用<sup>[11]</sup>，"
+        "王建荣等则提出了\u201cPLC-智能网关-云平台\u201d的典型链路架构，"
+        "为异构设备间的互联互通提供了技术支撑<sup>[12]</sup>。"
+    )
+
+    add_body_paragraph(doc,
+        "尽管上述研究为PLC虚拟实训奠定了坚实基础，但在实际推广中仍存在一定的技术门槛："
+        "多数方案高度依赖NX MCD、Factory IO等本地化、重型化工业软件，"
+        "对学生主机的硬件配置要求较高，且部署流程复杂、跨平台访问受限。"
+        "针对这一局限，本文设计并实现了一种面向PLC编程教学的桌面端数字孪生虚拟仿真平台。"
+        "该平台以典型的物料分拣实验场景为研究对象，"
+        "利用React + Three.js构建高实时性三维可视化场景，"
+        "并开发了基于Node.js的通信中间件网关，"
+        "实现了ModbusTCP工业协议与WebSocket消息协议的透明桥接。"
+        "相较于传统方案，本平台具有以下特征："
+        "1）桌面化部署，以Electron桌面应用形式打包，学生安装后即可使用，无需配置网络服务器；"
+        "2）虚实解耦，支持汇川H5U、EASY系列实体PLC和AutoShop仿真以及支持ModbusTCP的PLC及仿真软件的灵活接入；"
+        "3）全链路闭环，实现了从控制指令下发到场景逻辑反馈的双向透明传输；"
+        "4）多模式适配，提供手动、自动、仿真和评分四种运行模式，"
+        "覆盖从设备认知到实验考核的完整教学流程。"
+        "本文后续将从总体架构设计、三维场景实现、双向映射机制及教学应用价值等方面展开论述。"
+    )
+
+    # --- 1 系统需求分析 ---
+    add_heading_level1(doc, "1", "系统需求分析")
+
+    add_heading_level2(doc, "1.1", "教学需求")
+
+    add_body_paragraph(doc,
+        "结合PLC课程实验特点以及前述文献中反映出的主要问题，"
+        "平台建设应同时回应\u201c教学可用性\u201d和\u201c工程可实现性\u201d两方面需求。"
+        "在教学层面，平台不仅要能够替代部分实体实验条件，"
+        "还应保留典型控制对象、执行机构和检测逻辑之间的对应关系，"
+        "使学生在虚拟环境中仍能按照真实PLC实验的思路完成程序编写、联调与验证。"
+        "因此，平台需满足以下教学需求："
+    )
+
+    items_11 = [
+        "在无实体生产线条件下支持PLC程序编写、联调与验证。",
+        "直观展示传送带、气缸、传感器、信号灯塔和物料分拣过程，便于教师讲解控制逻辑。",
+        "当前优先适配PLC仿真软件环境，并为后续接入支持ModbusTCP的实际控制对象预留扩展空间。",
+        "支持学生通过桌面应用直接使用平台，降低安装和配置门槛。",
+        "保留典型工业通信方式，使训练过程更贴近工程实际<sup>[9-12]</sup>。",
+    ]
+    for item in items_11:
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        add_run_with_superscripts(p, item, FONT_SONG, FONT_TNR, 10.5)
+
+    add_heading_level2(doc, "1.2", "功能需求")
+
+    add_body_paragraph(doc,
+        "在功能设计上，平台旨在构建一个\u201c全要素映射、多情境适配\u201d的虚拟实验环境，"
+        "不仅要实现三维场景的静态呈现，更要覆盖从设备认知到实验考核的全生命周期。"
+        "基于此，系统设计了以下四种核心运行模式，以满足分层次的教学与实训需求："
+    )
+
+    func_items = [
+        ("手动模式（Manual）",
+         "该模式主要用于实验前的场景熟悉与设备认知。学生可通过界面直接操控传送带启停、"
+         "气缸伸缩及物料生成，观察气缸动作效果和传感器触发状态。"
+         "此模式的意义在于帮助学生了解设备基本动作和传感器工作原理，"
+         "建立执行机构与传感器反馈之间的感性认识。"),
+        ("自动模式（Automatic）",
+         "系统根据预设的标准分拣控制逻辑，自动驱动产线完成完整的分拣流程，"
+         "演示PLC程序设计达到的控制效果。教师可利用此模式展示标准控制工艺流程，"
+         "学生可观察和学习自动控制流程，作为课堂教学的直观教具。"),
+        ("仿真模式（Simulation）",
+         "这是平台的核心功能，旨在解决硬件匮乏下的实训难题。"
+         "平台通过本地网关连接PLC或PLC仿真软件，将PLC输出的控制信号转换为三维场景动作指令，"
+         "并将虚拟传感器的反馈实时回传给PLC，从而构建闭环控制回路，"
+         "支持学生进行PLC程序开发阶段的在线调试。"
+         "仿真模式支持汇川H5U、EASY系列实体PLC和AutoShop仿真以及支持ModbusTCP的PLC及仿真软件<sup>[8][11]</sup>。"),
+        ("评分模式（Scoring）",
+         "该模式用于自动实现PLC程序评价。连接PLC后，系统自动运行评分流程，"
+         "依据预设的评分规则对PLC程序的控制逻辑进行量化评估，"
+         "可用于实验考核和程序验证。"),
+    ]
+    for name, desc in func_items:
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_name = p.add_run(f"{name}：")
+        set_run_font(run_name, FONT_SONG, FONT_TNR, 10.5, bold=True)
+        add_run_with_superscripts(p, desc, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "此外，平台还需提供实时状态监测面板、内置使用指南面板"
+        "（包含使用说明、地址映射表和控制要求三个标签页）、"
+        "通信配置管理以及多视角切换等辅助功能，"
+        "以确保实验过程的可观测性与交互友好性。"
+    )
+
+    add_heading_level2(doc, "1.3", "对象模型")
+
+    add_body_paragraph(doc,
+        "物料分拣作为PLC教学中最具代表性的典型工况，"
+        "其工艺流程逻辑清晰、I/O耦合关系明确且执行机构动作典型，"
+        "是构建数字孪生模型的理想对象。"
+        "本平台针对分拣实训需求，对物理系统进行了机电属性抽象，"
+        "构建了一个由\u201c一轴三缸三感一物一塔\u201d组成的数字孪生对象模型。"
+    )
+
+    add_body_paragraph(doc,
+        "具体而言，模型包含一条由变频逻辑控制的虚拟传送带（主运动轴）、"
+        "三个负责物料导向与归档的气缸执行机构，"
+        "以及分布于关键工艺节点的上料检测、色标识别和物料到位等三组虚拟传感器。"
+        "此外，系统通过动态实例化机制产生具有不同物理属性（如颜色、高度标识）的物料对象，"
+        "并新增三色信号灯塔用于状态指示——红灯表示停止状态，黄灯表示复位清料中，绿灯表示运行状态。"
+        "该对象模型在保持系统轻量化的同时，完整覆盖了PLC程序设计中的启动联锁、"
+        "顺序控制、逻辑分支、闭环反馈及状态指示等核心要素。"
+        "通过对物理实体运动学特征的数字化提取，"
+        "平台实现了虚拟场景与真实控制逻辑之间的高保真映射，"
+        "为学生理解机电系统底层交互机制提供了直观的数字载体。"
+    )
+
+    # --- 2 系统总体设计 ---
+    add_heading_level1(doc, "2", "系统总体设计")
+
+    add_heading_level2(doc, "2.1", "总体架构")
+
+    add_body_paragraph(doc,
+        "平台遵循\u201c表现层与控制层深度解耦、现场协议与消息协议异构桥接\u201d的设计原则，"
+        "构建了由三维可视化前端、通信中间件服务及PLC逻辑控制层组成的三层分层架构，"
+        "其系统拓扑如图1所示。"
+    )
+
+    arch_items = [
+        ("三维可视化前端（Presentation Layer）",
+         "基于React框架与Three.js渲染引擎开发，负责数字孪生场景的高性能渲染。"
+         "该层通过WebSocket与中间件网关建立双向通信，"
+         "驱动虚拟执行机构的运动学变换，并为用户提供多维度的交互接口与状态监视看板。"),
+        ("通信中间件层（Communication Middleware）",
+         "作为系统的核心枢纽，该层采用基于Node.js开发的通信网关，"
+         "集成在Electron桌面应用内作为子进程运行。"
+         "网关实现工业侧ModbusTCP报文与Web侧WebSocket/JSON数据流的透明转换，"
+         "不仅承担着下行控制指令的转发任务，还负责上行传感器反馈信号的实时回写。"),
+        ("PLC逻辑控制层（Control Layer）",
+         "由物理PLC硬件或汇川AutoShop等仿真环境组成。"
+         "该层保留了工业标准的寄存器地址映射与线圈读写逻辑，"
+         "在不改变学生原有编程习惯的前提下，实现对虚拟生产线的远程控制与状态感知。"),
+    ]
+    for i, (name, desc) in enumerate(arch_items, 1):
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_num = p.add_run(f"{i}. ")
+        set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5)
+        run_name = p.add_run(f"{name}：")
+        set_run_font(run_name, FONT_SONG, FONT_TNR, 10.5, bold=True)
+        run_desc = p.add_run(desc)
+        set_run_font(run_desc, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "该架构以Electron桌面应用形式打包分发，学生安装后即可直接使用，"
+        "无需配置网络服务器或内网穿透服务，降低了部署和使用门槛。"
+    )
+
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing_pt=12,
+                         line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run = p.add_run("图1 基于数字孪生的PLC虚拟仿真教学平台总体架构")
+    set_run_font(run, FONT_SONG, FONT_TNR, 9)
+
+    add_heading_level2(doc, "2.2", "功能模块设计")
+
+    add_body_paragraph(doc, "系统主要包括以下模块：", first_indent=True)
+
+    modules = [
+        "三维场景建模模块：完成传送带、气缸、传感器、物料台、物料对象和信号灯塔的可视化表达。",
+        "设备状态管理模块：统一维护传送带运行、气缸伸缩、传感器触发、物料位置和信号灯塔状态等状态数据。",
+        "动画与逻辑执行模块：根据不同模式驱动物料移动、传感器检测、分拣动作和信号灯塔指示。",
+        "WebSocket通信模块：负责与网关的WebSocket连接管理、消息收发和数据校验。",
+        "ModbusTCP网关模块：负责PLC地址轮询、状态变化检测和消息双向转换，作为Electron子进程运行。",
+        "评分模块：在评分模式下自动运行评分流程，依据预设规则对PLC程序进行量化评价。",
+        "教学交互模块：负责模式切换、连接配置、状态面板、内置使用指南面板和数据统计展示。",
+    ]
+    for m in modules:
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        add_run_with_superscripts(p, m, FONT_SONG, FONT_TNR, 10.5)
+
+    # --- 3 关键技术实现 ---
+    add_heading_level1(doc, "3", "关键技术实现")
+
+    add_heading_level2(doc, "3.1", "Web三维场景实现")
+
+    add_body_paragraph(doc,
+        "平台前端采用Vite构建工程环境，使用React组件化组织三维对象，"
+        "使用Three.js实现几何建模、材质配置、灯光渲染与相机控制。"
+        "系统围绕物料分拣实验对象封装了传送带、气缸、传感器、物料、物料台和信号灯塔等组件，"
+        "并通过统一常量维护各对象空间坐标。"
+        "考虑教学可读性，平台还为关键设备设置了标签显示功能，"
+        "并在移动端提供抽屉式控制面板，以提升多终端访问体验。"
+    )
+
+    add_body_paragraph(doc,
+        "在三维行为实现上，平台通过状态驱动方式控制虚拟对象动作。"
+        "当传送带启动时，物料沿传送方向移动；当物料进入检测范围时，相应传感器触发；"
+        "当气缸伸出并满足空间位置条件时，物料沿分拣方向偏移；"
+        "信号灯塔根据系统运行状态切换红、黄、绿三色指示。"
+        "该实现使PLC输出信号与三维动作建立了较直接的对应关系，"
+        "有利于学生理解控制结果与程序逻辑之间的联系<sup>[2][5][14]</sup>。"
+    )
+
+    add_heading_level2(doc, "3.2", "设备状态模型设计")
+
+    add_body_paragraph(doc,
+        "项目基于统一状态仓库存储平台运行模式、传送带状态、气缸状态、传感器状态、"
+        "普通物料状态以及信号灯塔状态。"
+        "该设计将三维显示层、逻辑控制层和通信层有效解耦，"
+        "一方面便于不同运行模式共享同一设备模型，"
+        "另一方面也有利于后续扩展更多实验对象和控制流程。"
+    )
+
+    add_heading_level2(doc, "3.3", "仿真模式双向通信机制")
+
+    add_body_paragraph(doc,
+        "仿真模式是本文平台的核心功能。"
+        "当前方案支持汇川H5U、EASY系列实体PLC和AutoShop仿真以及支持ModbusTCP的PLC及仿真软件。"
+        "以AutoShop为例，在开启仿真后，AutoShop作为ModbusTCP服务器运行；"
+        "平台配套开发的基于Node.js的通信网关作为客户端建立连接，"
+        "采用异步非阻塞I/O机制周期读取线圈和寄存器状态。"
+        "网关将获取到的控制信号封装为WebSocket消息推送至数字孪生前端，驱动三维对象动作。"
+        "同时，数字孪生前端将传感器反馈与执行机构位姿状态通过相同链路写回PLC仿真侧，"
+        "形成\u201c仿真PLC输出—网关桥接—虚拟执行—状态反馈\u201d的双向闭环联调环境<sup>[8][10][11][13]</sup>。"
+        "由于用户侧中间件网关已完成原型开发与功能验证，本节主要给出其工作原理与地址映射设计。"
+    )
+
+    add_body_paragraph(doc,
+        "结合项目实现，平台采用结构化地址映射方案，主要地址映射关系如表1和表2所示。"
+    )
+
+    add_three_line_table(doc, "表1 输入信号地址映射表",
+                         ["地址", "信号名称", "说明"],
+                         [
+                             ["M0", "启动按钮", "系统启动信号"],
+                             ["M1", "复位按钮", "系统复位信号"],
+                             ["M2", "上料气缸缩回限位", "上料气缸缩回到位检测"],
+                             ["M3", "上料气缸伸出限位", "上料气缸伸出到位检测"],
+                             ["M4", "分拣1缩回限位", "分拣1气缸缩回到位检测"],
+                             ["M5", "分拣1伸出限位", "分拣1气缸伸出到位检测"],
+                             ["M6", "分拣2缩回限位", "分拣2气缸缩回到位检测"],
+                             ["M7", "分拣2伸出限位", "分拣2气缸伸出到位检测"],
+                             ["M8", "上料传感器", "上料位物料检测"],
+                             ["M9", "色标传感器", "物料颜色识别"],
+                             ["M10", "物料传感器", "物料到位检测"],
+                             ["M11", "停止按钮", "系统停止信号"],
+                         ])
+
+    doc.add_paragraph()
+
+    add_three_line_table(doc, "表2 输出信号地址映射表",
+                         ["地址", "信号名称", "说明"],
+                         [
+                             ["M100", "上料气缸", "控制上料气缸伸缩"],
+                             ["M101", "分拣1气缸", "控制分拣1气缸伸缩"],
+                             ["M102", "分拣2气缸", "控制分拣2气缸伸缩"],
+                             ["M103", "传送带", "控制传送带运行"],
+                             ["M104", "信号灯塔红灯", "停止状态指示"],
+                             ["M105", "信号灯塔绿灯", "运行状态指示"],
+                             ["M106", "信号灯塔黄灯", "复位清料状态指示"],
+                         ])
+
+    add_body_paragraph(doc,
+        "该结构化地址映射方案将输入信号统一编排于M0~M11区间，"
+        "输出信号统一编排于M100~M106区间，逻辑层次清晰，便于学生理解I/O分配规则。"
+        "学生在PLC软件中仍按熟悉的I/O逻辑编程，"
+        "而虚拟场景则承担执行机构与检测对象的动态可视化表达。"
+    )
+
+    add_heading_level2(doc, "3.4", "WebSocket通信设计")
+
+    add_body_paragraph(doc,
+        "为满足不同模式下的通信组织需求，平台采用基于WebSocket的双向通信机制。"
+        "在自动模式下，通信主要用于系统内部状态同步；"
+        "在仿真模式下，通信主要用于控制和反馈双向交互；"
+        "在评分模式下，通信用于评分流程的自动驱动与结果回传。"
+        "消息统一采用JSON格式，字段包括类型、名称、数值和时间戳，"
+        "以保证不同模块之间的数据一致性和可扩展性。"
+    )
+
+    add_body_paragraph(doc,
+        "在工程实现上，系统对主机地址、端口和消息内容进行了基本校验，"
+        "避免无效配置或异常报文导致连接失败或状态污染，从而提高平台运行稳定性。"
+        "相较于传统消息队列方案，基于WebSocket的通信方式在桌面应用场景下"
+        "具有更低的延迟和更简洁的部署架构，"
+        "适合教学型数字孪生系统的快速搭建与使用<sup>[10-14]</sup>。"
+    )
+
+    add_heading_level2(doc, "3.5", "本地网关设计")
+
+    add_body_paragraph(doc,
+        "本地网关是连接控制层与展示层的核心纽带。"
+        "系统将基于Node.js的通信网关集成在Electron桌面应用内，作为子进程运行，无需单独部署。"
+        "网关内置SimpleModbusTCP协议栈，能够处理工业通信中的TCP粘包与分包问题，"
+        "确保数据传输的稳定性。其核心逻辑包括："
+    )
+
+    gateway_items = [
+        ("协议转换引擎", "自动完成ModbusTCP报文与JSON格式消息的双向映射。"),
+        ("状态监测逻辑", "采用变化触发（COV）机制，仅在设备状态发生变化时推送消息，降低网络带宽占用。"),
+        ("闭环反馈控制", "在仿真模式下，网关不仅读取PLC输出，还负责将虚拟场景中的传感器信号（如感应开关、磁性开关）实时回写至PLC输入区。"),
+    ]
+    for i, (name, desc) in enumerate(gateway_items, 1):
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_num = p.add_run(f"{i}. ")
+        set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5)
+        run_name = p.add_run(f"{name}：")
+        set_run_font(run_name, FONT_SONG, FONT_TNR, 10.5, bold=True)
+        run_desc = p.add_run(desc)
+        set_run_font(run_desc, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "这种\u201c设备层-网关层-应用层\u201d的分层方式既保留了工业控制系统的基本特征，"
+        "又利用桌面应用技术解决了部署复杂性问题，"
+        "学生安装应用后即可使用，无需额外配置<sup>[8][11][13][14]</sup>。"
+    )
+
+    add_heading_level2(doc, "3.6", "评分模式设计")
+
+    add_body_paragraph(doc,
+        "评分模式是平台面向实验考核场景的特色功能。"
+        "在该模式下，系统连接PLC后自动运行评分流程，"
+        "依据预设的评分规则对PLC程序的控制逻辑进行量化评价。"
+        "评分规则涵盖启动联锁、顺序控制、分拣逻辑、复位流程和信号灯塔控制等关键维度，"
+        "每个维度设置相应的权重和评分标准。"
+        "评分过程中，系统自动向PLC发送启动信号，"
+        "监测PLC输出与预期控制逻辑的一致性，并实时记录评分结果。"
+        "评分完成后，系统生成评分报告，详细列出各维度的得分情况和扣分原因，"
+        "便于学生进行针对性改进。"
+        "该模式为实验考核提供了客观、可量化的评价手段，同时也可用于学生自主验证程序的正确性。"
+    )
+
+    add_heading_level2(doc, "3.7", "内置使用指南面板")
+
+    add_body_paragraph(doc,
+        "为提升平台的操作便利性和教学自引导能力，系统设计了内置使用指南面板，包含三个标签页："
+    )
+
+    guide_items = [
+        ("使用说明", "介绍平台各运行模式的功能定位和操作方法，帮助学生快速上手。"),
+        ("地址映射表", "完整列出输入信号（M0~M11）和输出信号（M100~M106）的地址分配，便于学生在编程时参考。"),
+        ("控制要求", "明确物料分拣实验的控制逻辑要求，具体包括：按下复位按钮，所有气缸缩回，传送带运行8秒清料；"
+         "按下启动按钮，上料气缸推出上料，上料传感器检出有物料推出后，传送带开始运行；"
+         "物料到达色标传感器检测颜色；蓝色物料由分拣1气缸推入1号分拣口，"
+         "黑色物料由分拣2气缸推入2号分拣口；运行状态绿灯亮，复位清料黄灯亮，停止状态红灯亮。"),
+    ]
+    for i, (name, desc) in enumerate(guide_items, 1):
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_num = p.add_run(f"{i}. ")
+        set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5)
+        run_name = p.add_run(f"{name}：")
+        set_run_font(run_name, FONT_SONG, FONT_TNR, 10.5, bold=True)
+        run_desc = p.add_run(desc)
+        set_run_font(run_desc, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "该面板的设计使学生在使用平台时无需查阅外部文档即可获取完整的实验指导信息，降低了学习门槛。"
+    )
+
+    # --- 4 平台应用与验证 ---
+    add_heading_level1(doc, "4", "平台应用与验证")
+
+    add_heading_level2(doc, "4.1", "教学应用流程")
+
+    add_body_paragraph(doc,
+        "从教学实施角度看，该平台适合嵌入PLC课程的预实验、课堂演示和课后联调三个环节。"
+        "考虑到当前项目仍在开发中，下面给出的流程主要对应仿真模式的设计使用流程："
+    )
+
+    flow_items = [
+        "教师预先配置本地网关和PLC仿真环境（或实体PLC连接）。",
+        "学生在汇川AutoShop中依据地址分配编写分拣控制程序，并启动PLC仿真。",
+        "AutoShop仿真启动后以ModbusTCP服务器方式运行。",
+        "启动Electron桌面应用，进入仿真模式并配置PLC连接参数。",
+        "应用内网关作为ModbusTCP客户端自动连接AutoShop，同时通过WebSocket与前端建立通信。",
+        "运行PLC程序，观察三维场景中的传送带运行、物料生成、气缸动作、信号灯塔指示和分拣结果。",
+        "若动作逻辑异常，可结合场景反馈和状态面板快速定位问题。",
+        "若需进行程序评价，切换至评分模式，系统自动运行评分流程并生成评分报告。",
+    ]
+    for i, item in enumerate(flow_items, 1):
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_num = p.add_run(f"{i}. ")
+        set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5)
+        add_run_with_superscripts(p, item, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "与传统实验相比，该方式不依赖完整实体产线，"
+        "能够将\u201c编程、运行、观察、纠错、评价\u201d整合到同一可视化环境中，"
+        "适合课程预实验、课后练习、集中授课演示和实验考核。"
+    )
+
+    add_heading_level2(doc, "4.2", "功能验证")
+
+    add_body_paragraph(doc,
+        "结合项目实现情况，平台已完成从底层协议到上层展示的全链路验证："
+    )
+
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing_pt=12,
+                         line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run = p.add_run("图2 PLC数字孪生虚拟仿真平台三维界面")
+    set_run_font(run, FONT_SONG, FONT_TNR, 9)
+
+    verify_items = [
+        ("场景表达验证", "三维场景能实时、准确地反映传送带、气缸、物料和信号灯塔的运动状态与指示状态。"),
+        ("模式组织验证", "手动、自动、仿真及评分模式切换顺畅，逻辑控制准确。"),
+        ("通信链路验证", "经测试，基于Node.js的中间件网关在AutoShop仿真环境下表现稳定，信号往返延迟满足教学实时性要求。"),
+        ("闭环仿真验证", "仿真模式下，PLC程序输出的控制指令能正确驱动虚拟产线，且虚拟传感器的反馈信号能准确触发PLC输入，实现了预期的联调功能。"),
+        ("评分功能验证", "评分模式下，系统能自动运行评分流程，依据预设规则对PLC程序进行量化评价，评分结果与预期一致。"),
+    ]
+    for i, (name, desc) in enumerate(verify_items, 1):
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_num = p.add_run(f"{i}. ")
+        set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5)
+        run_name = p.add_run(f"{name}：")
+        set_run_font(run_name, FONT_SONG, FONT_TNR, 10.5, bold=True)
+        run_desc = p.add_run(desc)
+        set_run_font(run_desc, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "上述验证结果表明，平台已完成数字孪生前端场景、运行逻辑和模式组织的基础开发，"
+        "能够支撑课堂展示、程序联调和实验考核。"
+        "其中，手动模式和自动模式验证了三维场景及动作逻辑的正确性；"
+        "仿真模式与评分模式则已形成较明确的功能实现，为后续开展大规模教学评价提供了基础。"
+    )
+
+    add_heading_level2(doc, "4.3", "教学应用价值分析")
+
+    add_body_paragraph(doc,
+        "结合系统设计目标和现有验证结果，平台在教学中的价值主要体现在以下几个方面："
+    )
+
+    p = doc.add_paragraph()
+    set_paragraph_format(p, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing_pt=12,
+                         line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+    run = p.add_run("图3 仿真模式下PLC与数字孪生系统的通信流程")
+    set_run_font(run, FONT_SONG, FONT_TNR, 9)
+
+    value_items = [
+        "降低实验条件依赖，使学生在缺少实体设备的情况下仍可开展PLC控制逻辑训练。",
+        "提升过程可视化水平，使PLC内部信号与三维动作形成直观映射，信号灯塔提供清晰的状态指示。",
+        "便于重复训练与错误复盘，有助于课后自主练习。",
+        "降低设备损耗和安全风险，部分调试过程可先在虚拟环境中完成。",
+        "提供客观的评分机制，支持实验考核和程序验证的自动化评价。",
+        "具有较强扩展性，后续可增加更多传感器、工位与工艺流程，形成系列化教学资源<sup>[4][5][7]</sup>。",
+    ]
+    for i, item in enumerate(value_items, 1):
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=15, line_spacing_rule=WD_LINE_SPACING.EXACTLY,
+                             first_line_indent=Emu(226695))
+        run_num = p.add_run(f"{i}. ")
+        set_run_font(run_num, FONT_SONG, FONT_TNR, 10.5)
+        add_run_with_superscripts(p, item, FONT_SONG, FONT_TNR, 10.5)
+
+    add_body_paragraph(doc,
+        "目前，平台已完成全链路技术验证与原型开发。"
+        "根据教学计划，本系统拟于2026级及2027级学生的相关课程实训中正式投入使用。"
+        "届时将通过大规模对比实验与问卷调查，对平台的教学成效进行量化评估与深度诊断。"
+    )
+
+    # --- 5 结论 ---
+    add_heading_level1(doc, "5", "结论")
+
+    add_body_paragraph(doc,
+        "本文针对PLC课程实训中硬件依赖强、教学场景受限等痛点，"
+        "设计并实现了一种桌面化、轻量化的数字孪生虚拟仿真平台。"
+        "通过对物料分拣典型工况的机电属性抽象，"
+        "平台利用React与Three.js构建了高实时的三维孪生场景，"
+        "并开发了基于Node.js的通信中间件网关，"
+        "实现了ModbusTCP工业控制协议与WebSocket消息协议的透明桥接。"
+    )
+
+    add_body_paragraph(doc,
+        "研究与实践表明，该平台在以下三个方面具有显著特征："
+        "1）技术架构的先进性，采用表现层与控制层解耦的架构，"
+        "以Electron桌面应用形式打包分发，突破了传统虚拟仿真方案对本地重型工业软件和网络服务器的依赖；"
+        "2）多模式教学的适配性，支持手动、自动、仿真和评分四种运行模式，"
+        "覆盖从设备认知到实验考核的完整教学流程，"
+        "其中评分模式为实验考核提供了客观、可量化的评价手段；"
+        "3）教学应用的普适性，仿真模式支持汇川H5U、EASY系列实体PLC和AutoShop仿真"
+        "以及支持ModbusTCP的PLC及仿真软件，极大地降低了学生参与PLC联调实训的门槛。"
+    )
+
+    add_body_paragraph(doc,
+        "后续研究将重点围绕多工位扩展、远程实验数据采集"
+        "以及基于2026级与2027级学生实训数据的成效评价机制进一步展开，"
+        "以持续完善PLC数字孪生辅助教学体系<sup>[1][3][4]</sup>。"
+    )
+
+    # === 参考文献 ===
+    p = doc.add_paragraph()
+    set_paragraph_format(p, space_before_pt=12, space_after_pt=6)
+    run = p.add_run("参考文献：")
+    set_run_font(run, FONT_SONG, FONT_TNR, 10.5)
+
+    references = [
+        "[1] 李钰龙, 张红梅, 陈普银, 等. 数字孪生技术在智能制造实训中的应用研究[J]. 南方农机, 2025, 56(07): 161-164. DOI:10.3969/j.issn.1672-3872.2025.07.042.",
+        "[2] 魏进, 赵伟博. 基于NX_MCD的数字孪生生产线实训教学研究与实践[J]. 现代信息科技, 2026, 10(04): 176-179. DOI:10.19850/j.cnki.2096-4706.2026.04.034.",
+        "[3] 高志远. 基于数字孪生技术的物料分拣实训课程改革研究[J]. 南方农机, 2026, 57(05): 185-188. DOI:10.3969/j.issn.1672-3872.2026.05.040.",
+        "[4] 崔久好, 孙承峰. 基于数字孪生技术实现GRAPH编程的自动化教学系统[J/OL]. 机电工程技术, 2026. DOI:10.3969/j.issn.1009-9492.2026.00012.",
+        "[5] 陈蒙, 王陆林, 鲍中运, 等. Factory_IO和TIA_Portal联合仿真在物联网控制教学中的应用探索[J]. 电脑知识与技术, 2025, 21(15): 87-90.",
+        "[6] 汤峰平. Factory_IO虚拟仿真工厂场景下的PLC技术课程教学设计与实践[J]. 嘉兴南洋职业技术学院学报, 2025(02): 待补页码.",
+        "[7] 靳雷, 位大亮. 基于TIA_Portal和Factory_IO的PLC虚拟仿真平台[J]. 电工电气, 2025(09): 待补页码.",
+        "[8] 吴昊, 孔祥伟, 钱文学. 虚拟调试技术在工程实训中的教学研究与实践[J/OL]. 机械设计与制造, 2026. DOI:10.19356/j.cnki.1001-3997.20260317.010.",
+        "[9] 闫晓阳. 基于西门子1200PLC的自动物料分拣实训平台[J]. 装备制造技术, 2023(05): 269-271.",
+        "[10] 邵康敏. 基于Modbus-TCP的填装生产实训装置技改研究[J]. 装备制造技术, 2025(06): 待补页码.",
+        "[11] 沈乾柄. 物联网与MQTT融合技术在自动化系统中的应用[J]. 电子技术, 2025, 54(09): 204-205.",
+        "[12] 王建荣, 陈斌. 基于PLC的工业物联网云平台研究与设计[J]. 自动化与仪器仪表, 2022(07): 104-107. DOI:10.14016/j.cnki.1001-9227.2022.07.104.",
+        "[13] 李鹏斌, 侯文腾, 康洪斐. 基于MQTT协议的物联网网关在新能源领域的应用[J]. 工业控制计算机, 2025, 38(04): 12-14.",
+        "[14] 周成军, 邱仁辉, 巫志龙, 等. 基于WebGL的森林作业技术与装备虚拟仿真实验系统[J]. 实验科学与技术, 2024, 22(06): 74-80. DOI:10.12179/1672-4550.20230598.",
+    ]
+
+    for ref in references:
+        p = doc.add_paragraph()
+        set_paragraph_format(p, line_spacing_pt=12, line_spacing_rule=WD_LINE_SPACING.EXACTLY)
+        run = p.add_run(ref)
+        set_run_font(run, FONT_SONG, FONT_TNR, 8)
+
+    doc.save(OUTPUT_PATH)
+    print(f"文档已保存至: {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    build_document()

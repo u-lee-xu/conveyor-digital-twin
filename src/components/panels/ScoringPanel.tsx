@@ -28,6 +28,7 @@ const STATUS_BG: Record<ScoringItemStatus, string> = {
 export const ScoringPanel: React.FC = () => {
   const {
     isScoringRunning,
+    scoringComplete,
     setScoringRunning,
     score,
     scoringStatus,
@@ -102,7 +103,39 @@ export const ScoringPanel: React.FC = () => {
       </div>
 
       <div className="bg-slate-900/50 rounded-xl p-5 border border-slate-700/50">
-        {!isScoringRunning ? (
+        {scoringComplete ? (
+          <div className="mb-4">
+            <div className={`px-4 py-4 rounded-xl border text-center ${
+              score >= 80 ? 'bg-green-500/10 border-green-500/30' :
+              score >= 50 ? 'bg-yellow-500/10 border-yellow-500/30' :
+              'bg-red-500/10 border-red-500/30'
+            }`}>
+              <div className="text-2xl mb-1">🏁</div>
+              <div className={`text-3xl font-black font-mono ${
+                score >= 80 ? 'text-green-400' :
+                score >= 50 ? 'text-yellow-400' :
+                'text-red-400'
+              }`}>
+                {score}
+              </div>
+              <div className="text-xs text-slate-400 mt-1">/ 100 分</div>
+              <div className={`text-sm font-bold mt-2 ${
+                score >= 80 ? 'text-green-300' :
+                score >= 50 ? 'text-yellow-300' :
+                'text-red-300'
+              }`}>
+                {score >= 90 ? '优秀' : score >= 80 ? '良好' : score >= 60 ? '及格' : '不及格'}
+              </div>
+            </div>
+            <Button
+              onClick={() => { setScoringRunning(false); }}
+              variant="primary"
+              className="w-full mt-3 h-10 text-sm font-bold"
+            >
+              返回
+            </Button>
+          </div>
+        ) : !isScoringRunning ? (
           <Button
             onClick={handleStartAutoTest}
             variant="primary"
@@ -123,7 +156,7 @@ export const ScoringPanel: React.FC = () => {
           </Button>
         )}
 
-        {isScoringRunning && scoringPrompt && (
+        {isScoringRunning && !scoringComplete && scoringPrompt && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
             <p className="text-sm text-indigo-200 font-medium">{scoringPrompt}</p>
           </div>
@@ -132,8 +165,11 @@ export const ScoringPanel: React.FC = () => {
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-slate-400">
             <span>测评状态</span>
-            <span className={isScoringRunning ? 'text-blue-400' : 'text-slate-500'}>
-              {isScoringRunning ? '序列执行中...' : '待命'}
+            <span className={
+              scoringComplete ? 'text-green-400' :
+              isScoringRunning ? 'text-blue-400' : 'text-slate-500'
+            }>
+              {scoringComplete ? '✓ 已完成' : isScoringRunning ? '序列执行中...' : '待命'}
             </span>
           </div>
         </div>

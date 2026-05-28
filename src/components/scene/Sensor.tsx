@@ -13,6 +13,7 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
   const { scene } = useScene();
   const groupRef = useRef<THREE.Group | null>(null);
   const ledRef = useRef<THREE.Mesh | null>(null);
+  const ledMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
   useEffect(() => {
     if (!scene) return;
@@ -21,26 +22,22 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
     group.position.set(...position);
     groupRef.current = group;
 
-    // 传感器支架
     const bracket = new THREE.Mesh(geometries.sensorBracket, materials.sensorBracket);
     bracket.position.set(0, -0.075, 0);
-    bracket.castShadow = true;
     group.add(bracket);
 
-    // 传感器主体 - 光电传感器盒子
     const sensorBody = new THREE.Mesh(geometries.sensor, materials.sensor);
     sensorBody.position.set(0, 0.03, 0);
-    sensorBody.castShadow = true;
     group.add(sensorBody);
 
-    // LED指示灯
-    const led = new THREE.Mesh(geometries.led, materials.ledInactive);
+    const ledMat = materials.ledInactive.clone();
+    ledMatRef.current = ledMat;
+    const led = new THREE.Mesh(geometries.led, ledMat);
     led.position.set(0, 0.06, 0.04);
     led.scale.set(1.5, 1.5, 1.5);
     group.add(led);
     ledRef.current = led;
 
-    // 根据类型添加标签颜色
     let labelMaterial = materials.sensorLabelFeed;
     if (type === 'color') {
       labelMaterial = materials.sensorLabelColor;
@@ -48,7 +45,6 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
       labelMaterial = materials.sensorLabelMaterial;
     }
 
-    // 类型标签
     const label = new THREE.Mesh(geometries.sensorLabel, labelMaterial);
     label.position.set(0, 0.03, -0.05);
     group.add(label);
@@ -57,6 +53,10 @@ export const Sensor: React.FC<SensorProps> = ({ position, active, type = 'feed' 
 
     return () => {
       scene.remove(group);
+      ledMat.dispose();
+      ledMatRef.current = null;
+      ledRef.current = null;
+      groupRef.current = null;
     };
   }, [scene, position, type]);
 

@@ -55,34 +55,38 @@ export function useDemoMode() {
   // 使用useState而不是useRef，以便触发UI更新
   const [demoState, setDemoState] = useState<DemoState>('IDLE');
   const isRunningRef = useRef(false);
-  const stoppedRef = useRef(false); // 用于停止异步循环
+  const stoppedRef = useRef(false);
   const materialColorRef = useRef<'blue' | 'black'>('blue');
+  const pendingTimeoutsRef = useRef<number[]>([]);
+  const pendingRaFsRef = useRef<number[]>([]);
 
-  // 可中断的延迟函数
   const delay = useCallback((ms: number) => {
     return new Promise<void>((resolve) => {
-      const timeoutId = setTimeout(() => {
+      const timeoutId = window.setTimeout(() => {
         if (!stoppedRef.current) {
           resolve();
         }
       }, ms);
-      // 存储timeoutId以便清理
-      return () => clearTimeout(timeoutId);
+      pendingTimeoutsRef.current.push(timeoutId);
     });
   }, []);
 
-  // 等待物料到达指定位置
+  const cancelAllPending = useCallback(() => {
+    pendingTimeoutsRef.current.forEach(id => clearTimeout(id));
+    pendingTimeoutsRef.current = [];
+    pendingRaFsRef.current.forEach(id => cancelAnimationFrame(id));
+    pendingRaFsRef.current = [];
+  }, []);
+
   const waitForMaterialPosition = useCallback((targetX: number): Promise<void> => {
     return new Promise((resolve) => {
       const check = () => {
-        // 检查是否应该停止
         if (stoppedRef.current) {
           resolve();
           return;
         }
         
         const currentMaterial = useDeviceStore.getState().material;
-        // 如果物料不可见，也返回（可能已被清除）
         if (!currentMaterial.visible) {
           resolve();
           return;
@@ -91,14 +95,14 @@ export function useDemoMode() {
         if (currentMaterial.position[0] >= targetX) {
           resolve();
         } else {
-          requestAnimationFrame(check);
+          const id = requestAnimationFrame(check);
+          pendingRaFsRef.current.push(id);
         }
       };
       check();
     });
   }, []);
 
-  // 等待物料到达指定Z位置（用于上料完成判断）
   const waitForMaterialZ = useCallback((targetZ: number): Promise<void> => {
     return new Promise((resolve) => {
       const check = () => {
@@ -106,18 +110,17 @@ export function useDemoMode() {
         const currentMaterial = useDeviceStore.getState().material;
         if (!currentMaterial.visible) { resolve(); return; }
         
-        // feed方向是减小Z
         if (currentMaterial.position[2] <= targetZ) {
           resolve();
         } else {
-          requestAnimationFrame(check);
+          const id = requestAnimationFrame(check);
+          pendingRaFsRef.current.push(id);
         }
       };
       check();
     });
   }, []);
 
-  // 等待物料被清除（用于分拣完成判断）
   const waitForMaterialCleared = useCallback((): Promise<void> => {
     return new Promise((resolve) => {
       const check = () => {
@@ -126,7 +129,8 @@ export function useDemoMode() {
         if (!currentMaterial.visible) {
           resolve();
         } else {
-          requestAnimationFrame(check);
+          const id = requestAnimationFrame(check);
+          pendingRaFsRef.current.push(id);
         }
       };
       check();
@@ -250,8 +254,9 @@ export function useDemoMode() {
     // 清理函数
     return () => {
       stoppedRef.current = true;
+      cancelAllPending();
     };
-  }, [mode, startDemo, delay]);
+  }, [mode, startDemo, delay, cancelAllPending]);
 
   return {
     state: demoState,
