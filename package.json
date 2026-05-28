@@ -19,29 +19,20 @@
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test"
   },
-  "dependencies": {
-    "@tailwindcss/postcss": "^4.2.1",
-    "@types/three": "^0.183.1",
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.6",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "stats.js": "^0.17.0",
-    "tailwindcss": "^4.2.1",
-    "three": "^0.183.1",
-    "ws": "^8.21.0",
-    "zustand": "^5.0.11"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@eslint/js": "^9.39.1",
+    "@tailwindcss/postcss": "^4.2.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/stats.js": "^0.17.4",
+    "@types/three": "^0.183.1",
     "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.27",
     "concurrently": "^9.1.2",
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
@@ -51,12 +42,20 @@
     "globals": "^16.5.0",
     "jsdom": "^29.1.1",
     "modbus-serial": "^8.0.16",
+    "postcss": "^8.5.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "stats.js": "^0.17.0",
+    "tailwindcss": "^4.2.1",
+    "three": "^0.183.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^5.4.0",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "ws": "^8.21.0",
+    "zustand": "^5.0.11"
   },
   "build": {
     "appId": "com.digital-twin.app",
@@ -66,9 +65,19 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*",
-      "node_modules/**/*"
+      "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "websocket-server/server.js",
+        "to": "websocket-server/server.js"
+      },
+      {
+        "from": "websocket-server/node_modules",
+        "to": "websocket-server/node_modules"
+      }
+    ],
+    "electronLanguages": ["zh-CN"],
     "cscLink": null,
     "win": {
       "signingHashAlgorithms": [],
