@@ -302,7 +302,7 @@ export function useConveyorScoring() {
 
   const readCoilsOnce = async (): Promise<boolean[] | null> => {
     try {
-      const result = await globalModbus.readCoils(0, 104);
+      const result = await globalModbus.readCoils(0, 107);
       if (result.success && result.values) return result.values;
     } catch {}
     return null;

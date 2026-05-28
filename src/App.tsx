@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable, Label } from './components/scene';
+import { Scene, ConveyorBelt, Cylinder, Sensor, Material, MaterialTable, Label, SignalTower } from './components/scene';
 import { CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION } from './components/scene/shared';
 import { ModeSelector } from './components/ui';
-import { ControlPanel, StatusPanel, DemoPanel, PlcConnectionPanel, ScoringPanel, SimPanel, ViewControlPanel } from './components/panels';
+import { ControlPanel, StatusPanel, DemoPanel, PlcConnectionPanel, ScoringPanel, SimPanel, ViewControlPanel, PlcHelpPanel } from './components/panels';
 import { useDeviceStore } from './stores';
 import { usePhysics } from './hooks/usePhysics';
 import { useDemoMode } from './hooks/useDemoMode';
@@ -19,8 +19,10 @@ function App() {
   const sensors = useDeviceStore((s) => s.sensors);
   const material = useDeviceStore((s) => s.material);
   const showLabels = useDeviceStore((s) => s.showLabels);
+  const signalTower = useDeviceStore((s) => s.signalTower);
 
   const [isMobile, setIsMobile] = useState(false);
+  const [showPlcHelp, setShowPlcHelp] = useState(false);
   const prevModeRef = useRef(mode);
 
   useEffect(() => {
@@ -182,19 +184,38 @@ function App() {
               visible={material.visible}
             />
           )}
+
+          <SignalTower
+            position={[1.6, 0.98, -0.5]}
+            red={signalTower.red}
+            green={signalTower.green}
+            yellow={signalTower.yellow}
+          />
+          {showLabels && (
+            <Label key="signal-tower" text="信号灯塔" position={[1.6, 0.98, -0.5]} offset={[0, 1.1, 0]} color="yellow" />
+          )}
         </Scene>
       </div>
 
       {!isMobile && (
         <div className="absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
           <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <span className="text-white text-xl">⚙</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                  <span className="text-white text-xl">⚙</span>
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-white">数字孪生传送带系统</h1>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-white">数字孪生传送带系统</h1>
-              </div>
+              <button
+                onClick={() => setShowPlcHelp(true)}
+                className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 hover:text-blue-300 rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                title="PLC配置指南"
+              >
+                📖 使用指南
+              </button>
             </div>
           </div>
 
@@ -229,6 +250,10 @@ function App() {
       )}
 
       <div className="absolute bottom-4 right-4 text-xs text-gray-600">Digital Twin</div>
+
+      {showPlcHelp && (
+        <PlcHelpPanel onClose={() => setShowPlcHelp(false)} />
+      )}
     </div>
   );
 }

@@ -34,10 +34,14 @@ export const MODBUS_ADDRESSES = {
   // ============================================
   START: 0,                      // 00001 启动信号 (M0)
   RESET: 1,                      // 00002 复位信号 (M1)
+  STOP: 11,                      // 00012 停止信号 (M11)
   FEED_CYLINDER_VALVE: 100,      // 00101 上料气缸伸出阀 (M100)
   SORTING1_CYLINDER_VALVE: 101,  // 00102 分拣气缸1伸出阀 (M101)
   SORTING2_CYLINDER_VALVE: 102,  // 00103 分拣气缸2伸出阀 (M102)
   CONVEYOR: 103,                 // 00104 传送带控制 (M103)
+  SIGNAL_TOWER_RED: 104,         // 00105 信号灯塔红灯 (M104)
+  SIGNAL_TOWER_GREEN: 105,       // 00106 信号灯塔绿灯 (M105)
+  SIGNAL_TOWER_YELLOW: 106,      // 00107 信号灯塔黄灯 (M106)
 
   // ============================================
   // 传感器反馈（数字孪生输出 -> PLC输入）- 线圈
@@ -550,7 +554,7 @@ export class ModbusService {
       // 批量读取地址 0 到 103 (覆盖所有控制信号、传感器和磁性开关)
       // M0-M10 对应 0-10, M100-M103 对应 100-103
       // 读取长度为 104 即可覆盖所有区间
-      const result = await this.readCoils(0, 104);
+      const result = await this.readCoils(0, 107);
 
       if (result.success && result.values) {
         // 直接返回完整的布尔数组，地址即为索引

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, createContext, useContext, useCallback, ty
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import Stats from 'stats.js';
+import { useDeviceStore } from '../../stores';
 
 interface SceneContextType {
   scene: THREE.Scene | null;
@@ -29,24 +29,12 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const css2DRendererRef = useRef<CSS2DRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const statsRef = useRef<Stats | null>(null);
   const animationIdRef = useRef<number>(0);
+  const lastRenderTimeRef = useRef<number>(0);
   const [sceneState, setSceneState] = useState<THREE.Scene | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    
-    // 初始化性能监控
-    if (import.meta.env.DEV) {
-      const stats = new Stats();
-      stats.showPanel(0);
-      stats.dom.style.position = 'absolute';
-      stats.dom.style.top = '0px';
-      stats.dom.style.left = '0px';
-      stats.dom.style.zIndex = '100';
-      containerRef.current.appendChild(stats.dom);
-      statsRef.current = stats;
-    }
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e293b);
@@ -63,16 +51,15 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'default' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(1);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-    
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 创建CSS2D渲染器用于HTML标签
     const css2DRenderer = new CSS2DRenderer();
     css2DRenderer.setSize(window.innerWidth, window.innerHeight);
     css2DRenderer.domElement.style.position = 'absolute';
@@ -89,24 +76,25 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     controls.maxPolarAngle = Math.PI / 2;
     controlsRef.current = controls;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
     directionalLight.position.set(5, 10, 7);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.shadow.mapSize.width = 512;
+    directionalLight.shadow.mapSize.height = 512;
     directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -10;
-    directionalLight.shadow.camera.right = 10;
-    directionalLight.shadow.camera.top = 10;
-    directionalLight.shadow.camera.bottom = -10;
+    directionalLight.shadow.camera.far = 30;
+    directionalLight.shadow.camera.left = -5;
+    directionalLight.shadow.camera.right = 5;
+    directionalLight.shadow.camera.top = 5;
+    directionalLight.shadow.camera.bottom = -5;
+    directionalLight.shadow.bias = -0.001;
     scene.add(directionalLight);
 
     const groundGeometry = new THREE.PlaneGeometry(20, 20);
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
+    const groundMaterial = new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.8,
     });
@@ -116,15 +104,53 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const animate = () => {
-      animationIdRef.current = requestAnimationFrame(animate);
-      if (statsRef.current) statsRef.current.begin();
-      controls.update();
-      renderer.render(scene, camera);
-      css2DRenderer.render(scene, camera);
-      if (statsRef.current) statsRef.current.end();
+    let userInteracting = false;
+    let interactionTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const onPointerDown = () => {
+      userInteracting = true;
+      if (interactionTimeout) clearTimeout(interactionTimeout);
     };
-    animate();
+    const onPointerUp = () => {
+      interactionTimeout = setTimeout(() => {
+        userInteracting = false;
+      }, 2000);
+    };
+
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+    const FRAME_ACTIVE = 16;
+    const FRAME_IDLE = 66;
+
+    const animate = (time: number) => {
+      animationIdRef.current = requestAnimationFrame(animate);
+
+      controls.update();
+
+      const { conveyorRunning, material, cylinders } = useDeviceStore.getState();
+      const hasAnimation = conveyorRunning || material.visible ||
+        cylinders.feed.currentExtension > 0.01 ||
+        cylinders.sorting1.currentExtension > 0.01 ||
+        cylinders.sorting2.currentExtension > 0.01;
+
+      if (userInteracting || hasAnimation) {
+        const elapsed = time - lastRenderTimeRef.current;
+        if (elapsed >= FRAME_ACTIVE) {
+          lastRenderTimeRef.current = time;
+          renderer.render(scene, camera);
+          css2DRenderer.render(scene, camera);
+        }
+      } else {
+        const elapsed = time - lastRenderTimeRef.current;
+        if (elapsed >= FRAME_IDLE) {
+          lastRenderTimeRef.current = time;
+          renderer.render(scene, camera);
+          css2DRenderer.render(scene, camera);
+        }
+      }
+    };
+    animate(0);
 
     const handleResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -136,13 +162,15 @@ export const Scene: React.FC<SceneProps> = ({ children }) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      if (interactionTimeout) clearTimeout(interactionTimeout);
       cancelAnimationFrame(animationIdRef.current);
       controls.dispose();
       const container = containerRef.current;
       if (container) {
         if (renderer.domElement) container.removeChild(renderer.domElement);
         if (css2DRenderer.domElement) container.removeChild(css2DRenderer.domElement);
-        if (statsRef.current?.dom) container.removeChild(statsRef.current.dom);
       }
       groundGeometry.dispose();
       groundMaterial.dispose();

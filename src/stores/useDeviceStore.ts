@@ -43,6 +43,12 @@ interface DeviceStore {
     conveyorDelay: number;
   };
 
+  signalTower: {
+    red: boolean;
+    green: boolean;
+    yellow: boolean;
+  };
+
   isRecording: boolean;
   recordedTrace: TraceEntry[];
 
@@ -85,6 +91,7 @@ interface DeviceStore {
   setMaterialConveyorDelay: (delay: number) => void;
   spawnMaterial: () => void;
   clearMaterial: () => void;
+  setSignalTower: (lights: { red?: boolean; green?: boolean; yellow?: boolean }) => void;
   reset: () => void;
   showLabels: boolean;
   toggleLabels: () => void;
@@ -111,6 +118,11 @@ const initialState = {
     position: [-1.3, 1.06, 0.6] as [number, number, number],
     onConveyor: false,
     conveyorDelay: 0,
+  },
+  signalTower: {
+    red: true,
+    green: false,
+    yellow: false,
   },
   isRecording: false,
   recordedTrace: [],
@@ -258,6 +270,13 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
       visible: false,
       onConveyor: false,
       conveyorDelay: 0,
+    },
+  })),
+
+  setSignalTower: (lights) => set((state) => ({
+    signalTower: {
+      ...state.signalTower,
+      ...lights,
     },
   })),
 

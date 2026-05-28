@@ -71,7 +71,6 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
     group.add(createValve(bodyHalfLen - 0.05));
     group.add(createValve(-bodyHalfLen + 0.05));
 
-    // --- 磁性开关 ---
     const createSwitch = (yPos: number) => {
       const swBody = new THREE.Mesh(geometries.magneticSwitch, materials.magneticSwitch);
       swBody.position.set(0, yPos, -0.1);
@@ -145,7 +144,15 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
     rodGroup.add(head);
 
     scene.add(group);
-    return () => { scene.remove(group); };
+    return () => {
+      scene.remove(group);
+      if (led1Ref.current) {
+        (led1Ref.current.material as THREE.Material).dispose();
+      }
+      if (led2Ref.current) {
+        (led2Ref.current.material as THREE.Material).dispose();
+      }
+    };
   }, [scene, position, name, isFeed, bodyGeom, rodGeom, rodLen, bodyHalfLen]);
 
   // 动画逻辑（含基于物理位置的磁性开关LED更新）
@@ -204,9 +211,10 @@ export const Cylinder: React.FC<CylinderProps> = ({ name, position, extended }) 
         rodRef.current.position.y = target;
         updateCylinderExtension(name, target);
         setLEDs(target);
+        animationIdRef.current = 0;
       }
     };
-    animate();
+    animationIdRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationIdRef.current);
   }, [extended, name, isFeed, updateCylinderExtension]);
 

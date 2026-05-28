@@ -35,6 +35,7 @@ interface SimPanelProps {
   onSimulationStop: (signal: boolean) => void;
   onSimulationReset: (signal: boolean) => void;
   onSpawnMaterial: () => void;
+  onInitialize: () => void;
 }
 
 const SignalRow: React.FC<{
@@ -92,6 +93,7 @@ export const SimPanel: React.FC<SimPanelProps> = ({
   onSimulationStop,
   onSimulationReset,
   onSpawnMaterial,
+  onInitialize,
 }) => {
   if (step === 'DISCONNECTED' || step === 'ERROR') {
     return (
@@ -120,7 +122,7 @@ export const SimPanel: React.FC<SimPanelProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           <button
             tabIndex={-1}
             onMouseDown={() => onSimulationStart(true)}
@@ -160,6 +162,13 @@ export const SimPanel: React.FC<SimPanelProps> = ({
             className="py-2 px-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-sm font-medium hover:from-blue-600 hover:to-indigo-600 transition-colors active:brightness-90 shadow-lg shadow-blue-500/20 select-none"
           >
             生料
+          </button>
+          <button
+            tabIndex={-1}
+            onClick={onInitialize}
+            className="py-2 px-3 rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white text-sm font-medium hover:from-purple-600 hover:to-fuchsia-600 transition-colors active:brightness-90 shadow-lg shadow-purple-500/20 select-none"
+          >
+            初始化
           </button>
         </div>
       </div>

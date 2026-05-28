@@ -125,6 +125,7 @@ export const useSimMode = () => {
 
     let polling = false;
     let stopped = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       if (polling) return;
       polling = true;
@@ -132,7 +133,7 @@ export const useSimMode = () => {
         const { isScoringRunning } = useDeviceStore.getState();
         if (isScoringRunning) return;
 
-        const result = await globalModbus.readCoils(0, 104);
+        const result = await globalModbus.readCoils(0, 107);
         if (!result.success || !result.values) return;
 
         const v = result.values;
@@ -148,6 +149,10 @@ export const useSimMode = () => {
         const s1Valve = v[MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE] ?? false;
         const s2Valve = v[MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE] ?? false;
         const conveyorVal = v[MODBUS_ADDRESSES.CONVEYOR] ?? false;
+
+        const signalTowerRed = v[MODBUS_ADDRESSES.SIGNAL_TOWER_RED] ?? false;
+        const signalTowerGreen = v[MODBUS_ADDRESSES.SIGNAL_TOWER_GREEN] ?? false;
+        const signalTowerYellow = v[MODBUS_ADDRESSES.SIGNAL_TOWER_YELLOW] ?? false;
 
         setControlSignals(prev => {
           if (
@@ -170,7 +175,7 @@ export const useSimMode = () => {
           };
         });
 
-        const { conveyorRunning, startConveyor, stopConveyor, extendCylinder, retractCylinder, cylinders: curCylinders } = useDeviceStore.getState();
+        const { conveyorRunning, startConveyor, stopConveyor, extendCylinder, retractCylinder, cylinders: curCylinders, setSignalTower } = useDeviceStore.getState();
 
         if (conveyorVal) {
           if (!conveyorRunning) startConveyor();
@@ -188,6 +193,8 @@ export const useSimMode = () => {
           if (s2Valve) extendCylinder('sorting2'); else retractCylinder('sorting2');
         }
 
+        setSignalTower({ red: signalTowerRed, green: signalTowerGreen, yellow: signalTowerYellow });
+
         statsRef.current.readCount++;
       } catch {
         statsRef.current.errorCount++;
@@ -199,11 +206,14 @@ export const useSimMode = () => {
     const loop = () => {
       if (stopped) return;
       poll();
-      setTimeout(loop, 100);
+      timeoutId = setTimeout(loop, 100);
     };
     loop();
 
-    return () => { stopped = true; };
+    return () => {
+      stopped = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
   }, [isConnected, mode]);
 
   useEffect(() => {

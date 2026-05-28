@@ -9,7 +9,7 @@ interface LabelProps {
   text: string;
   position: [number, number, number];
   offset?: [number, number, number];
-  color?: 'blue' | 'green' | 'orange' | 'purple' | 'gray';
+  color?: 'blue' | 'green' | 'orange' | 'purple' | 'gray' | 'yellow';
 }
 
 const colorStyles = {
@@ -18,6 +18,7 @@ const colorStyles = {
   orange: { bg: 'rgba(245, 158, 11, 0.4)', border: 'rgba(251, 191, 36, 0.6)', text: '#fef3c7' },
   purple: { bg: 'rgba(168, 85, 247, 0.4)', border: 'rgba(192, 132, 252, 0.6)', text: '#f3e8ff' },
   gray: { bg: 'rgba(107, 114, 128, 0.4)', border: 'rgba(156, 163, 175, 0.6)', text: '#f1f5f9' },
+  yellow: { bg: 'rgba(234, 179, 8, 0.4)', border: 'rgba(250, 204, 21, 0.6)', text: '#fef9c3' },
 };
 
 export const Label: React.FC<LabelProps> = React.memo(({ 
@@ -49,8 +50,6 @@ export const Label: React.FC<LabelProps> = React.memo(({
       background-color: ${styles.bg};
       color: ${styles.text};
       white-space: nowrap;
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       transition: opacity 0.3s ease, transform 0.3s ease;
       pointer-events: none;
@@ -71,6 +70,9 @@ export const Label: React.FC<LabelProps> = React.memo(({
     return () => {
       if (labelRef.current && scene) {
         scene.remove(labelRef.current);
+        if (labelRef.current.element && labelRef.current.element.parentNode) {
+          labelRef.current.element.parentNode.removeChild(labelRef.current.element);
+        }
       }
     };
   }, [scene, text, color]);
