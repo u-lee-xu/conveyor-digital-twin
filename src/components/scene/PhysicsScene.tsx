@@ -253,14 +253,14 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       </group>
 
       {/* 推板物理碰撞体 - 独立于旋转 group，直接使用世界坐标 */}
-      {/* 调整碰撞体Y轴位置，与视觉推板中心对齐（视觉推板Y轴在气缸坐标系下，对应世界坐标系） */}
+      {/* 调整碰撞体Y轴位置，与视觉推板中心对齐；加大尺寸确保能推到物料 */}
       <RigidBody
         ref={pushPlateRef}
         type="kinematicPosition"
         colliders={false}
         position={[position[0], position[1] + 0.135, initialWorldZ]}
       >
-        <CuboidCollider args={[0.1, 0.08, 0.02]} />
+        <CuboidCollider args={[0.25, 0.15, 0.04]} />
       </RigidBody>
     </>
   );
@@ -314,7 +314,9 @@ function PhysicsMaterial() {
   if (!material.visible) return null;
 
   return (
-    <RigidBody ref={rigidBodyRef} colliders="cuboid" friction={0.8} restitution={0.1}>
+    <RigidBody ref={rigidBodyRef} colliders={false} friction={0.6} restitution={0.0}>
+      {/* 物料碰撞体，尺寸稍微比视觉大一点 */}
+      <CuboidCollider args={[0.09, 0.09, 0.09]} />
       <mesh
         geometry={geometries.material}
         material={material.color === 'blue' ? materials.materialBlue : materials.materialBlack}
@@ -335,14 +337,14 @@ function PhysicsMaterialTable({ position }: { position: [number, number, number]
 
   return (
     <group position={position}>
-      {/* 物料台桌面物理碰撞体 */}
+      {/* 物料台桌面物理碰撞体 - 更大更宽，覆盖物料台区域 */}
       <RigidBody type="fixed" position={[0, 0, 0]} colliders={false} friction={1.0}>
-        <CuboidCollider args={[0.15, 0.025, 0.15]} />
+        <CuboidCollider args={[0.25, 0.025, 0.25]} />
       </RigidBody>
 
       {/* 物料台到传送带的过渡斜面 - 帮助物料平滑滑到传送带上 */}
-      <RigidBody type="fixed" position={[0, -0.005, -0.22]} colliders={false} friction={0.5}>
-        <CuboidCollider args={[0.15, 0.02, 0.12]} />
+      <RigidBody type="fixed" position={[0, -0.005, -0.25]} colliders={false} friction={0.5}>
+        <CuboidCollider args={[0.25, 0.02, 0.18]} />
       </RigidBody>
 
       <mesh geometry={geometries.tableTop} material={materials.wood} castShadow receiveShadow />
