@@ -98,6 +98,10 @@ interface DeviceStore {
   reset: () => void;
   showLabels: boolean;
   toggleLabels: () => void;
+  
+  // 物理引擎状态
+  useNewPhysics: boolean;
+  setUseNewPhysics: (useNewPhysics: boolean) => void;
 }
 
 const initialState = {
@@ -137,6 +141,7 @@ const initialState = {
   scoringComplete: false,
   scoringPrompt: '',
   isConnected: false,
+  useNewPhysics: false, // 默认使用旧物理引擎
 };
 
 function getInitialPlcConfig() {
@@ -178,6 +183,7 @@ function persistPlcConfig(config: { host: string; port: number; unitId: number; 
 export const useDeviceStore = create<DeviceStore>((set) => ({
   ...initialState,
 
+  setUseNewPhysics: (useNewPhysics: boolean) => set({ useNewPhysics }),
   setMode: (mode: Mode) => set({ mode }),
   setConnected: (connected: boolean) => set({ isConnected: connected }),
   setPlcConfig: (config) => set((state) => {

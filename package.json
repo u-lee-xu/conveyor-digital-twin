@@ -23,7 +23,9 @@
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@react-three/rapier": "^2.2.0"
+  },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@eslint/js": "^9.39.1",
@@ -81,7 +83,9 @@
         "to": "websocket-server/node_modules"
       }
     ],
-    "electronLanguages": ["zh-CN"],
+    "electronLanguages": [
+      "zh-CN"
+    ],
     "cscLink": null,
     "win": {
       "signingHashAlgorithms": [],
