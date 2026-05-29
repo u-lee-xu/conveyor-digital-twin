@@ -276,7 +276,7 @@ export class ModbusService {
       const id = `msg_${Date.now()}_${this.messageId++}`;
       const fullMessage = { ...message, id };
 
-      const timeoutMs = this.currentProtocol === 's7' ? 8000 : 5000;
+      const timeoutMs = this.currentProtocol === 's7' ? 10000 : 5000;
       const timeout = setTimeout(() => {
         if (this.messageHandlers.has(id)) {
           this.messageHandlers.delete(id);

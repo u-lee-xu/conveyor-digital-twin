@@ -296,19 +296,19 @@ class SimpleS7Client {
     });
   }
 
-  _isNodes7Connected() {
+  _isNodes7Ready() {
     if (!this.nodes7) return false;
-    return this.nodes7.connectionID != null;
+    return this.nodes7.isoConnectionState === 4;
   }
 
   _startConnCheck() {
     if (this._connCheckInterval) clearInterval(this._connCheckInterval);
     this._connCheckInterval = setInterval(() => {
-      if (this.connected && !this._isNodes7Connected()) {
-        console.log('[S7] 检测到连接丢失 (connectionID=null)');
+      if (this.connected && !this._isNodes7Ready()) {
+        console.log('[S7] 检测到连接丢失 (isoConnectionState=' + (this.nodes7 ? this.nodes7.isoConnectionState : 'null') + ')');
         this.connected = false;
       }
-    }, 2000);
+    }, 5000);
   }
 
   async connect(host, port, rack = 0, slot = 1) {
@@ -339,10 +339,35 @@ class SimpleS7Client {
             if (err) {
               console.error('[S7] 连接失败:', err);
               this._cleanup();
-              resolve({ success: false, error: String(err) });
+              let errMsg = String(err);
+              if (errMsg.includes('ISO didn\'t') || errMsg.includes('ISO did not')) {
+                errMsg = 'TCP已连接但ISO握手失败 — 请在博途中启用 PUT/GET 功能（CPU属性 → Protection → Allow PUT/GET）';
+              } else if (errMsg.includes('ECONNREFUSED')) {
+                errMsg = '连接被拒绝 — 请检查PLC/NetToPLCSim是否已启动，端口是否正确';
+              } else if (errMsg.includes('ETIMEDOUT') || errMsg.includes('timed out')) {
+                errMsg = '连接超时 — 请检查IP地址和端口是否正确，防火墙是否放行';
+              } else if (errMsg.includes('EHOSTUNREACH')) {
+                errMsg = '主机不可达 — 请检查网络连接和IP地址';
+              }
+              resolve({ success: false, error: errMsg });
             } else {
-              console.log(`[S7] 连接成功: ${host}:${port || 102} (Rack:${rack}, Slot:${slot})`);
+              console.log(`[S7] 连接成功: ${host}:${port || 102} (Rack:${rack}, Slot:${slot}), isoState=${this.nodes7.isoConnectionState}`);
               this.connected = true;
+
+              if (this.nodes7.isoclient) {
+                this.nodes7.isoclient.on('close', () => {
+                  console.log('[S7] TCP连接关闭');
+                  if (this.connected) {
+                    this.connected = false;
+                  }
+                });
+                this.nodes7.isoclient.on('end', () => {
+                  console.log('[S7] TCP连接收到FIN');
+                });
+                this.nodes7.isoclient.on('error', (e) => {
+                  console.log('[S7] TCP连接错误:', e.message || e);
+                });
+              }
 
               this.nodes7.setTranslationCB((tag) => {
                 return this.variables[tag] || tag;
@@ -407,9 +432,10 @@ class SimpleS7Client {
     if (!this.connected || !this.nodes7) {
       return { success: false, error: 'S7未连接' };
     }
-    if (!this._isNodes7Connected()) {
+    if (!this._isNodes7Ready()) {
+      console.warn('[S7] readVars: isoConnectionState=' + this.nodes7.isoConnectionState + ', 连接未就绪');
       this.connected = false;
-      return { success: false, error: 'S7连接已丢失' };
+      return { success: false, error: 'S7连接未就绪' };
     }
 
     return this._enqueue(() => {
@@ -418,21 +444,23 @@ class SimpleS7Client {
           try {
             this.nodes7.readAllItems((err, values) => {
               if (err) {
-                console.error('[S7] readAllItems 错误:', err);
-                if (String(err).includes('disconnect') || String(err).includes('timeout')) {
+                console.error('[S7] readAllItems 错误:', err, 'isoState=' + this.nodes7.isoConnectionState);
+                if (!this._isNodes7Ready()) {
                   this.connected = false;
                 }
                 resolve({ success: false, error: String(err) });
               } else {
                 const filtered = {};
+                let trueCount = 0;
                 for (const name of varNames) {
-                  if (values && values[name] !== undefined) {
+                  if (values && values[name] !== undefined && values[name] !== null) {
                     filtered[name] = !!values[name];
+                    if (filtered[name]) trueCount++;
                   } else {
                     filtered[name] = false;
                   }
                 }
-                console.log('[S7] 读取成功:', JSON.stringify(filtered));
+                console.log('[S7] 读取完成: ' + trueCount + '/' + varNames.length + ' 个为true, isoState=' + this.nodes7.isoConnectionState);
                 resolve({ success: true, values: filtered });
               }
             });
@@ -441,10 +469,10 @@ class SimpleS7Client {
             resolve({ success: false, error: e.message });
           }
         }),
-        3000,
+        5000,
         'readVars'
       ).catch((e) => {
-        console.error('[S7] readVars 超时或异常:', e.message);
+        console.error('[S7] readVars 超时:', e.message);
         return { success: false, error: e.message };
       });
     });
@@ -454,9 +482,10 @@ class SimpleS7Client {
     if (!this.connected || !this.nodes7) {
       return { success: false, error: 'S7未连接' };
     }
-    if (!this._isNodes7Connected()) {
+    if (!this._isNodes7Ready()) {
+      console.warn('[S7] writeVar: isoConnectionState=' + this.nodes7.isoConnectionState + ', 连接未就绪');
       this.connected = false;
-      return { success: false, error: 'S7连接已丢失' };
+      return { success: false, error: 'S7连接未就绪' };
     }
 
     return this._enqueue(() => {
@@ -465,8 +494,8 @@ class SimpleS7Client {
           try {
             this.nodes7.writeItems(varName, value, (err) => {
               if (err) {
-                console.error('[S7] 写入失败:', varName, value, err);
-                if (String(err).includes('disconnect') || String(err).includes('timeout')) {
+                console.error('[S7] 写入失败:', varName, value, err, 'isoState=' + this.nodes7.isoConnectionState);
+                if (!this._isNodes7Ready()) {
                   this.connected = false;
                 }
                 resolve({ success: false, error: String(err) });
@@ -480,10 +509,10 @@ class SimpleS7Client {
             resolve({ success: false, error: e.message });
           }
         }),
-        3000,
+        5000,
         'writeVar'
       ).catch((e) => {
-        console.error('[S7] writeVar 超时或异常:', e.message);
+        console.error('[S7] writeVar 超时:', e.message);
         return { success: false, error: e.message };
       });
     });
@@ -493,9 +522,10 @@ class SimpleS7Client {
     if (!this.connected || !this.nodes7) {
       return { success: false, error: 'S7未连接' };
     }
-    if (!this._isNodes7Connected()) {
+    if (!this._isNodes7Ready()) {
+      console.warn('[S7] writeVars: isoConnectionState=' + this.nodes7.isoConnectionState + ', 连接未就绪');
       this.connected = false;
-      return { success: false, error: 'S7连接已丢失' };
+      return { success: false, error: 'S7连接未就绪' };
     }
 
     return this._enqueue(() => {
@@ -504,8 +534,8 @@ class SimpleS7Client {
           try {
             this.nodes7.writeItems(varNames, values, (err) => {
               if (err) {
-                console.error('[S7] 批量写入失败:', varNames, err);
-                if (String(err).includes('disconnect') || String(err).includes('timeout')) {
+                console.error('[S7] 批量写入失败:', varNames, err, 'isoState=' + this.nodes7.isoConnectionState);
+                if (!this._isNodes7Ready()) {
                   this.connected = false;
                 }
                 resolve({ success: false, error: String(err) });
@@ -519,10 +549,10 @@ class SimpleS7Client {
             resolve({ success: false, error: e.message });
           }
         }),
-        3000,
+        5000,
         'writeVars'
       ).catch((e) => {
-        console.error('[S7] writeVars 超时或异常:', e.message);
+        console.error('[S7] writeVars 超时:', e.message);
         return { success: false, error: e.message };
       });
     });
