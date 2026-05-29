@@ -132,9 +132,9 @@ export function useScoring() {
             break;
 
           case 'TRIGGER_RESET':
-            await modbusService.writeCoil(MODBUS_ADDRESSES.RESET, true);
+            await modbusService.writeSignal(MODBUS_ADDRESSES.RESET, true);
             addPassedItem('阶段 1/3：复位流程 - 已下发 Reset 指令 (M1)');
-            safeTimeout(() => modbusService.writeCoil(MODBUS_ADDRESSES.RESET, false), 800);
+            safeTimeout(() => modbusService.writeSignal(MODBUS_ADDRESSES.RESET, false), 800);
             stepRef.current = 'WAITING_RESET_DONE';
             stateTimerRef.current = Date.now();
             break;
@@ -170,9 +170,9 @@ export function useScoring() {
 
           case 'TRIGGER_START':
             if (Date.now() - stateTimerRef.current > 2000) {
-              await modbusService.writeCoil(MODBUS_ADDRESSES.START, true);
-              addPassedItem('上料指令下发：等待 PLC 触发气缸动作');
-              safeTimeout(() => modbusService.writeCoil(MODBUS_ADDRESSES.START, false), 800);
+              await modbusService.writeSignal(MODBUS_ADDRESSES.START, true);
+              addPassedItem('阶段 2/3：启动流程 - 已下发 Start 指令 (M0)');
+              safeTimeout(() => modbusService.writeSignal(MODBUS_ADDRESSES.START, false), 800);
               stepRef.current = 'RUNNING';
               stateTimerRef.current = Date.now();
             }

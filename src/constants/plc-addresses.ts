@@ -25,7 +25,86 @@ export interface PLCHelpContent {
   signals: PLCSignal;
   modeGuides: ModeGuide[];
   controlRequirements: string[];
+  s7Guide?: {
+    title: string;
+    description: string;
+    addressMapping: S7AddressMapping[];
+    configSections: S7ConfigSection[];
+  };
 }
+
+export interface S7AddressMapping {
+  name: string;
+  modbusAddress: string;
+  s7Address: string;
+  description: string;
+}
+
+export const S7_ADDRESS_MAPPING: S7AddressMapping[] = [
+  { name: '启动按钮', modbusAddress: 'M0', s7Address: 'M10.0', description: '按下启动按钮，系统开始自动运行' },
+  { name: '复位按钮', modbusAddress: 'M1', s7Address: 'M10.1', description: '按下复位按钮，所有气缸缩回，传送带运行8秒清料' },
+  { name: '上料气缸缩回限位', modbusAddress: 'M2', s7Address: 'M12.0', description: '上料气缸缩回到位时为 ON' },
+  { name: '上料气缸伸出限位', modbusAddress: 'M3', s7Address: 'M12.1', description: '上料气缸伸出到位时为 ON' },
+  { name: '分拣1气缸缩回限位', modbusAddress: 'M4', s7Address: 'M14.0', description: '分拣1气缸缩回到位时为 ON' },
+  { name: '分拣1气缸伸出限位', modbusAddress: 'M5', s7Address: 'M14.1', description: '分拣1气缸伸出到位时为 ON' },
+  { name: '分拣2气缸缩回限位', modbusAddress: 'M6', s7Address: 'M16.0', description: '分拣2气缸缩回到位时为 ON' },
+  { name: '分拣2气缸伸出限位', modbusAddress: 'M7', s7Address: 'M16.1', description: '分拣2气缸伸出到位时为 ON' },
+  { name: '上料传感器', modbusAddress: 'M8', s7Address: 'M18.0', description: '检测物料台上是否有物料，检测到物料时为 ON' },
+  { name: '色标传感器', modbusAddress: 'M9', s7Address: 'M19.0', description: '检测物料颜色，检出黑色物料时为 ON，无法检出蓝色物料时为 OFF' },
+  { name: '物料传感器', modbusAddress: 'M10', s7Address: 'M20.0', description: '检测物料是否到达分拣2位置，检测到物料时为 ON' },
+  { name: '停止按钮', modbusAddress: 'M11', s7Address: 'M21.0', description: '按下停止按钮，系统停止运行' },
+  { name: '上料气缸', modbusAddress: 'M100', s7Address: 'M100.0', description: '控制物料推送到传送带，ON 时气缸伸出' },
+  { name: '分拣1气缸', modbusAddress: 'M101', s7Address: 'M101.0', description: '将物料推入1号分拣口，ON 时气缸伸出' },
+  { name: '分拣2气缸', modbusAddress: 'M102', s7Address: 'M102.0', description: '将物料推入2号分拣口，ON 时气缸伸出' },
+  { name: '传送带', modbusAddress: 'M103', s7Address: 'M103.0', description: '控制传送带的启动和停止，ON 时传送带运行' },
+  { name: '信号灯塔-红灯', modbusAddress: 'M104', s7Address: 'M104.0', description: '控制信号灯塔红灯亮灭，ON 时红灯亮' },
+  { name: '信号灯塔-绿灯', modbusAddress: 'M105', s7Address: 'M105.0', description: '控制信号灯塔绿灯亮灭，ON 时绿灯亮' },
+  { name: '信号灯塔-黄灯', modbusAddress: 'M106', s7Address: 'M106.0', description: '控制信号灯塔黄灯亮灭，ON 时黄灯亮' },
+];
+
+export interface S7ConfigStep {
+  text: string;
+  detail?: string;
+}
+
+export interface S7ConfigSection {
+  title: string;
+  steps: S7ConfigStep[];
+}
+
+const S7_CONFIG_SECTIONS: S7ConfigSection[] = [
+  {
+    title: '第一步：博途项目配置',
+    steps: [
+      { text: '打开 TIA Portal，新建或打开已有项目', detail: '选择 S7-1200 或 S7-1500 系列 CPU' },
+      { text: '在设备组态中双击 CPU，打开属性面板', detail: '在左侧导航树中找到"PROFINET 接口"' },
+      { text: '配置以太网 IP 地址', detail: '在"以太网地址"选项卡中设置 IP（如 192.168.0.1），子网掩码 255.255.255.0' },
+      { text: '开启 PUT/GET 通信权限', detail: '在"保护"选项卡中：安全等级选"完全访问"，勾选"允许来自远程对象的 PUT/GET 通信访问"' },
+      { text: '编写 PLC 程序', detail: '参照下方 S7 地址映射表编写程序，输入用 M10.0~M21.0，输出用 M100.0~M106.0' },
+      { text: '启动 PLCSIM 仿真并下载程序', detail: '点击"启动仿真"，将程序下载到 PLCSIM 中' },
+    ],
+  },
+  {
+    title: '第二步：NetToPLCSim 桥接配置',
+    steps: [
+      { text: '右键以管理员身份运行 NetToPLCSim', detail: '必须以管理员身份运行，否则无法桥接网络' },
+      { text: '点击 "Add" 添加一条映射规则', detail: '如果 PLCSIM 已经在运行，NetToPLCSim 可能会自动检测到' },
+      { text: '设置 Local IP（本机网卡 IP）', detail: '下拉选择你电脑的物理网卡 IP；如果只有本机使用，选 127.0.0.1' },
+      { text: '设置 PLC IP（博途中配置的 PLC IP）', detail: '填写你在博途中给 CPU 设置的 IP 地址（如 192.168.0.1）' },
+      { text: '确认 Rack 和 Slot', detail: 'S7-1200/1500 通常是 Rack=0, Slot=1，一般不需要修改' },
+      { text: '点击 "Start Server" 启动桥接', detail: '状态栏应显示 "Running"，表示桥接已建立' },
+    ],
+  },
+  {
+    title: '第三步：数字孪生连接',
+    steps: [
+      { text: '打开数字孪生程序，切换到仿真模式或评分模式', detail: '' },
+      { text: '在连接面板中选择"Siemens S7"协议', detail: '或直接选择预设"S7-1200/1500 仿真"' },
+      { text: '确认 IP、端口、Rack、Slot 配置正确', detail: 'IP 填 NetToPLCSim 中设置的 Local IP，端口 102，Rack=0，Slot=1' },
+      { text: '点击"连接"按钮', detail: '连接成功后状态指示灯变为绿色' },
+    ],
+  },
+];
 
 export const PLC_HELP_CONTENT: PLCHelpContent = {
   title: '使用指南',
@@ -216,7 +295,13 @@ export const PLC_HELP_CONTENT: PLCHelpContent = {
     '黑色物料被色标传感器检出后，到达分拣1位置时，分拣1气缸推出将物料推入1号分拣口。',
     '蓝色物料无法被色标传感器检出，继续运行至分拣2位置，物料传感器检测到物料后，分拣2气缸推出将物料推入2号分拣口。',
     '运行状态下信号灯塔绿灯亮；复位清料过程中信号灯塔黄灯亮；停止状态下信号灯塔红灯亮。'
-  ]
+  ],
+  s7Guide: {
+    title: '西门子 S7 仿真配置指南',
+    description: '通过 S7 协议连接西门子 PLC 仿真器，无需在博途中配置 Modbus Server。输入地址从 M10.0 开始，避开系统时钟位 MB0。',
+    addressMapping: S7_ADDRESS_MAPPING,
+    configSections: S7_CONFIG_SECTIONS
+  }
 };
 
 export const getInputAddress = (name: string): string | undefined => {
