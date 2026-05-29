@@ -44,6 +44,7 @@ function createWindow(): void {
     height: 720,
     minWidth: 800,
     minHeight: 600,
+    title: '数字孪生传送带系统 V1.0',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -104,8 +105,16 @@ function startWebSocketServer(): void {
 
 function stopWebSocketServer(): void {
   if (wsServerProcess) {
-    wsServerProcess.kill();
-    wsServerProcess = null;
+    try {
+      wsServerProcess.stdin?.write(JSON.stringify({ type: 'shutdown' }) + '\n');
+      wsServerProcess.stdin?.end();
+    } catch {}
+    setTimeout(() => {
+      if (wsServerProcess) {
+        wsServerProcess.kill();
+        wsServerProcess = null;
+      }
+    }, 1500);
   }
 }
 

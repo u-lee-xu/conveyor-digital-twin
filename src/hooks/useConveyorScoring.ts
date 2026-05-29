@@ -302,7 +302,7 @@ export function useConveyorScoring() {
 
   const readCoilsOnce = async (): Promise<boolean[] | null> => {
     try {
-      const result = await globalModbus.readCoils(0, 107);
+      const result = await globalModbus.readAllControlSignals();
       if (result.success && result.values) return result.values;
     } catch {}
     return null;
@@ -379,11 +379,11 @@ export function useConveyorScoring() {
   const writeCoilWithRetry = async (addr: number, value: boolean, retries = 3): Promise<boolean> => {
     for (let i = 0; i < retries; i++) {
       try {
-        const result = await globalModbus.writeCoil(addr, value);
+        const result = await globalModbus.writeSignal(addr, value);
         if (result.success) return true;
-        console.warn(`[评分] 写入线圈 地址${addr} 值${value} 失败(${i + 1}/${retries}):`, result.error);
+        console.warn(`[评分] 写入信号 地址${addr} 值${value} 失败(${i + 1}/${retries}):`, result.error);
       } catch (e) {
-        console.warn(`[评分] 写入线圈 地址${addr} 值${value} 异常(${i + 1}/${retries}):`, e);
+        console.warn(`[评分] 写入信号 地址${addr} 值${value} 异常(${i + 1}/${retries}):`, e);
       }
       if (i < retries - 1) await new Promise(r => setTimeout(r, 500));
     }
@@ -436,8 +436,9 @@ export function useConveyorScoring() {
       }
     };
 
-    const publishInterval = setInterval(publishFeedback, 200);
-    const processInterval = setInterval(tick, 200);
+    const scoringInterval = globalModbus.getProtocol() === 's7' ? 800 : 200;
+    const publishInterval = setInterval(publishFeedback, scoringInterval);
+    const processInterval = setInterval(tick, scoringInterval);
     return () => { clearInterval(publishInterval); clearInterval(processInterval); clearAllTimeouts(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScoringRunning, publishFeedback]);
@@ -472,19 +473,19 @@ export function useConveyorScoring() {
 
       case 'M1_CHECK_CONNECTION': {
         try {
-          const result = await globalModbus.readCoils(0, 1);
+          const result = await globalModbus.readAllControlSignals();
           if (result.success) {
-            console.log('[评分] Modbus连接验证成功');
+            console.log('[评分] PLC连接验证成功');
             stepRef.current = 'M1_INITIALIZE';
             setScoringPrompt('⏳ 模块1/4：初始化气缸伸出状态...');
           } else {
             console.error('[评分] Modbus连接验证失败:', result.error);
-            setScoringPrompt('❌ Modbus连接失败，请检查PLC连接后重试');
+            setScoringPrompt('❌ PLC连接失败，请检查PLC连接后重试');
             setScoringRunning(false);
           }
         } catch (e) {
           console.error('[评分] Modbus连接验证异常:', e);
-          setScoringPrompt('❌ Modbus通信异常，请检查PLC连接后重试');
+          setScoringPrompt('❌ PLC通信异常，请检查PLC连接后重试');
           setScoringRunning(false);
         }
         break;

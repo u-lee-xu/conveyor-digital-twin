@@ -41,9 +41,15 @@ export const MODBUS_CONFIG = {
  * 仿真模式专用的Hook，适配现有的代码使用习惯
  * 提供统一的Modbus操作API，内部委托给modbus-websocket服务
  */
-export const useModbusService = (config: { host: string; port: number; unitId?: number }) => {
+export const useModbusService = (config: { host: string; port: number; unitId?: number; protocol?: 'modbus' | 's7'; rack?: number; slot?: number }) => {
   return {
-    connect: () => modbusService.connect(config.host, config.port),
+    connect: () => modbusService.connect({
+      host: config.host,
+      port: config.port,
+      protocol: config.protocol || 'modbus',
+      rack: config.rack,
+      slot: config.slot,
+    }),
     disconnect: () => modbusService.disconnect(),
     getStatus: () => modbusService.getStatus(),
     testConnection: async () => {
@@ -72,6 +78,12 @@ export const useModbusService = (config: { host: string; port: number; unitId?: 
 
     // 批量读取线圈
     readCoils: (address: number, length: number) => modbusService.readCoils(address, length),
+
+    // 统一写入信号（自动适配 Modbus/S7 协议）
+    writeSignal: (address: number, value: boolean) => modbusService.writeSignal(address, value),
+
+    // 统一读取所有控制信号（自动适配 Modbus/S7 协议）
+    readAllControlSignals: () => modbusService.readAllControlSignals(),
   };
 };
 

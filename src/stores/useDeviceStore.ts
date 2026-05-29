@@ -23,6 +23,9 @@ interface DeviceStore {
     host: string;
     port: number;
     unitId: number;
+    protocol: 'modbus' | 's7';
+    rack: number;
+    slot: number;
   };
   conveyorRunning: boolean;
   cylinders: {
@@ -62,7 +65,7 @@ interface DeviceStore {
 
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
-  setPlcConfig: (config: Partial<{ host: string; port: number; unitId: number }>) => void;
+  setPlcConfig: (config: Partial<{ host: string; port: number; unitId: number; protocol: 'modbus' | 's7'; rack: number; slot: number }>) => void;
 
   startRecording: () => void;
   stopRecording: () => void;
@@ -141,6 +144,9 @@ function getInitialPlcConfig() {
     host: '127.0.0.1',
     port: 502,
     unitId: 1,
+    protocol: 'modbus' as const,
+    rack: 0,
+    slot: 1,
   };
 
   if (typeof window === 'undefined') {
@@ -155,13 +161,16 @@ function getInitialPlcConfig() {
       host: typeof parsed.host === 'string' && parsed.host.trim() ? parsed.host : fallback.host,
       port: Number.isInteger(parsed.port) ? parsed.port : fallback.port,
       unitId: Number.isInteger(parsed.unitId) ? parsed.unitId : fallback.unitId,
+      protocol: (parsed.protocol === 's7' ? 's7' : 'modbus') as 'modbus' | 's7',
+      rack: Number.isInteger(parsed.rack) ? parsed.rack : fallback.rack,
+      slot: Number.isInteger(parsed.slot) ? parsed.slot : fallback.slot,
     };
   } catch {
     return fallback;
   }
 }
 
-function persistPlcConfig(config: { host: string; port: number; unitId: number }) {
+function persistPlcConfig(config: { host: string; port: number; unitId: number; protocol: 'modbus' | 's7'; rack: number; slot: number }) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem('plc-config', JSON.stringify(config));
 }

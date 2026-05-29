@@ -88,7 +88,7 @@ export const useSimMode = () => {
     setIsSimulationRunning(true);
     setControlSignals(prev => ({ ...prev, start: signal }));
     try {
-      await globalModbus.writeCoil(MODBUS_ADDRESSES.START, signal);
+      await globalModbus.writeSignal(MODBUS_ADDRESSES.START, signal);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '启动信号写入失败');
     }
@@ -98,7 +98,7 @@ export const useSimMode = () => {
     if (mode !== 'sim' || !isConnected) return;
     setControlSignals(prev => ({ ...prev, reset: signal }));
     try {
-      await globalModbus.writeCoil(MODBUS_ADDRESSES.RESET, signal);
+      await globalModbus.writeSignal(MODBUS_ADDRESSES.RESET, signal);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '复位信号写入失败');
     }
@@ -111,7 +111,7 @@ export const useSimMode = () => {
     if (mode !== 'sim' || !isConnected) return;
     setControlSignals(prev => ({ ...prev, stop: signal }));
     try {
-      await globalModbus.writeCoil(11, signal);
+      await globalModbus.writeSignal(11, signal);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '停止信号写入失败');
     }
@@ -133,7 +133,7 @@ export const useSimMode = () => {
         const { isScoringRunning } = useDeviceStore.getState();
         if (isScoringRunning) return;
 
-        const result = await globalModbus.readCoils(0, 107);
+        const result = await globalModbus.readAllControlSignals();
         if (!result.success || !result.values) return;
 
         const v = result.values;
@@ -206,7 +206,8 @@ export const useSimMode = () => {
     const loop = () => {
       if (stopped) return;
       poll();
-      timeoutId = setTimeout(loop, 100);
+      const pollInterval = globalModbus.getProtocol() === 's7' ? 300 : 100;
+      timeoutId = setTimeout(loop, pollInterval);
     };
     loop();
 
@@ -227,6 +228,7 @@ export const useSimMode = () => {
   useEffect(() => {
     if (mode !== 'sim' || !isConnected) return;
     let publishing = false;
+    const feedbackInterval = globalModbus.getProtocol() === 's7' ? 800 : 200;
     const interval = setInterval(async () => {
       if (publishing) return;
       publishing = true;
@@ -235,7 +237,7 @@ export const useSimMode = () => {
       } finally {
         publishing = false;
       }
-    }, 200);
+    }, feedbackInterval);
     return () => clearInterval(interval);
   }, [isConnected, mode, publishAllFeedback]);
 
@@ -274,9 +276,9 @@ export const useSimMode = () => {
     }
 
     try {
-      await globalModbus.writeCoil(MODBUS_ADDRESSES.FEED_CYLINDER_VALVE, toExtend.includes('feed'));
-      await globalModbus.writeCoil(MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE, toExtend.includes('sorting1'));
-      await globalModbus.writeCoil(MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE, toExtend.includes('sorting2'));
+      await globalModbus.writeSignal(MODBUS_ADDRESSES.FEED_CYLINDER_VALVE, toExtend.includes('feed'));
+      await globalModbus.writeSignal(MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE, toExtend.includes('sorting1'));
+      await globalModbus.writeSignal(MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE, toExtend.includes('sorting2'));
     } catch {}
 
     setControlSignals(prev => ({

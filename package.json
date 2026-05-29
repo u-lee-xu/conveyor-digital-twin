@@ -1,7 +1,11 @@
 {
-  "name": "digital-twin-v3",
+  "name": "digital-twin-conveyor",
+  "productName": "数字孪生传送带系统",
+  "description": "传送带分拣系统数字孪生仿真与评分平台",
+  "version": "1.0.0",
+  "author": "老徐",
+  "license": "MIT",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {

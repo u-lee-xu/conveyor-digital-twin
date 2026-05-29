@@ -5,7 +5,7 @@ interface PlcHelpPanelProps {
   onClose: () => void;
 }
 
-type TabType = 'guide' | 'addresses' | 'requirements';
+type TabType = 'guide' | 'addresses' | 'requirements' | 's7';
 
 const colorMap: Record<string, { bg: string; border: string; text: string; badge: string }> = {
   blue: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', badge: 'bg-blue-500/20' },
@@ -71,6 +71,16 @@ export const PlcHelpPanel: React.FC<PlcHelpPanelProps> = ({ onClose }) => {
             }`}
           >
             ⚙️ 控制要求
+          </button>
+          <button
+            onClick={() => setActiveTab('s7')}
+            className={`flex-1 px-5 py-3 text-sm font-medium transition-colors ${
+              activeTab === 's7'
+                ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-500/10'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            🔧 S7 仿真
           </button>
         </div>
 
@@ -200,6 +210,81 @@ export const PlcHelpPanel: React.FC<PlcHelpPanelProps> = ({ onClose }) => {
                     </li>
                   ))}
                 </ol>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 's7' && PLC_HELP_CONTENT.s7Guide && (
+            <div className="space-y-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <span className="text-lg">💡</span>
+                  <div>
+                    <h4 className="text-sm font-semibold text-green-400 mb-1">{PLC_HELP_CONTENT.s7Guide.title}</h4>
+                    <p className="text-xs text-slate-300 leading-relaxed">{PLC_HELP_CONTENT.s7Guide.description}</p>
+                  </div>
+                </div>
+              </div>
+
+              {PLC_HELP_CONTENT.s7Guide.configSections.map((section, sectionIdx) => (
+                <div key={sectionIdx} className="bg-slate-900/50 rounded-lg border border-slate-700 p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">{sectionIdx === 0 ? '🖥️' : sectionIdx === 1 ? '🔗' : '🎮'}</span>
+                    <h3 className="text-sm font-semibold text-white">{section.title}</h3>
+                  </div>
+                  <ol className="space-y-3">
+                    {section.steps.map((step, idx) => (
+                      <li key={idx} className="flex items-start gap-3 text-xs leading-relaxed">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-xs font-bold mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <span className="text-slate-200">{step.text}</span>
+                          {step.detail && (
+                            <p className="text-slate-500 mt-0.5">{step.detail}</p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base">📍</span>
+                  <h3 className="text-sm font-semibold text-white">S7 地址映射表</h3>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg overflow-hidden border border-slate-700">
+                  <table className="w-full">
+                    <thead className="bg-slate-700/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-300">设备名称</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-slate-300">Modbus</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-slate-300">S7 地址</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-300">说明</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      {PLC_HELP_CONTENT.s7Guide.addressMapping.map((item, index) => (
+                        <tr key={index} className="hover:bg-slate-700/30 transition-colors">
+                          <td className="px-3 py-2 text-xs font-medium text-white">{item.name}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs font-mono">
+                              {item.modbusAddress}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 text-xs font-mono">
+                              {item.s7Address}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-slate-400">{item.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

@@ -207,6 +207,7 @@ function App() {
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white">数字孪生传送带系统</h1>
+                  <p className="text-xs text-gray-500">V1.0 · 老徐</p>
                 </div>
               </div>
               <button
@@ -249,7 +250,7 @@ function App() {
         </div>
       )}
 
-      <div className="absolute bottom-4 right-4 text-xs text-gray-600">Digital Twin</div>
+      <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生传送带系统</div>
 
       {showPlcHelp && (
         <PlcHelpPanel onClose={() => setShowPlcHelp(false)} />
