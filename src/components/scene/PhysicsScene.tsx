@@ -11,10 +11,15 @@ import {
   CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT,
 } from './shared';
 
-const CONVEYOR_SURFACE_Y = 0.94;
 const CONVEYOR_LENGTH = 3.5;
 const CONVEYOR_WIDTH = 0.6;
 const CONVEYOR_HEIGHT = 1.0;
+const CONVEYOR_SURFACE_Y = 1.0;
+const SURFACE_OFFSET = 0.72;
+
+function getPushPlateWorldZ(cylinderZ: number, extension: number): number {
+  return cylinderZ - (extension + SURFACE_OFFSET);
+}
 
 function PhysicsConveyorBelt() {
   const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
@@ -52,17 +57,9 @@ function PhysicsConveyorBelt() {
 
   return (
     <group>
-      {/* 传送带表面物理碰撞体 - 顶部与滚筒齐平 */}
-      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y, 0]} colliders={false} friction={2.0}>
-        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.04, CONVEYOR_WIDTH / 2]} />
-      </RigidBody>
-
-      {/* 传送带侧面挡板（防止物料从侧面掉落） */}
-      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y + 0.04, -CONVEYOR_WIDTH / 2 - 0.02]} colliders={false}>
-        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.08, 0.02]} />
-      </RigidBody>
-      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y + 0.04, CONVEYOR_WIDTH / 2 + 0.02]} colliders={false}>
-        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.08, 0.02]} />
+      {/* 传送带表面物理碰撞体 - 顶部与滚筒顶部齐平 Y=1.0 */}
+      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y - 0.02, 0]} colliders={false}>
+        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.02, CONVEYOR_WIDTH / 2]} friction={1.5} />
       </RigidBody>
 
       {/* 滚筒 */}
@@ -146,7 +143,7 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
   const cylinder = cylinders[name as keyof typeof cylinders];
   const updateCylinderExtension = useDeviceStore((s) => s.updateCylinderExtension);
   const rodRef = useRef<THREE.Group>(null);
-  const rigidBodyRef = useRef<RapierRigidBody>(null);
+  const pushPlateRef = useRef<RapierRigidBody>(null);
   const led1Ref = useRef<THREE.Mesh>(null);
   const led2Ref = useRef<THREE.Mesh>(null);
 
@@ -166,99 +163,104 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
     const current = currentExtensionRef.current;
     const diff = targetValue - current;
 
+    let newExt = current;
     if (Math.abs(diff) > 0.001) {
-      const nextPos = current + diff * 0.25;
-      currentExtensionRef.current = nextPos;
-      rodRef.current.position.y = nextPos;
-      updateCylinderExtension(name as any, nextPos);
-
-      if (rigidBodyRef.current) {
-        const worldZ = position[2] - (nextPos + 0.72);
-        rigidBodyRef.current.setNextKinematicTranslation({
-          x: position[0],
-          y: position[1],
-          z: worldZ,
-        });
-      }
+      newExt = current + diff * 0.25;
     } else if (current !== targetValue) {
-      currentExtensionRef.current = targetValue;
-      rodRef.current.position.y = targetValue;
-      updateCylinderExtension(name as any, targetValue);
-
-      if (rigidBodyRef.current) {
-        const worldZ = position[2] - (targetValue + 0.72);
-        rigidBodyRef.current.setNextKinematicTranslation({
-          x: position[0],
-          y: position[1],
-          z: worldZ,
-        });
+      newExt = targetValue;
+    } else {
+      // LED update only
+      const atRetract = currentExtensionRef.current <= CYLINDER_RETRACT_POS + 0.04;
+      const atExtend = currentExtensionRef.current >= targetExtend - 0.04;
+      if (led1Ref.current) {
+        const mat = led1Ref.current.material as THREE.MeshStandardMaterial;
+        if (atExtend) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
+        else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
       }
+      if (led2Ref.current) {
+        const mat = led2Ref.current.material as THREE.MeshStandardMaterial;
+        if (atRetract) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
+        else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
+      }
+      return;
     }
 
-    const atRetract = currentExtensionRef.current <= CYLINDER_RETRACT_POS + 0.04;
-    const atExtend = currentExtensionRef.current >= targetExtend - 0.04;
+    currentExtensionRef.current = newExt;
+    rodRef.current.position.y = newExt;
+    updateCylinderExtension(name as any, newExt);
+
+    // 推板世界坐标位置（不依赖父 group 旋转）
+    if (pushPlateRef.current) {
+      const worldZ = getPushPlateWorldZ(position[2], newExt);
+      pushPlateRef.current.setNextKinematicTranslation({
+        x: position[0],
+        y: position[1],
+        z: worldZ,
+      });
+    }
+
+    const atRetract = newExt <= CYLINDER_RETRACT_POS + 0.04;
+    const atExtend = newExt >= targetExtend - 0.04;
     if (led1Ref.current) {
       const mat = led1Ref.current.material as THREE.MeshStandardMaterial;
-      if (atExtend) {
-        mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0;
-      } else {
-        mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0;
-      }
+      if (atExtend) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
+      else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
     }
     if (led2Ref.current) {
       const mat = led2Ref.current.material as THREE.MeshStandardMaterial;
-      if (atRetract) {
-        mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0;
-      } else {
-        mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0;
-      }
+      if (atRetract) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
+      else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
     }
   });
 
+  const initialWorldZ = getPushPlateWorldZ(position[2], currentExtensionRef.current);
+
   return (
-    <group position={position} rotation={[Math.PI / 2, 0, Math.PI]}>
-      <mesh geometry={geometries.cylinderBody} material={materials.cylinderBody} castShadow />
-      <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -bodyHalfLen, 0]} castShadow />
-      <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, bodyHalfLen, 0]} castShadow />
+    <>
+      {/* 视觉组件（旋转 group 内） */}
+      <group position={position} rotation={[Math.PI / 2, 0, Math.PI]}>
+        <mesh geometry={geometries.cylinderBody} material={materials.cylinderBody} castShadow />
+        <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -bodyHalfLen, 0]} castShadow />
+        <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, bodyHalfLen, 0]} castShadow />
 
-      {[
-        { y: bodyHalfLen - 0.05, key: 'valve-top' },
-        { y: -bodyHalfLen + 0.05, key: 'valve-bottom' },
-      ].map(({ y, key }) => (
-        <group key={key} position={[0.1, y, 0]}>
-          <mesh geometry={geometries.valveBody} material={materials.endCap} />
-          <mesh geometry={geometries.tubeConnector} material={materials.darkMetal} position={[0.04, 0, 0]} rotation={[0, 0, Math.PI / 2]} />
-          <mesh geometry={geometries.valveCap} material={materials.darkMetal} position={[0, 0.04, 0]} />
+        {[
+          { y: bodyHalfLen - 0.05, key: 'valve-top' },
+          { y: -bodyHalfLen + 0.05, key: 'valve-bottom' },
+        ].map(({ y, key }) => (
+          <group key={key} position={[0.1, y, 0]}>
+            <mesh geometry={geometries.valveBody} material={materials.endCap} />
+            <mesh geometry={geometries.tubeConnector} material={materials.darkMetal} position={[0.04, 0, 0]} rotation={[0, 0, Math.PI / 2]} />
+            <mesh geometry={geometries.valveCap} material={materials.darkMetal} position={[0, 0.04, 0]} />
+          </group>
+        ))}
+
+        {[
+          { y: bodyHalfLen - 0.1, ledRef: led1Ref, key: 'sw-ext' },
+          { y: -bodyHalfLen + 0.1, ledRef: led2Ref, key: 'sw-ret' },
+        ].map(({ y, ledRef: ref, key }) => (
+          <group key={key}>
+            <mesh geometry={geometries.magneticSwitch} material={materials.magneticSwitch} position={[0, y, -0.1]}>
+              <mesh ref={ref} geometry={geometries.led} material={materials.ledInactive.clone()} position={[0, 0.01, -0.03]} />
+            </mesh>
+          </group>
+        ))}
+
+        <group ref={rodRef} position={[0, currentExtensionRef.current, 0]}>
+          <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, rodLen / 2, 0]} castShadow />
+          <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, rodLen, 0]} castShadow />
         </group>
-      ))}
-
-      {[
-        { y: bodyHalfLen - 0.1, ledRef: led1Ref, key: 'sw-ext' },
-        { y: -bodyHalfLen + 0.1, ledRef: led2Ref, key: 'sw-ret' },
-      ].map(({ y, ledRef: ref, key }) => (
-        <group key={key}>
-          <mesh geometry={geometries.magneticSwitch} material={materials.magneticSwitch} position={[0, y, -0.1]}>
-            <mesh ref={ref} geometry={geometries.led} material={materials.ledInactive.clone()} position={[0, 0.01, -0.03]} />
-          </mesh>
-        </group>
-      ))}
-
-      <group ref={rodRef} position={[0, currentExtensionRef.current, 0]}>
-        <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, rodLen / 2, 0]} castShadow />
-        <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, rodLen, 0]} castShadow />
       </group>
 
+      {/* 推板物理碰撞体 - 独立于旋转 group，直接使用世界坐标 */}
       <RigidBody
-        ref={rigidBodyRef}
+        ref={pushPlateRef}
         type="kinematicPosition"
-        colliders="cuboid"
-        position={[0, 0, -(currentExtensionRef.current + 0.72)]}
+        colliders={false}
+        position={[position[0], position[1], initialWorldZ]}
       >
-        <mesh visible={false}>
-          <boxGeometry args={[0.2, 0.18, 0.04]} />
-        </mesh>
+        <CuboidCollider args={[0.1, 0.09, 0.02]} />
       </RigidBody>
-    </group>
+    </>
   );
 }
 
@@ -281,7 +283,6 @@ function PhysicsMaterial() {
     lastVisible.current = material.visible;
   }, [material.visible, material.position]);
 
-  // 传送带驱动力：每帧给物料施加X方向速度
   useFrame(() => {
     if (!rigidBodyRef.current || !material.visible || !conveyorRunning) return;
 
@@ -335,6 +336,11 @@ function PhysicsMaterialTable({ position }: { position: [number, number, number]
       {/* 物料台桌面物理碰撞体 */}
       <RigidBody type="fixed" position={[0, 0, 0]} colliders={false} friction={1.0}>
         <CuboidCollider args={[0.15, 0.025, 0.15]} />
+      </RigidBody>
+
+      {/* 物料台到传送带的过渡斜面 - 帮助物料平滑滑到传送带上 */}
+      <RigidBody type="fixed" position={[0, -0.005, -0.22]} colliders={false} friction={0.5}>
+        <CuboidCollider args={[0.15, 0.02, 0.12]} />
       </RigidBody>
 
       <mesh geometry={geometries.tableTop} material={materials.wood} castShadow receiveShadow />
