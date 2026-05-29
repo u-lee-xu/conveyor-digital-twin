@@ -20,6 +20,7 @@
  * - 时间归一化：以60fps为基准进行时间缩放，限制最大缩放防止突变
  * - 惯性模拟：气缸推动后物料保持惯性，通过阻尼系数逐渐减速
  * - 传感器检测：根据物料位置和颜色判断传感器状态
+ * - 物理引擎切换：支持旧手动物理引擎和新 Rapier 物理引擎
  */
 
 import { useEffect, useRef } from 'react';
@@ -33,6 +34,7 @@ import { SENSORS, CYLINDERS, CONVEYOR_SPEED, CONVEYOR_END_X, CONVEYOR_Z_MIN, CON
  */
 export function usePhysics() {
   const mode = useDeviceStore((state) => state.mode);
+  const useNewPhysics = useDeviceStore((state) => state.useNewPhysics);
   const animationIdRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
@@ -44,6 +46,12 @@ export function usePhysics() {
   });
 
   useEffect(() => {
+    // 如果启用了新物理引擎（Rapier），则禁用旧的手动物理引擎
+    if (useNewPhysics) {
+      console.log('[物理模拟] 已启用Rapier物理引擎，禁用旧手动物理');
+      return;
+    }
+
     // 启用物理模拟：手动模式、自动模式、仿真模式和评分模式
     if (mode !== 'manual' && mode !== 'auto' && mode !== 'sim' && mode !== 'scoring') {
       console.log('[物理模拟] 模式为', mode, '，已禁用物理模拟');
@@ -187,7 +195,7 @@ export function usePhysics() {
     return () => {
       cancelAnimationFrame(animationIdRef.current);
     };
-  }, [mode]);
+  }, [mode, useNewPhysics]);
 
   return null;
 }
