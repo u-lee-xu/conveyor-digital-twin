@@ -237,9 +237,18 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({ mode }) 
         </button>
       </div>
 
-      <div className="mt-3 text-xs text-slate-400 min-h-4">
-        {message || `当前: ${protocol === 's7' ? 'S7' : 'Modbus'} / ${plcConfig.host}:${plcConfig.port}`}
-      </div>
+      {message && (
+        <div className={`mt-3 text-xs px-3 py-2 rounded-lg ${
+          message.includes('已连接') ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'
+        }`}>
+          {message}
+        </div>
+      )}
+      {!message && (
+        <div className="mt-3 text-xs text-slate-500">
+          当前: {protocol === 's7' ? 'S7' : 'Modbus'} / {plcConfig.host}:{plcConfig.port}
+        </div>
+      )}
     </div>
   );
 };
