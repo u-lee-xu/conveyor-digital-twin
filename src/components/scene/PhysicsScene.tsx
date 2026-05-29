@@ -5,6 +5,7 @@ import { Physics, RigidBody, CuboidCollider, type RapierRigidBody } from '@react
 import * as THREE from 'three';
 import { useDeviceStore } from '../../stores';
 import { geometries, materials } from './shared';
+import { Label } from './';
 import {
   CONVEYOR_END_X, CONVEYOR_Z_MIN, CONVEYOR_Z_MAX, CONVEYOR_SPEED,
   CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION,
@@ -190,14 +191,14 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
     updateCylinderExtension(name as any, newExt);
 
     // 推板世界坐标位置（不依赖父 group 旋转）
-    if (pushPlateRef.current) {
-      const worldZ = getPushPlateWorldZ(position[2], newExt);
-      pushPlateRef.current.setNextKinematicTranslation({
-        x: position[0],
-        y: position[1],
-        z: worldZ,
-      });
-    }
+      if (pushPlateRef.current) {
+        const worldZ = getPushPlateWorldZ(position[2], newExt);
+        pushPlateRef.current.setNextKinematicTranslation({
+          x: position[0],
+          y: position[1] + 0.135, // 加上Y轴偏移，与视觉对齐
+          z: worldZ,
+        });
+      }
 
     const atRetract = newExt <= CYLINDER_RETRACT_POS + 0.04;
     const atExtend = newExt >= targetExtend - 0.04;
@@ -252,13 +253,14 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       </group>
 
       {/* 推板物理碰撞体 - 独立于旋转 group，直接使用世界坐标 */}
+      {/* 调整碰撞体Y轴位置，与视觉推板中心对齐（视觉推板Y轴在气缸坐标系下，对应世界坐标系） */}
       <RigidBody
         ref={pushPlateRef}
         type="kinematicPosition"
         colliders={false}
-        position={[position[0], position[1], initialWorldZ]}
+        position={[position[0], position[1] + 0.135, initialWorldZ]}
       >
-        <CuboidCollider args={[0.1, 0.09, 0.02]} />
+        <CuboidCollider args={[0.1, 0.08, 0.02]} />
       </RigidBody>
     </>
   );
@@ -434,9 +436,12 @@ function PhysicsGround() {
 
 function PhysicsSceneContent() {
   const signalTower = useDeviceStore((s) => s.signalTower);
+  const showLabels = useDeviceStore((s) => s.showLabels);
+  const useNewPhysics = useDeviceStore((s) => s.useNewPhysics);
+  const showDebug = false;
 
   return (
-    <Physics gravity={[0, -9.8, 0]} debug={false}>
+    <Physics gravity={[0, -9.8, 0]} debug={showDebug && useNewPhysics}>
       <ambientLight intensity={1.5} />
       <directionalLight
         position={[5, 10, 7]}
@@ -456,12 +461,40 @@ function PhysicsSceneContent() {
       <PhysicsGround />
       <PhysicsConveyorBelt />
       <PhysicsMaterialTable position={MATERIAL_TABLE_POSITION} />
+      {showLabels && (
+        <Label key="material-table" text="物料台" position={MATERIAL_TABLE_POSITION} offset={[0, 0.2, 0]} color="gray" />
+      )}
+
       <PhysicsSensor name="feed" position={[...SENSOR_POSITIONS.feed]} />
+      {showLabels && (
+        <Label key="feed-sensor" text="上料传感器" position={SENSOR_POSITIONS.feed} offset={[0, 0.2, 0]} color="green" />
+      )}
+
       <PhysicsSensor name="color" position={[...SENSOR_POSITIONS.color]} />
+      {showLabels && (
+        <Label key="color-sensor" text="色标传感器" position={SENSOR_POSITIONS.color} offset={[0, 0.2, 0]} color="orange" />
+      )}
+
       <PhysicsSensor name="material" position={[...SENSOR_POSITIONS.material]} />
+      {showLabels && (
+        <Label key="material-sensor" text="物料传感器" position={SENSOR_POSITIONS.material} offset={[0, 0.2, 0]} color="green" />
+      )}
+
       <PhysicsCylinder name="feed" position={[...CYLINDER_POSITIONS.feed]} />
+      {showLabels && (
+        <Label key="feed-cylinder" text="上料气缸" position={CYLINDER_POSITIONS.feed} offset={[0, 0.3, 0]} color="blue" />
+      )}
+
       <PhysicsCylinder name="sorting1" position={[...CYLINDER_POSITIONS.sorting1]} />
+      {showLabels && (
+        <Label key="sorting1-cylinder" text="分拣1" position={CYLINDER_POSITIONS.sorting1} offset={[0, 0.3, 0]} color="purple" />
+      )}
+
       <PhysicsCylinder name="sorting2" position={[...CYLINDER_POSITIONS.sorting2]} />
+      {showLabels && (
+        <Label key="sorting2-cylinder" text="分拣2" position={CYLINDER_POSITIONS.sorting2} offset={[0, 0.3, 0]} color="purple" />
+      )}
+
       <PhysicsMaterial />
       <PhysicsSignalTower
         position={[1.6, 0.98, -0.5]}
@@ -469,6 +502,9 @@ function PhysicsSceneContent() {
         green={signalTower.green}
         yellow={signalTower.yellow}
       />
+      {showLabels && (
+        <Label key="signal-tower" text="信号灯塔" position={[1.6, 0.98, -0.5]} offset={[0, 1.1, 0]} color="yellow" />
+      )}
     </Physics>
   );
 }
