@@ -6,39 +6,41 @@ import * as THREE from 'three';
 import { useDeviceStore } from '../../stores';
 import { geometries, materials } from './shared';
 import {
-  CONVEYOR_END_X, CONVEYOR_Z_MIN,
+  CONVEYOR_END_X, CONVEYOR_Z_MIN, CONVEYOR_Z_MAX, CONVEYOR_SPEED,
   CYLINDER_POSITIONS, SENSOR_POSITIONS, MATERIAL_TABLE_POSITION,
   CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT,
 } from './shared';
+
+const CONVEYOR_SURFACE_Y = 0.94;
+const CONVEYOR_LENGTH = 3.5;
+const CONVEYOR_WIDTH = 0.6;
+const CONVEYOR_HEIGHT = 1.0;
 
 function PhysicsConveyorBelt() {
   const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
   const rollersRef = useRef<THREE.Mesh[]>([]);
 
-  const conveyorLength = 3.5;
-  const conveyorWidth = 0.6;
-  const conveyorHeight = 1.0;
   const rollerCount = 12;
-  const rollerSpacing = (conveyorLength - 0.2) / (rollerCount - 1);
+  const rollerSpacing = (CONVEYOR_LENGTH - 0.2) / (rollerCount - 1);
 
   const rollerPositions = useMemo(() => {
     const positions: [number, number, number][] = [];
     for (let i = 0; i < rollerCount; i++) {
       positions.push([
-        -conveyorLength / 2 + 0.1 + i * rollerSpacing,
-        conveyorHeight - 0.06,
+        -CONVEYOR_LENGTH / 2 + 0.1 + i * rollerSpacing,
+        CONVEYOR_HEIGHT - 0.06,
         0,
       ]);
     }
     return positions;
-  }, [rollerCount, rollerSpacing, conveyorLength]);
+  }, [rollerCount, rollerSpacing]);
 
   const legPositions = useMemo(() => [
-    { x: -conveyorLength / 2 - 0.04, z: -conveyorWidth / 2 - 0.04 },
-    { x: -conveyorLength / 2 - 0.04, z: conveyorWidth / 2 + 0.04 },
-    { x: conveyorLength / 2 + 0.04, z: -conveyorWidth / 2 - 0.04 },
-    { x: conveyorLength / 2 + 0.04, z: conveyorWidth / 2 + 0.04 },
-  ], [conveyorLength, conveyorWidth]);
+    { x: -CONVEYOR_LENGTH / 2 - 0.04, z: -CONVEYOR_WIDTH / 2 - 0.04 },
+    { x: -CONVEYOR_LENGTH / 2 - 0.04, z: CONVEYOR_WIDTH / 2 + 0.04 },
+    { x: CONVEYOR_LENGTH / 2 + 0.04, z: -CONVEYOR_WIDTH / 2 - 0.04 },
+    { x: CONVEYOR_LENGTH / 2 + 0.04, z: CONVEYOR_WIDTH / 2 + 0.04 },
+  ], []);
 
   useFrame(() => {
     if (conveyorRunning) {
@@ -50,9 +52,17 @@ function PhysicsConveyorBelt() {
 
   return (
     <group>
-      {/* 传送带物理碰撞体 - 固定刚体覆盖传送带表面 */}
-      <RigidBody type="fixed" position={[0, conveyorHeight - 0.12, 0]} colliders={false}>
-        <CuboidCollider args={[conveyorLength / 2, 0.06, conveyorWidth / 2]} />
+      {/* 传送带表面物理碰撞体 - 顶部与滚筒齐平 */}
+      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y, 0]} colliders={false} friction={2.0}>
+        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.04, CONVEYOR_WIDTH / 2]} />
+      </RigidBody>
+
+      {/* 传送带侧面挡板（防止物料从侧面掉落） */}
+      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y + 0.04, -CONVEYOR_WIDTH / 2 - 0.02]} colliders={false}>
+        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.08, 0.02]} />
+      </RigidBody>
+      <RigidBody type="fixed" position={[0, CONVEYOR_SURFACE_Y + 0.04, CONVEYOR_WIDTH / 2 + 0.02]} colliders={false}>
+        <CuboidCollider args={[CONVEYOR_LENGTH / 2, 0.08, 0.02]} />
       </RigidBody>
 
       {/* 滚筒 */}
@@ -69,16 +79,16 @@ function PhysicsConveyorBelt() {
       ))}
 
       {/* 长轨 */}
-      <mesh geometry={geometries.rail} material={materials.darkMetal} position={[0, conveyorHeight - 0.06, -conveyorWidth / 2 - 0.04]} />
-      <mesh geometry={geometries.rail} material={materials.darkMetal} position={[0, conveyorHeight - 0.06, conveyorWidth / 2 + 0.04]} />
+      <mesh geometry={geometries.rail} material={materials.darkMetal} position={[0, CONVEYOR_HEIGHT - 0.06, -CONVEYOR_WIDTH / 2 - 0.04]} />
+      <mesh geometry={geometries.rail} material={materials.darkMetal} position={[0, CONVEYOR_HEIGHT - 0.06, CONVEYOR_WIDTH / 2 + 0.04]} />
 
       {/* 侧轨 */}
-      <mesh geometry={geometries.sideRail} material={materials.darkMetal} position={[-conveyorLength / 2 - 0.04, conveyorHeight - 0.06, 0]} />
-      <mesh geometry={geometries.sideRail} material={materials.darkMetal} position={[conveyorLength / 2 + 0.04, conveyorHeight - 0.06, 0]} />
+      <mesh geometry={geometries.sideRail} material={materials.darkMetal} position={[-CONVEYOR_LENGTH / 2 - 0.04, CONVEYOR_HEIGHT - 0.06, 0]} />
+      <mesh geometry={geometries.sideRail} material={materials.darkMetal} position={[CONVEYOR_LENGTH / 2 + 0.04, CONVEYOR_HEIGHT - 0.06, 0]} />
 
       {/* 支撑腿 */}
       {legPositions.map((pos, i) => (
-        <mesh key={`leg-${i}`} geometry={geometries.leg} material={materials.darkMetal} position={[pos.x, conveyorHeight / 2, pos.z]} receiveShadow />
+        <mesh key={`leg-${i}`} geometry={geometries.leg} material={materials.darkMetal} position={[pos.x, CONVEYOR_HEIGHT / 2, pos.z]} receiveShadow />
       ))}
     </group>
   );
@@ -97,7 +107,6 @@ function PhysicsSensor({ name, position }: { name: string; position: [number, nu
 
   return (
     <group position={position}>
-      {/* 传感器视觉 */}
       <mesh geometry={geometries.sensorBracket} material={materials.sensorBracket} position={[0, -0.075, 0]} />
       <mesh geometry={geometries.sensor} material={materials.sensor} position={[0, 0.03, 0]} />
       <mesh position={[0, 0.06, 0.04]} scale={[1.5, 1.5, 1.5]}>
@@ -110,7 +119,6 @@ function PhysicsSensor({ name, position }: { name: string; position: [number, nu
       </mesh>
       <mesh geometry={geometries.sensorLabel} material={labelMaterial} position={[0, 0.03, -0.05]} />
 
-      {/* 传感器物理碰撞体 */}
       <CuboidCollider
         sensor
         args={[0.25, 0.5, 0.25]}
@@ -164,7 +172,6 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       rodRef.current.position.y = nextPos;
       updateCylinderExtension(name as any, nextPos);
 
-      // 更新运动学刚体位置
       if (rigidBodyRef.current) {
         const worldZ = position[2] - (nextPos + 0.72);
         rigidBodyRef.current.setNextKinematicTranslation({
@@ -188,7 +195,6 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       }
     }
 
-    // 更新 LED
     const atRetract = currentExtensionRef.current <= CYLINDER_RETRACT_POS + 0.04;
     const atExtend = currentExtensionRef.current >= targetExtend - 0.04;
     if (led1Ref.current) {
@@ -211,14 +217,10 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
 
   return (
     <group position={position} rotation={[Math.PI / 2, 0, Math.PI]}>
-      {/* 缸体 */}
       <mesh geometry={geometries.cylinderBody} material={materials.cylinderBody} castShadow />
-
-      {/* 端盖 */}
       <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -bodyHalfLen, 0]} castShadow />
       <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, bodyHalfLen, 0]} castShadow />
 
-      {/* 节流阀 */}
       {[
         { y: bodyHalfLen - 0.05, key: 'valve-top' },
         { y: -bodyHalfLen + 0.05, key: 'valve-bottom' },
@@ -230,7 +232,6 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
         </group>
       ))}
 
-      {/* 磁性开关 + LED */}
       {[
         { y: bodyHalfLen - 0.1, ledRef: led1Ref, key: 'sw-ext' },
         { y: -bodyHalfLen + 0.1, ledRef: led2Ref, key: 'sw-ret' },
@@ -242,13 +243,11 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
         </group>
       ))}
 
-      {/* 活塞杆组件 */}
       <group ref={rodRef} position={[0, currentExtensionRef.current, 0]}>
         <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, rodLen / 2, 0]} castShadow />
         <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, rodLen, 0]} castShadow />
       </group>
 
-      {/* 推板物理碰撞体 - 运动学刚体 */}
       <RigidBody
         ref={rigidBodyRef}
         type="kinematicPosition"
@@ -266,6 +265,7 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
 function PhysicsMaterial() {
   const material = useDeviceStore((s) => s.material);
   const clearMaterial = useDeviceStore((s) => s.clearMaterial);
+  const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const lastVisible = useRef(false);
 
@@ -280,6 +280,21 @@ function PhysicsMaterial() {
     }
     lastVisible.current = material.visible;
   }, [material.visible, material.position]);
+
+  // 传送带驱动力：每帧给物料施加X方向速度
+  useFrame(() => {
+    if (!rigidBodyRef.current || !material.visible || !conveyorRunning) return;
+
+    const pos = rigidBodyRef.current.translation();
+    const isOnConveyor = pos.z >= CONVEYOR_Z_MIN && pos.z <= CONVEYOR_Z_MAX;
+
+    if (isOnConveyor) {
+      const currentVel = rigidBodyRef.current.linvel();
+      const targetVelX = CONVEYOR_SPEED * 60;
+      const newVelX = currentVel.x + (targetVelX - currentVel.x) * 0.1;
+      rigidBodyRef.current.setLinvel({ x: newVelX, y: currentVel.y, z: currentVel.z }, false);
+    }
+  });
 
   useEffect(() => {
     if (!material.visible || !rigidBodyRef.current) return;
@@ -296,7 +311,7 @@ function PhysicsMaterial() {
   if (!material.visible) return null;
 
   return (
-    <RigidBody ref={rigidBodyRef} colliders="cuboid">
+    <RigidBody ref={rigidBodyRef} colliders="cuboid" friction={0.8} restitution={0.1}>
       <mesh
         geometry={geometries.material}
         material={material.color === 'blue' ? materials.materialBlue : materials.materialBlack}
@@ -317,6 +332,11 @@ function PhysicsMaterialTable({ position }: { position: [number, number, number]
 
   return (
     <group position={position}>
+      {/* 物料台桌面物理碰撞体 */}
+      <RigidBody type="fixed" position={[0, 0, 0]} colliders={false} friction={1.0}>
+        <CuboidCollider args={[0.15, 0.025, 0.15]} />
+      </RigidBody>
+
       <mesh geometry={geometries.tableTop} material={materials.wood} castShadow receiveShadow />
       {legPositions.map((pos, i) => (
         <mesh key={i} geometry={geometries.tableLeg} material={materials.darkMetal} position={pos} castShadow />
@@ -349,22 +369,18 @@ function PhysicsSignalTower({ position, red, green, yellow }: {
 
   return (
     <group position={position}>
-      {/* 底座 */}
       <mesh position={[0, BASE_HEIGHT / 2, 0]}>
         <cylinderGeometry args={[BASE_RADIUS_TOP, BASE_RADIUS_BOTTOM, BASE_HEIGHT, 20]} />
         <meshStandardMaterial color={0x1F2937} metalness={0.7} roughness={0.3} />
       </mesh>
 
-      {/* 支柱 */}
       <mesh position={[0, BASE_HEIGHT + POLE_HEIGHT / 2, 0]}>
         <cylinderGeometry args={[POLE_RADIUS, POLE_RADIUS, POLE_HEIGHT, 12]} />
         <meshStandardMaterial color={0x374151} metalness={0.6} roughness={0.4} />
       </mesh>
 
-      {/* 信号灯模块 */}
       {moduleData.map(({ y, active, activeColor, darkColor }, i) => (
         <group key={i} position={[0, y, 0]}>
-          {/* 灯体 */}
           <mesh>
             <cylinderGeometry args={[MODULE_RADIUS, MODULE_RADIUS, MODULE_HEIGHT, 20]} />
             <meshStandardMaterial
@@ -377,7 +393,6 @@ function PhysicsSignalTower({ position, red, green, yellow }: {
               metalness={0.1}
             />
           </mesh>
-          {/* 灯罩 */}
           <mesh position={[0, MODULE_HEIGHT / 2, 0]}>
             <sphereGeometry args={[DOME_RADIUS, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2.5]} />
             <meshStandardMaterial
@@ -390,7 +405,6 @@ function PhysicsSignalTower({ position, red, green, yellow }: {
               metalness={0}
             />
           </mesh>
-          {/* 点光源 */}
           {active && (
             <pointLight color={activeColor} intensity={0.8} distance={1.5} position={[0, MODULE_HEIGHT / 2 + 0.025, 0]} />
           )}
@@ -417,7 +431,6 @@ function PhysicsSceneContent() {
 
   return (
     <Physics gravity={[0, -9.8, 0]} debug={false}>
-      {/* 灯光 */}
       <ambientLight intensity={1.5} />
       <directionalLight
         position={[5, 10, 7]}
@@ -434,29 +447,16 @@ function PhysicsSceneContent() {
         shadow-bias={-0.001}
       />
 
-      {/* 地面 */}
       <PhysicsGround />
-
-      {/* 传送带 */}
       <PhysicsConveyorBelt />
-
-      {/* 物料台 */}
       <PhysicsMaterialTable position={MATERIAL_TABLE_POSITION} />
-
-      {/* 传感器 */}
       <PhysicsSensor name="feed" position={[...SENSOR_POSITIONS.feed]} />
       <PhysicsSensor name="color" position={[...SENSOR_POSITIONS.color]} />
       <PhysicsSensor name="material" position={[...SENSOR_POSITIONS.material]} />
-
-      {/* 气缸 */}
       <PhysicsCylinder name="feed" position={[...CYLINDER_POSITIONS.feed]} />
       <PhysicsCylinder name="sorting1" position={[...CYLINDER_POSITIONS.sorting1]} />
       <PhysicsCylinder name="sorting2" position={[...CYLINDER_POSITIONS.sorting2]} />
-
-      {/* 物料 */}
       <PhysicsMaterial />
-
-      {/* 信号灯塔 */}
       <PhysicsSignalTower
         position={[1.6, 0.98, -0.5]}
         red={signalTower.red}
