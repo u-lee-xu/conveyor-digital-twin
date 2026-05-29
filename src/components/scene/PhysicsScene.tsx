@@ -166,7 +166,8 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
 
     let newExt = current;
     if (Math.abs(diff) > 0.001) {
-      newExt = current + diff * 0.25;
+      // 进一步减慢推板移动速度，让物理引擎有更多时间处理碰撞
+      newExt = current + diff * 0.08;
     } else if (current !== targetValue) {
       newExt = targetValue;
     } else {
@@ -190,15 +191,15 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
     rodRef.current.position.y = newExt;
     updateCylinderExtension(name as any, newExt);
 
-    // 推板世界坐标位置（不依赖父 group 旋转）
-      if (pushPlateRef.current) {
-        const worldZ = getPushPlateWorldZ(position[2], newExt);
-        pushPlateRef.current.setNextKinematicTranslation({
-          x: position[0],
-          y: position[1] + 0.135, // 加上Y轴偏移，与视觉对齐
-          z: worldZ,
-        });
-      }
+    // 推板世界坐标位置 - 保持一直在正确位置！
+    if (pushPlateRef.current) {
+      const worldZ = getPushPlateWorldZ(position[2], newExt);
+      pushPlateRef.current.setNextKinematicTranslation({
+        x: position[0],
+        y: position[1] + 0.135,
+        z: worldZ,
+      });
+    }
 
     const atRetract = newExt <= CYLINDER_RETRACT_POS + 0.04;
     const atExtend = newExt >= targetExtend - 0.04;
@@ -253,14 +254,15 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       </group>
 
       {/* 推板物理碰撞体 - 独立于旋转 group，直接使用世界坐标 */}
-      {/* 调整碰撞体Y轴位置，与视觉推板中心对齐；加大尺寸确保能推到物料 */}
+      {/* 加厚推板 + 开启CCD，防止穿模！ */}
       <RigidBody
         ref={pushPlateRef}
         type="kinematicPosition"
         colliders={false}
         position={[position[0], position[1] + 0.135, initialWorldZ]}
+        ccd
       >
-        <CuboidCollider args={[0.25, 0.15, 0.04]} />
+        <CuboidCollider args={[0.25, 0.15, 0.12]} /> {/* 再加厚到0.12 */}
       </RigidBody>
     </>
   );
@@ -314,8 +316,15 @@ function PhysicsMaterial() {
   if (!material.visible) return null;
 
   return (
-    <RigidBody ref={rigidBodyRef} colliders={false} friction={0.6} restitution={0.0}>
-      {/* 物料碰撞体，尺寸稍微比视觉大一点 */}
+    <RigidBody
+      ref={rigidBodyRef}
+      colliders={false}
+      friction={0.6}
+      restitution={0.0}
+      ccd
+      linearDamping={0.5}
+      angularDamping={0.8}
+    >
       <CuboidCollider args={[0.09, 0.09, 0.09]} />
       <mesh
         geometry={geometries.material}
@@ -440,10 +449,10 @@ function PhysicsSceneContent() {
   const signalTower = useDeviceStore((s) => s.signalTower);
   const showLabels = useDeviceStore((s) => s.showLabels);
   const useNewPhysics = useDeviceStore((s) => s.useNewPhysics);
-  const showDebug = false;
+  const showDebug = true;
 
   return (
-    <Physics gravity={[0, -9.8, 0]} debug={showDebug && useNewPhysics}>
+    <Physics gravity={[0, -9.8, 0]} debug={showDebug && useNewPhysics} timeStep="vary">
       <ambientLight intensity={1.5} />
       <directionalLight
         position={[5, 10, 7]}
