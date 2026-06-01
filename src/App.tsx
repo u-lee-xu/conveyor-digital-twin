@@ -40,7 +40,7 @@ function App() {
 
   usePhysics();
   useConveyorScoring();
-  const { state: demoState } = useDemoMode();
+  const { state: demoState, isStarted: demoStarted, isPaused: demoPaused, startDemoMode, togglePause: demoTogglePause, resetDemo: demoReset } = useDemoMode();
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -98,7 +98,7 @@ function App() {
     if (mode === 'auto') {
       return (
         <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-          <DemoPanel demoState={demoState} />
+          <DemoPanel demoState={demoState} isStarted={demoStarted} isPaused={demoPaused} onStart={startDemoMode} onTogglePause={demoTogglePause} onReset={demoReset} />
         </div>
       );
     }
@@ -270,7 +270,7 @@ function App() {
             <ModeSelector currentMode={mode} onModeChange={setMode} />
             <div className="mt-4">
               {mode === 'manual' && <ControlPanel isMobile={true} />}
-              {mode === 'auto' && <DemoPanel demoState={demoState} />}
+              {mode === 'auto' && <DemoPanel demoState={demoState} isStarted={demoStarted} isPaused={demoPaused} onStart={startDemoMode} onTogglePause={demoTogglePause} onReset={demoReset} />}
               {mode === 'scoring' && (
                 <>
                   <PlcConnectionPanel mode="scoring" />

@@ -638,7 +638,7 @@ export function useConveyorScoring() {
         }
         setScoringPrompt('⏳ 模块2/4：上料流程 — 检测PLC响应中...');
         useDeviceStore.setState(s => ({
-          material: { ...s.material, visible: true, color: 'black', position: [-1.3, 1.06, 0.6] }
+          material: { ...s.material, visible: true, color: 'black', position: [-1.3, 1.10, 0.6] }
         }));
         stepRef.current = 'M2_WAIT_FEED_EXTEND';
         timerRef.current = now;
@@ -846,7 +846,7 @@ export function useConveyorScoring() {
         }
         setScoringPrompt('⏳ 模块4/4：蓝色物料分拣 — 检测PLC响应中...');
         useDeviceStore.setState(s => ({
-          material: { ...s.material, visible: true, color: 'blue', position: [-1.3, 1.06, 0.6] }
+          material: { ...s.material, visible: true, color: 'blue', position: [-1.3, 1.10, 0.6] }
         }));
         stepRef.current = 'M4_WAIT_LOAD';
         timerRef.current = now;
