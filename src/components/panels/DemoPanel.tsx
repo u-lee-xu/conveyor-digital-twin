@@ -17,9 +17,14 @@ const STATE_LABELS: Record<string, { label: string; icon: string; color: string 
 
 interface DemoPanelProps {
   demoState: string;
+  isStarted: boolean;
+  isPaused: boolean;
+  onStart: () => void;
+  onTogglePause: () => void;
+  onReset: () => void;
 }
 
-export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState }) => {
+export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState, isStarted, isPaused, onStart, onTogglePause, onReset }) => {
   const {
     conveyorRunning,
     cylinders,
@@ -59,6 +64,42 @@ export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState }) => {
           <span className={['SORTING1', 'SORTING1_RETRACT', 'SORTING2', 'SORTING2_RETRACT'].includes(demoState) ? 'text-white' : ''}>分拣</span>
           <span>→</span>
           <span className={demoState === 'COMPLETE' ? 'text-white' : ''}>完成</span>
+        </div>
+      </div>
+
+      {/* 控制按钮 */}
+      <div className="device-card">
+        <div className="flex gap-2">
+          <button
+            onClick={onStart}
+            disabled={isStarted && !isPaused}
+            className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              isStarted && !isPaused
+                ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
+                : 'bg-green-500 text-white shadow-lg shadow-green-500/30 hover:bg-green-600'
+            }`}
+          >
+            ▶ 启动
+          </button>
+          <button
+            onClick={onTogglePause}
+            disabled={!isStarted}
+            className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              !isStarted
+                ? 'bg-gray-600/30 text-gray-500 cursor-not-allowed'
+                : isPaused
+                  ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
+                  : 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30'
+            }`}
+          >
+            {isPaused ? '▶ 继续' : '⏸ 暂停'}
+          </button>
+          <button
+            onClick={onReset}
+            className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30"
+          >
+            ⟲ 复位
+          </button>
         </div>
       </div>
 

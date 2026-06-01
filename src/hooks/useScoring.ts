@@ -161,7 +161,7 @@ export function useScoring() {
             
             // 强制设置物料颜色进行测试
             useDeviceStore.setState((s) => ({
-              material: { ...s.material, visible: true, color: color, position: [-1.3, 1.06, 0.6] }
+              material: { ...s.material, visible: true, color: color, position: [-1.3, 1.10, 0.6] }
             }));
             
             stepRef.current = 'TRIGGER_START';

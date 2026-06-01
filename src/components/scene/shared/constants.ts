@@ -93,7 +93,7 @@ export const SENSOR_RANGE = 0.15;
  * 物料初始位置
  * Z=0.6，配合上料气缸的行程设计
  */
-export const MATERIAL_INITIAL_POSITION: [number, number, number] = [-1.3, 1.06, 0.6];
+export const MATERIAL_INITIAL_POSITION: [number, number, number] = [-1.3, 1.10, 0.6];
 
 // ============================================
 // 3D对象位置（用于渲染）

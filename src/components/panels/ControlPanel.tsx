@@ -12,12 +12,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
     conveyorRunning,
     cylinders,
     material,
+    signalTower,
     startConveyor,
     stopConveyor,
     extendCylinder,
     retractCylinder,
     spawnMaterial,
     clearMaterial,
+    setSignalTower,
   } = useDeviceStore();
 
   return (
@@ -183,6 +185,55 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
           >
             🗑 清除
           </Button>
+        </div>
+      </div>
+
+      {/* 三色灯塔控制 */}
+      <div className="device-card">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm font-semibold text-white">三色灯塔</span>
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`w-3 h-3 rounded-full ${signalTower.red ? 'bg-red-500' : 'bg-gray-600'}`}></span>
+              <span className="text-xs font-medium text-gray-300">红灯</span>
+            </div>
+            <Button
+              onClick={() => setSignalTower({ red: !signalTower.red })}
+              variant={signalTower.red ? 'danger' : 'default'}
+              size="sm"
+            >
+              {signalTower.red ? '熄灭' : '点亮'}
+            </Button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`w-3 h-3 rounded-full ${signalTower.yellow ? 'bg-yellow-500' : 'bg-gray-600'}`}></span>
+              <span className="text-xs font-medium text-gray-300">黄灯</span>
+            </div>
+            <Button
+              onClick={() => setSignalTower({ yellow: !signalTower.yellow })}
+              variant={signalTower.yellow ? 'warning' : 'default'}
+              size="sm"
+              className="text-white"
+            >
+              {signalTower.yellow ? '熄灭' : '点亮'}
+            </Button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`w-3 h-3 rounded-full ${signalTower.green ? 'bg-green-500' : 'bg-gray-600'}`}></span>
+              <span className="text-xs font-medium text-gray-300">绿灯</span>
+            </div>
+            <Button
+              onClick={() => setSignalTower({ green: !signalTower.green })}
+              variant={signalTower.green ? 'success' : 'default'}
+              size="sm"
+            >
+              {signalTower.green ? '熄灭' : '点亮'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

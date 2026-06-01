@@ -122,7 +122,7 @@ const initialState = {
   material: {
     visible: false,
     color: 'blue' as MaterialColor,
-    position: [-1.3, 1.06, 0.6] as [number, number, number],
+    position: [-1.3, 1.10, 0.6] as [number, number, number],
     onConveyor: false,
     conveyorDelay: 0,
   },
@@ -274,7 +274,7 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     material: {
       visible: true,
       color: Math.random() > 0.5 ? 'blue' : 'black',
-      position: [-1.3, 1.06, 0.6],
+      position: [-1.3, 1.10, 0.6],
       onConveyor: false,
       conveyorDelay: 0,
     },
