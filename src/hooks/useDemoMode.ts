@@ -31,9 +31,31 @@ export function useDemoMode() {
   const [isStarted, setIsStarted] = useState(false);
   const materialColorRef = useRef<'blue' | 'black'>('blue');
   const loopRunningRef = useRef(false);
+  const timeoutsRef = useRef<number[]>([]);
+  const rafsRef = useRef<number[]>([]);
 
-  const checkAbort = useCallback(() => {
-    if (abortRef.current?.signal.aborted) throw new DemoAbortError();
+  const addTimeout = useCallback((cb: () => void, ms: number) => {
+    const id = window.setTimeout(cb, ms);
+    timeoutsRef.current.push(id);
+    return id;
+  }, []);
+
+  const addRAF = useCallback((cb: () => void) => {
+    const id = window.requestAnimationFrame(cb);
+    rafsRef.current.push(id);
+    return id;
+  }, []);
+
+  const clearAllTimers = useCallback(() => {
+    for (const id of timeoutsRef.current) {
+      clearTimeout(id);
+    }
+    timeoutsRef.current = [];
+
+    for (const id of rafsRef.current) {
+      cancelAnimationFrame(id);
+    }
+    rafsRef.current = [];
   }, []);
 
   const delay = useCallback(async (ms: number) => {
@@ -41,16 +63,18 @@ export function useDemoMode() {
       const signal = abortRef.current?.signal;
       if (signal?.aborted) { reject(new DemoAbortError()); return; }
 
-      const onAbort = () => { clearTimeout(tid); reject(new DemoAbortError()); };
+      const onAbort = () => { reject(new DemoAbortError()); };
       signal?.addEventListener('abort', onAbort, { once: true });
 
-      const tid = window.setTimeout(() => {
+      const tid = addTimeout(() => {
         signal?.removeEventListener('abort', onAbort);
         if (signal?.aborted) { reject(new DemoAbortError()); return; }
+        const idx = timeoutsRef.current.indexOf(tid);
+        if (idx !== -1) timeoutsRef.current.splice(idx, 1);
         resolve();
       }, ms);
     });
-  }, []);
+  }, [addTimeout]);
 
   const delayWhilePaused = useCallback(async () => {
     while (pausedRef.current) {
@@ -63,94 +87,150 @@ export function useDemoMode() {
       const signal = abortRef.current?.signal;
       if (signal?.aborted) { reject(new DemoAbortError()); return; }
 
-      const onAbort = () => { cancelAnimationFrame(rafId); reject(new DemoAbortError()); };
+      const activeRafs: number[] = [];
+      
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+        activeRafs.forEach(id => {
+          cancelAnimationFrame(id);
+          const idx = rafsRef.current.indexOf(id);
+          if (idx !== -1) rafsRef.current.splice(idx, 1);
+        });
+        activeRafs.length = 0;
+      };
+
+      const onAbort = () => {
+        cleanup();
+        reject(new DemoAbortError());
+      };
       signal?.addEventListener('abort', onAbort, { once: true });
 
-      let rafId = 0;
       const check = () => {
-        if (signal?.aborted) { reject(new DemoAbortError()); return; }
-        if (pausedRef.current) { rafId = requestAnimationFrame(check); return; }
+        if (signal?.aborted) { return; }
+        if (pausedRef.current) { 
+          const id = addRAF(check);
+          activeRafs.push(id);
+          return; 
+        }
 
         const currentMaterial = useDeviceStore.getState().material;
         if (!currentMaterial.visible) {
-          signal?.removeEventListener('abort', onAbort);
+          cleanup();
           resolve();
           return;
         }
 
         if (currentMaterial.position[0] >= targetX) {
-          signal?.removeEventListener('abort', onAbort);
+          cleanup();
           resolve();
         } else {
-          rafId = requestAnimationFrame(check);
+          const id = addRAF(check);
+          activeRafs.push(id);
         }
       };
       check();
     });
-  }, []);
+  }, [addRAF]);
 
   const waitForMaterialZ = useCallback(async (targetZ: number) => {
     return new Promise<void>((resolve, reject) => {
       const signal = abortRef.current?.signal;
       if (signal?.aborted) { reject(new DemoAbortError()); return; }
 
-      const onAbort = () => { cancelAnimationFrame(rafId); reject(new DemoAbortError()); };
+      const activeRafs: number[] = [];
+      
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+        activeRafs.forEach(id => {
+          cancelAnimationFrame(id);
+          const idx = rafsRef.current.indexOf(id);
+          if (idx !== -1) rafsRef.current.splice(idx, 1);
+        });
+        activeRafs.length = 0;
+      };
+
+      const onAbort = () => {
+        cleanup();
+        reject(new DemoAbortError());
+      };
       signal?.addEventListener('abort', onAbort, { once: true });
 
-      let rafId = 0;
       const check = () => {
-        if (signal?.aborted) { reject(new DemoAbortError()); return; }
-        if (pausedRef.current) { rafId = requestAnimationFrame(check); return; }
+        if (signal?.aborted) { return; }
+        if (pausedRef.current) { 
+          const id = addRAF(check);
+          activeRafs.push(id);
+          return; 
+        }
 
         const currentMaterial = useDeviceStore.getState().material;
         if (!currentMaterial.visible) {
-          signal?.removeEventListener('abort', onAbort);
+          cleanup();
           resolve();
           return;
         }
 
         if (currentMaterial.position[2] <= targetZ) {
-          signal?.removeEventListener('abort', onAbort);
+          cleanup();
           resolve();
         } else {
-          rafId = requestAnimationFrame(check);
+          const id = addRAF(check);
+          activeRafs.push(id);
         }
       };
       check();
     });
-  }, []);
+  }, [addRAF]);
 
   const waitForMaterialCleared = useCallback(async () => {
     return new Promise<void>((resolve, reject) => {
       const signal = abortRef.current?.signal;
       if (signal?.aborted) { reject(new DemoAbortError()); return; }
 
-      const onAbort = () => { cancelAnimationFrame(rafId); reject(new DemoAbortError()); };
+      const activeRafs: number[] = [];
+      
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+        activeRafs.forEach(id => {
+          cancelAnimationFrame(id);
+          const idx = rafsRef.current.indexOf(id);
+          if (idx !== -1) rafsRef.current.splice(idx, 1);
+        });
+        activeRafs.length = 0;
+      };
+
+      const onAbort = () => {
+        cleanup();
+        reject(new DemoAbortError());
+      };
       signal?.addEventListener('abort', onAbort, { once: true });
 
-      let rafId = 0;
       const check = () => {
-        if (signal?.aborted) { reject(new DemoAbortError()); return; }
-        if (pausedRef.current) { rafId = requestAnimationFrame(check); return; }
+        if (signal?.aborted) { return; }
+        if (pausedRef.current) { 
+          const id = addRAF(check);
+          activeRafs.push(id);
+          return; 
+        }
 
         const currentMaterial = useDeviceStore.getState().material;
         if (!currentMaterial.visible) {
-          signal?.removeEventListener('abort', onAbort);
+          cleanup();
           resolve();
         } else {
-          rafId = requestAnimationFrame(check);
+          const id = addRAF(check);
+          activeRafs.push(id);
         }
       };
       check();
     });
-  }, []);
+  }, [addRAF]);
 
   const startDemo = useCallback(async () => {
     const ac = new AbortController();
     abortRef.current = ac;
 
     try {
-      checkAbort();
       const color = Math.random() > 0.5 ? 'blue' : 'black';
       materialColorRef.current = color;
 
@@ -162,6 +242,7 @@ export function useDemoMode() {
 
       await delay(1000);
       await delayWhilePaused();
+      if (ac.signal.aborted) return;
 
       setDemoState('FEEDING');
       extendCylinder('feed');
@@ -169,11 +250,13 @@ export function useDemoMode() {
       await waitForMaterialZ(0.05);
       await delay(200);
       await delayWhilePaused();
+      if (ac.signal.aborted) return;
 
       setDemoState('FEED_RETRACT');
       retractCylinder('feed');
       await delay(500);
       await delayWhilePaused();
+      if (ac.signal.aborted) return;
 
       setDemoState('TRANSIT');
       startConveyor();
@@ -184,18 +267,22 @@ export function useDemoMode() {
       await waitForMaterialPosition(SENSORS.color - 0.05);
       await delay(100);
       await delayWhilePaused();
+      if (ac.signal.aborted) return;
 
       await waitForMaterialPosition(targetStopX);
+      if (ac.signal.aborted) return;
 
       stopConveyor();
       await delay(100);
       await delayWhilePaused();
+      if (ac.signal.aborted) return;
 
       if (isBlack) {
         setDemoState('SORTING1');
         extendCylinder('sorting1');
 
         await waitForMaterialCleared();
+        if (ac.signal.aborted) return;
 
         setDemoState('SORTING1_RETRACT');
         retractCylinder('sorting1');
@@ -205,6 +292,7 @@ export function useDemoMode() {
         extendCylinder('sorting2');
 
         await waitForMaterialCleared();
+        if (ac.signal.aborted) return;
 
         setDemoState('SORTING2_RETRACT');
         retractCylinder('sorting2');
@@ -223,7 +311,7 @@ export function useDemoMode() {
         abortRef.current = null;
       }
     }
-  }, [checkAbort, delay, delayWhilePaused, extendCylinder, retractCylinder, startConveyor, stopConveyor, waitForMaterialPosition, waitForMaterialZ, waitForMaterialCleared]);
+  }, [delay, delayWhilePaused, extendCylinder, retractCylinder, startConveyor, stopConveyor, waitForMaterialPosition, waitForMaterialZ, waitForMaterialCleared]);
 
   useEffect(() => {
     if (mode !== 'auto') {
@@ -235,6 +323,7 @@ export function useDemoMode() {
       setIsPaused(false);
       setDemoState('IDLE');
       loopRunningRef.current = false;
+      clearAllTimers();
       return;
     }
 
@@ -242,24 +331,30 @@ export function useDemoMode() {
       if (loopRunningRef.current) return;
       loopRunningRef.current = true;
 
-      while (useDeviceStore.getState().mode === 'auto') {
-        if (!startedRef.current) {
-          await new Promise<void>(r => window.setTimeout(r, 200));
-          continue;
+      try {
+        while (useDeviceStore.getState().mode === 'auto') {
+          if (!startedRef.current) {
+            await delay(200);
+            continue;
+          }
+          if (pausedRef.current) {
+            await delay(200);
+            continue;
+          }
+
+          await startDemo();
+
+          if (!startedRef.current) continue;
+
+          await delay(2000);
         }
-        if (pausedRef.current) {
-          await new Promise<void>(r => window.setTimeout(r, 200));
-          continue;
+      } catch (e) {
+        if (!(e instanceof DemoAbortError)) {
+          console.error('[DemoMode] runLoop error:', e);
         }
-
-        await startDemo();
-
-        if (!startedRef.current) continue;
-
-        await new Promise<void>(r => window.setTimeout(r, 2000));
+      } finally {
+        loopRunningRef.current = false;
       }
-
-      loopRunningRef.current = false;
     };
 
     runLoop();
@@ -268,8 +363,9 @@ export function useDemoMode() {
       abortRef.current?.abort();
       abortRef.current = null;
       loopRunningRef.current = false;
+      clearAllTimers();
     };
-  }, [mode, startDemo]);
+  }, [mode]); // ❗️ 只依赖 mode，不能依赖 startDemo！
 
   const startDemoMode = useCallback(() => {
     if (!startedRef.current) {
@@ -293,6 +389,8 @@ export function useDemoMode() {
   const resetDemo = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    clearAllTimers();
+    loopRunningRef.current = false;
 
     startedRef.current = false;
     setIsStarted(false);
@@ -306,7 +404,7 @@ export function useDemoMode() {
     state.retractCylinder('sorting2');
     state.clearMaterial();
     setDemoState('IDLE');
-  }, []);
+  }, [clearAllTimers]);
 
   return {
     state: demoState,

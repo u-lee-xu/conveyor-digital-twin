@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const net = require('net');
+const fs = require('fs');
 
 const MODBUS_ADDRESSES = {
   START: 0,
@@ -48,6 +49,15 @@ class SimpleModbusTCP {
     this.transactionId = 0;
     this.pendingRequests = new Map();
     this.receiveBuffer = Buffer.alloc(0);
+    // 延迟统计
+    this.latencyStats = {
+      read: [], // 读延迟
+      write: [], // 写延迟
+      last10Read: [], // 最近10次读延迟
+      last10Write: [] // 最近10次写延迟
+    };
+    // 日志文件路径（延迟测试用）
+    this.latencyLogFile = 'latency_modbus.log';
   }
 
   async connect(host, port) {
@@ -76,6 +86,30 @@ class SimpleModbusTCP {
             if (pendingRequest) {
               clearTimeout(pendingRequest.timeout);
               this.pendingRequests.delete(respTransactionId);
+
+              // ===== 测量并记录延迟
+              if (pendingRequest.startTime) {
+                const latency = Date.now() - pendingRequest.startTime;
+                const type = pendingRequest.type || 'unknown';
+                if (type === 'read') {
+                  this.latencyStats.read.push(latency);
+                  this.latencyStats.last10Read.push(latency);
+                  if (this.latencyStats.last10Read.length > 10) {
+                    this.latencyStats.last10Read.shift();
+                  }
+                } else if (type === 'write') {
+                  this.latencyStats.write.push(latency);
+                  this.latencyStats.last10Write.push(latency);
+                  if (this.latencyStats.last10Write.length > 10) {
+                    this.latencyStats.last10Write.shift();
+                  }
+                }
+                // 每10次打印一次统计
+                const total = this.latencyStats.read.length + this.latencyStats.write.length;
+                if (total % 50 === 0) {
+                  this._printLatencyStats();
+                }
+              }
 
               try {
                 const functionCode = packet.readUInt8(7);
@@ -130,11 +164,48 @@ class SimpleModbusTCP {
           this.connected = false;
           this.client = null;
           console.log('ModbusTCP连接已断开');
+          this._printLatencyStats(); // 断开连接时也打印一次统计
           resolve({ success: true });
         });
       });
     }
+    // 即使没有连接也打印统计
+    this._printLatencyStats();
     return { success: true };
+  }
+
+  _printLatencyStats() {
+    const read = this.latencyStats.read;
+    const write = this.latencyStats.write;
+    if (read.length + write.length === 0) return;
+
+    const calcStats = (arr) => {
+      if (arr.length === 0) return { avg: 0, min: 0, max: 0, p95: 0 };
+      const sorted = [...arr].sort((a, b) => a - b);
+      return {
+        avg: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
+        min: sorted[0],
+        max: sorted[sorted.length - 1],
+        p95: sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1]
+      };
+    };
+
+    const readStats = calcStats(read);
+    const writeStats = calcStats(write);
+
+    const timestamp = new Date().toISOString();
+    const output =
+      '\n' +
+      '='.repeat(60) + '\n' +
+      `[ModbusTCP 通信延迟统计] ${timestamp}\n` +
+      `读请求次数: ${read.length}, 平均: ${readStats.avg}ms, 最小: ${readStats.min}ms, 最大: ${readStats.max}ms, P95: ${readStats.p95}ms\n` +
+      `写请求次数: ${write.length}, 平均: ${writeStats.avg}ms, 最小: ${writeStats.min}ms, 最大: ${writeStats.max}ms, P95: ${writeStats.p95}ms\n` +
+      '='.repeat(60) + '\n';
+
+    // 输出到控制台
+    console.log(output);
+    // 输出到文件
+    fs.appendFileSync(this.latencyLogFile, output);
   }
 
   async readCoils(address, length) {
@@ -158,7 +229,7 @@ class SimpleModbusTCP {
           resolve({ success: false, error: '读取超时' });
         }, 2000);
 
-        this.pendingRequests.set(tid, { resolve, timeout, address, length });
+        this.pendingRequests.set(tid, { resolve, timeout, address, length, type: 'read', startTime: Date.now() });
         this.client.write(buffer);
       } catch (e) { resolve({ success: false, error: e.message }); }
     });
@@ -185,7 +256,7 @@ class SimpleModbusTCP {
           resolve({ success: false, error: '写入超时' });
         }, 2000);
 
-        this.pendingRequests.set(tid, { resolve, timeout, address, value });
+        this.pendingRequests.set(tid, { resolve, timeout, address, value, type: 'write', startTime: Date.now() });
         this.client.write(buffer);
       } catch (e) { resolve({ success: false, error: e.message }); }
     });
@@ -225,7 +296,7 @@ class SimpleModbusTCP {
           resolve({ success: false, error: '批量写入超时' });
         }, 2000);
 
-        this.pendingRequests.set(tid, { resolve, timeout, address, length: count });
+        this.pendingRequests.set(tid, { resolve, timeout, address, length: count, type: 'write', startTime: Date.now() });
         this.client.write(buffer);
       } catch (e) { resolve({ success: false, error: e.message }); }
     });
@@ -242,6 +313,15 @@ class SimpleS7Client {
     this._opQueue = [];
     this._processing = false;
     this._connCheckInterval = null;
+    // S7 延迟统计
+    this.latencyStats = {
+      read: [],
+      write: [],
+      last10Read: [],
+      last10Write: []
+    };
+    // 日志文件路径（延迟测试用）
+    this.latencyLogFile = 'latency_s7.log';
   }
 
   _cleanup() {
@@ -299,6 +379,40 @@ class SimpleS7Client {
   _isNodes7Ready() {
     if (!this.nodes7) return false;
     return this.nodes7.isoConnectionState === 4;
+  }
+
+  _printLatencyStats() {
+    const read = this.latencyStats.read;
+    const write = this.latencyStats.write;
+    if (read.length + write.length === 0) return;
+
+    const calcStats = (arr) => {
+      if (arr.length === 0) return { avg: 0, min: 0, max: 0, p95: 0 };
+      const sorted = [...arr].sort((a, b) => a - b);
+      return {
+        avg: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
+        min: sorted[0],
+        max: sorted[sorted.length - 1],
+        p95: sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1]
+      };
+    };
+
+    const readStats = calcStats(read);
+    const writeStats = calcStats(write);
+
+    const timestamp = new Date().toISOString();
+    const output =
+      '\n' +
+      '='.repeat(60) + '\n' +
+      `[S7 通信延迟统计] ${timestamp}\n` +
+      `读请求次数: ${read.length}, 平均: ${readStats.avg}ms, 最小: ${readStats.min}ms, 最大: ${readStats.max}ms, P95: ${readStats.p95}ms\n` +
+      `写请求次数: ${write.length}, 平均: ${writeStats.avg}ms, 最小: ${writeStats.min}ms, 最大: ${writeStats.max}ms, P95: ${writeStats.p95}ms\n` +
+      '='.repeat(60) + '\n';
+
+    // 输出到控制台
+    console.log(output);
+    // 输出到文件
+    fs.appendFileSync(this.latencyLogFile, output);
   }
 
   _startConnCheck() {
@@ -410,6 +524,7 @@ class SimpleS7Client {
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
           console.log('[S7] 断开超时，强制清理');
+          this._printLatencyStats();
           resolve({ success: true });
         }, 3000);
 
@@ -417,14 +532,17 @@ class SimpleS7Client {
           oldNodes7.dropConnection(() => {
             clearTimeout(timeout);
             console.log('[S7] 连接已断开');
+            this._printLatencyStats();
             resolve({ success: true });
           });
         } catch {
           clearTimeout(timeout);
+          this._printLatencyStats();
           resolve({ success: true });
         }
       });
     }
+    this._printLatencyStats();
     return { success: true };
   }
 
@@ -438,11 +556,26 @@ class SimpleS7Client {
       return { success: false, error: 'S7连接未就绪' };
     }
 
+    const startTime = Date.now();
+
     return this._enqueue(() => {
       return this._withTimeout(
         new Promise((resolve) => {
           try {
             this.nodes7.readAllItems((err, values) => {
+              // 记录读延迟
+              const latency = Date.now() - startTime;
+              this.latencyStats.read.push(latency);
+              this.latencyStats.last10Read.push(latency);
+              if (this.latencyStats.last10Read.length > 10) {
+                this.latencyStats.last10Read.shift();
+              }
+              // 每50次打印统计
+              const total = this.latencyStats.read.length + this.latencyStats.write.length;
+              if (total % 50 === 0) {
+                this._printLatencyStats();
+              }
+
               if (err) {
                 console.error('[S7] readAllItems 错误:', err, 'isoState=' + this.nodes7.isoConnectionState);
                 if (!this._isNodes7Ready()) {
@@ -460,7 +593,7 @@ class SimpleS7Client {
                     filtered[name] = false;
                   }
                 }
-                console.log('[S7] 读取完成: ' + trueCount + '/' + varNames.length + ' 个为true, isoState=' + this.nodes7.isoConnectionState);
+                console.log('[S7] 读取完成: ' + trueCount + '/' + varNames.length + ' 个为true, 延迟=' + latency + 'ms, isoState=' + this.nodes7.isoConnectionState);
                 resolve({ success: true, values: filtered });
               }
             });
@@ -488,11 +621,26 @@ class SimpleS7Client {
       return { success: false, error: 'S7连接未就绪' };
     }
 
+    const startTime = Date.now();
+
     return this._enqueue(() => {
       return this._withTimeout(
         new Promise((resolve) => {
           try {
             this.nodes7.writeItems(varName, value, (err) => {
+              // 记录写延迟
+              const latency = Date.now() - startTime;
+              this.latencyStats.write.push(latency);
+              this.latencyStats.last10Write.push(latency);
+              if (this.latencyStats.last10Write.length > 10) {
+                this.latencyStats.last10Write.shift();
+              }
+              // 每50次打印统计
+              const total = this.latencyStats.read.length + this.latencyStats.write.length;
+              if (total % 50 === 0) {
+                this._printLatencyStats();
+              }
+
               if (err) {
                 console.error('[S7] 写入失败:', varName, value, err, 'isoState=' + this.nodes7.isoConnectionState);
                 if (!this._isNodes7Ready()) {
@@ -500,7 +648,7 @@ class SimpleS7Client {
                 }
                 resolve({ success: false, error: String(err) });
               } else {
-                console.log('[S7] 写入成功:', varName, '=', value);
+                console.log('[S7] 写入成功:', varName, '=', value, '延迟=' + latency + 'ms');
                 resolve({ success: true });
               }
             });
@@ -528,11 +676,26 @@ class SimpleS7Client {
       return { success: false, error: 'S7连接未就绪' };
     }
 
+    const startTime = Date.now();
+
     return this._enqueue(() => {
       return this._withTimeout(
         new Promise((resolve) => {
           try {
             this.nodes7.writeItems(varNames, values, (err) => {
+              // 记录写延迟
+              const latency = Date.now() - startTime;
+              this.latencyStats.write.push(latency);
+              this.latencyStats.last10Write.push(latency);
+              if (this.latencyStats.last10Write.length > 10) {
+                this.latencyStats.last10Write.shift();
+              }
+              // 每50次打印统计
+              const total = this.latencyStats.read.length + this.latencyStats.write.length;
+              if (total % 50 === 0) {
+                this._printLatencyStats();
+              }
+
               if (err) {
                 console.error('[S7] 批量写入失败:', varNames, err, 'isoState=' + this.nodes7.isoConnectionState);
                 if (!this._isNodes7Ready()) {
@@ -540,7 +703,7 @@ class SimpleS7Client {
                 }
                 resolve({ success: false, error: String(err) });
               } else {
-                console.log('[S7] 批量写入成功:', varNames.join(','));
+                console.log('[S7] 批量写入成功:', varNames.join(','), '延迟=' + latency + 'ms');
                 resolve({ success: true });
               }
             });
