@@ -2,7 +2,7 @@ import React, { Suspense, useRef, useEffect, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import { Physics, RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/rapier';
-import * as THREE from 'three';
+import { DoubleSide, type Mesh, type Group, type MeshStandardMaterial } from 'three';
 import { useDeviceStore } from '../../stores';
 import { geometries, materials } from './shared';
 import {
@@ -68,14 +68,14 @@ function DebugBox({ args, color = 0x00ff00, opacity = 0.25 }: {
   return (
     <mesh>
       <boxGeometry args={[args[0] * 2, args[1] * 2, args[2] * 2]} />
-      <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} side={THREE.DoubleSide} />
+      <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} side={DoubleSide} />
     </mesh>
   );
 }
 
 function PhysicsConveyorBelt() {
   const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
-  const rollersRef = useRef<THREE.Mesh[]>([]);
+  const rollersRef = useRef<Mesh[]>([]);
 
   const rollerCount = 12;
   const rollerSpacing = (CONVEYOR_LENGTH - 0.2) / (rollerCount - 1);
@@ -123,7 +123,6 @@ function PhysicsConveyorBelt() {
             material={conveyorRunning ? materials.rollerRunning : materials.roller}
             position={pos}
             rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
           />
         ))}
 
@@ -134,7 +133,7 @@ function PhysicsConveyorBelt() {
         <mesh geometry={geometries.sideRail} material={materials.darkMetal} position={[CONVEYOR_LENGTH / 2 + 0.04, CONVEYOR_HEIGHT - 0.06, 0]} />
 
         {legPositions.map((pos, i) => (
-          <mesh key={`leg-${i}`} geometry={geometries.leg} material={materials.darkMetal} position={[pos.x, CONVEYOR_HEIGHT / 2, pos.z]} receiveShadow />
+          <mesh key={`leg-${i}`} geometry={geometries.leg} material={materials.darkMetal} position={[pos.x, CONVEYOR_HEIGHT / 2, pos.z]} />
         ))}
       </group>
     </group>
@@ -174,9 +173,9 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
   const cylinders = useDeviceStore((s) => s.cylinders);
   const cylinder = cylinders[name as keyof typeof cylinders];
   const updateCylinderExtension = useDeviceStore((s) => s.updateCylinderExtension);
-  const rodRef = useRef<THREE.Group>(null);
-  const led1Ref = useRef<THREE.Mesh>(null);
-  const led2Ref = useRef<THREE.Mesh>(null);
+  const rodRef = useRef<Group>(null);
+  const led1Ref = useRef<Mesh>(null);
+  const led2Ref = useRef<Mesh>(null);
   const pushPlateRef = useRef<RapierRigidBody>(null);
 
   const isFeed = name === 'feed';
@@ -204,12 +203,12 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       const atRetract = currentExtensionRef.current <= CYLINDER_RETRACT_POS + 0.04;
       const atExtend = currentExtensionRef.current >= targetExtend - 0.04;
       if (led1Ref.current) {
-        const mat = led1Ref.current.material as THREE.MeshStandardMaterial;
+        const mat = led1Ref.current.material as MeshStandardMaterial;
         if (atExtend) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
         else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
       }
       if (led2Ref.current) {
-        const mat = led2Ref.current.material as THREE.MeshStandardMaterial;
+        const mat = led2Ref.current.material as MeshStandardMaterial;
         if (atRetract) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
         else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
       }
@@ -240,12 +239,12 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
     const atRetract = newExt <= CYLINDER_RETRACT_POS + 0.04;
     const atExtend = newExt >= targetExtend - 0.04;
     if (led1Ref.current) {
-      const mat = led1Ref.current.material as THREE.MeshStandardMaterial;
+      const mat = led1Ref.current.material as MeshStandardMaterial;
       if (atExtend) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
       else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
     }
     if (led2Ref.current) {
-      const mat = led2Ref.current.material as THREE.MeshStandardMaterial;
+      const mat = led2Ref.current.material as MeshStandardMaterial;
       if (atRetract) { mat.color.set(0x10B981); mat.emissive.set(0x10B981); mat.emissiveIntensity = 2.0; }
       else { mat.color.set(0x1F2937); mat.emissive.set(0x000000); mat.emissiveIntensity = 0; }
     }
@@ -259,9 +258,9 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
       </RigidBody>
       <group position={position} rotation={[Math.PI / 2, 0, Math.PI]}>
         <group visible={!COLLIDERS_ONLY}>
-          <mesh geometry={geometries.cylinderBody} material={materials.cylinderBody} castShadow />
-          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -bodyHalfLen, 0]} castShadow />
-          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, bodyHalfLen, 0]} castShadow />
+          <mesh geometry={geometries.cylinderBody} material={materials.cylinderBody} />
+          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -bodyHalfLen, 0]} />
+          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, bodyHalfLen, 0]} />
 
           {[
             { y: bodyHalfLen - 0.05, key: 'valve-top' },
@@ -286,8 +285,8 @@ function PhysicsCylinder({ name, position }: { name: string; position: [number, 
           ))}
 
           <group ref={rodRef} position={[0, currentExtensionRef.current, 0]}>
-            <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, rodLen / 2, 0]} castShadow />
-            <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, rodLen, 0]} castShadow />
+            <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, rodLen / 2, 0]} />
+            <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, rodLen, 0]} />
           </group>
         </group>
       </group>
@@ -415,9 +414,8 @@ function PhysicsMaterial() {
       }
     }
 
-    useDeviceStore.setState(s => ({
-      material: { ...s.material, position: [pos.x, pos.y, pos.z] }
-    }));
+    // 只在位置变化时更新，防止无限重渲染！
+    state.updateMaterialPosition([pos.x, pos.y, pos.z]);
   });
 
   useEffect(() => {
@@ -450,8 +448,6 @@ function PhysicsMaterial() {
         <mesh
           geometry={geometries.material}
           material={material.color === 'blue' ? materials.materialBlue : materials.materialBlack}
-          castShadow
-          receiveShadow
         />
       </group>
     </RigidBody>
@@ -474,9 +470,9 @@ function PhysicsMaterialTable({ position }: { position: [number, number, number]
       </RigidBody>
 
       <group visible={!COLLIDERS_ONLY}>
-        <mesh geometry={geometries.tableTop} material={materials.wood} castShadow receiveShadow />
+        <mesh geometry={geometries.tableTop} material={materials.wood} />
         {legPositions.map((pos, i) => (
-          <mesh key={i} geometry={geometries.tableLeg} material={materials.darkMetal} position={pos} castShadow />
+          <mesh key={i} geometry={geometries.tableLeg} material={materials.darkMetal} position={pos} />
         ))}
       </group>
     </group>
@@ -544,7 +540,10 @@ function PhysicsSignalTower({ position, red, green, yellow }: {
             />
           </mesh>
           {active && (
-            <pointLight color={activeColor} intensity={0.8} distance={1.5} position={[0, MODULE_HEIGHT / 2 + 0.025, 0]} />
+            <mesh position={[0, MODULE_HEIGHT / 2 + 0.025, 0]}>
+              <sphereGeometry args={[0.03, 8, 8]} />
+              <meshStandardMaterial color={activeColor} emissive={activeColor} emissiveIntensity={2.0} />
+            </mesh>
           )}
         </group>
       ))}
@@ -558,7 +557,7 @@ function PhysicsGround() {
       <CuboidCollider args={[10, 0.01, 10]} />
       <DebugBox args={[10, 0.01, 10]} color={0x64748B} opacity={0.1} />
       <group visible={!COLLIDERS_ONLY}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[20, 20]} />
           <meshStandardMaterial color={0x334155} roughness={0.8} />
         </mesh>
@@ -569,25 +568,14 @@ function PhysicsGround() {
 
 function PhysicsSceneContent() {
   const signalTower = useDeviceStore((s) => s.signalTower);
-  const useNewPhysics = useDeviceStore((s) => s.useNewPhysics);
   const showDebug = false;
 
   return (
-    <Physics gravity={[0, -9.8, 0]} debug={showDebug && useNewPhysics} timeStep="vary">
-      <ambientLight intensity={1.5} />
+    <Physics gravity={[0, -9.8, 0]} debug={showDebug} timeStep={1 / 30}>
+      <ambientLight intensity={2.0} />
       <directionalLight
         position={[5, 10, 7]}
         intensity={1.5}
-        castShadow
-        shadow-mapSize-width={512}
-        shadow-mapSize-height={512}
-        shadow-camera-near={0.5}
-        shadow-camera-far={30}
-        shadow-camera-left={-5}
-        shadow-camera-right={5}
-        shadow-camera-top={5}
-        shadow-camera-bottom={-5}
-        shadow-bias={-0.001}
       />
 
       <PhysicsGround />
@@ -629,13 +617,10 @@ export const PhysicsScene: React.FC = () => {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1e293b' }}>
       <Canvas
-        shadows
         camera={{ position: [0, 5, 8], fov: 45, near: 0.1, far: 1000 }}
         gl={{ antialias: true }}
         onCreated={({ gl }) => {
           gl.setPixelRatio(1);
-          gl.shadowMap.enabled = true;
-          gl.shadowMap.type = THREE.PCFSoftShadowMap;
         }}
       >
         <Suspense fallback={null}>

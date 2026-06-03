@@ -34,4 +34,16 @@ export default defineConfig({
       '10.40.32.59',
     ],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-three': ['three'],
+          'vendor-rapier': ['@react-three/rapier'],
+          'vendor-r3f': ['@react-three/fiber', '@react-three/drei'],
+          'vendor-react': ['react', 'react-dom'],
+        },
+      },
+    },
+  },
 })

@@ -376,6 +376,12 @@ export function useConveyorScoring() {
     return entry[addr] && !cur[addr];
   };
 
+  const safeTimeout = useCallback((fn: () => void, delay: number) => {
+    const id = window.setTimeout(fn, delay);
+    timeoutsRef.current.push(id);
+    return id;
+  }, []);
+
   const writeCoilWithRetry = async (addr: number, value: boolean, retries = 3): Promise<boolean> => {
     for (let i = 0; i < retries; i++) {
       try {
@@ -385,7 +391,7 @@ export function useConveyorScoring() {
       } catch (e) {
         console.warn(`[评分] 写入信号 地址${addr} 值${value} 异常(${i + 1}/${retries}):`, e);
       }
-      if (i < retries - 1) await new Promise(r => setTimeout(r, 500));
+      if (i < retries - 1) await new Promise<void>(r => { safeTimeout(r, 500); });
     }
     return false;
   };
@@ -396,7 +402,9 @@ export function useConveyorScoring() {
       console.error(`[评分] 发送脉冲信号 地址${addr}失败: 写入true重试耗尽`);
       return false;
     }
-    await new Promise(r => setTimeout(r, duration));
+    await new Promise<void>(r => {
+      safeTimeout(r, duration);
+    });
     await writeCoilWithRetry(addr, false);
     return true;
   };
@@ -510,7 +518,7 @@ export function useConveyorScoring() {
         }));
         stepRef.current = 'M1_SEND_RESET';
         timerRef.current = now;
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise<void>(r => { safeTimeout(r, 600); });
         await updateCoils();
         setScoringPrompt('⏳ 模块1/4：发送复位信号...');
         break;

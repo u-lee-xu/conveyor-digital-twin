@@ -309,7 +309,21 @@ export class ModbusService {
   async connect(config: ModbusConfig): Promise<ModbusResult> {
     const protocol = config.protocol || 'modbus';
     this.currentProtocol = protocol;
-    
+
+    if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.connectWebSocket();
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if (this.connected || !this.reconnecting) resolve();
+          else setTimeout(check, 100);
+        };
+        setTimeout(check, 100);
+      });
+      if (!this.connected) {
+        return { success: false, error: 'WebSocket代理服务器连接失败，请确认服务器已启动(端口8081)' };
+      }
+    }
+
     try {
       if (protocol === 's7') {
         const result = await this.sendMessage({
@@ -351,15 +365,20 @@ export class ModbusService {
       this.reconnectTimer = null;
     }
     this.reconnecting = false;
-    try {
-      const result = await this.sendMessage({
-        type: 'disconnect',
-      });
-      return { success: result.success, error: result.error };
-    } catch (error) {
-      console.error('断开连接失败:', error);
-      return { success: false, error: (error as Error).message };
+    this.reconnectAttempts = 0;
+    this.connected = false;
+    this.clearAllMessageHandlers();
+
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close();
+      }
+      this.ws = null;
     }
+
+    return { success: true };
   }
 
   async writeCoils(address: number, values: boolean[]): Promise<ModbusResult> {
