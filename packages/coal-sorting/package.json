@@ -1,0 +1,96 @@
+{
+  "name": "@digital-twin/coal-sorting",
+  "productName": "煤料智能分拣系统",
+  "description": "工业级煤料输送与智能分拣数字孪生仿真平台",
+  "version": "2.0.0",
+  "author": "老徐",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "electron:dev": "vite --mode electron",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@digital-twin/shared": "*",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/rapier": "^2.2.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@eslint/js": "^9.39.1",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.183.1",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.27",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
+    "modbus-serial": "^8.0.16",
+    "postcss": "^8.5.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.2.1",
+    "three": "^0.183.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vite": "^5.4.0",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^3.2.4",
+    "ws": "^8.21.0",
+    "zustand": "^5.0.11"
+  },
+  "build": {
+    "appId": "com.digital-twin.coal",
+    "productName": "煤料智能分拣系统",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../websocket-server/server.js",
+        "to": "websocket-server/server.js"
+      },
+      {
+        "from": "../../websocket-server/node_modules",
+        "to": "websocket-server/node_modules"
+      }
+    ],
+    "electronLanguages": ["zh-CN"],
+    "cscLink": null,
+    "win": {
+      "signingHashAlgorithms": [],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
