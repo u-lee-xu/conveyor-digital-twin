@@ -1,0 +1,398 @@
+@import "tailwindcss";
+
+/* 全局样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #0a0f1a 0%, #0f172a 50%, #0a0f1a 100%);
+  color: #ffffff; /* 提高对比度：从#f8fafc改为纯白 */
+}
+
+/* 动态背景网格 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* 玻璃拟态效果 */
+.glass {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 增强玻璃效果 */
+.glass-enhanced {
+  background: linear-gradient(135deg,
+    rgba(15, 23, 42, 0.85) 0%,
+    rgba(30, 41, 59, 0.75) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* 渐变边框 */
+.gradient-border {
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.4) 0%,
+    rgba(168, 85, 247, 0.4) 50%,
+    rgba(236, 72, 153, 0.4) 100%);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes borderGlow {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* 霓虹发光效果 */
+.neon-glow-blue {
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.5),
+              0 0 20px rgba(0, 212, 255, 0.3),
+              0 0 30px rgba(0, 212, 255, 0.1);
+}
+
+.neon-glow-purple {
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.5),
+              0 0 20px rgba(168, 85, 247, 0.3),
+              0 0 30px rgba(168, 85, 247, 0.1);
+}
+
+.neon-glow-pink {
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.5),
+              0 0 20px rgba(236, 72, 153, 0.3),
+              0 0 30px rgba(236, 72, 153, 0.1);
+}
+
+.neon-glow-green {
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5),
+              0 0 20px rgba(34, 197, 94, 0.3),
+              0 0 30px rgba(34, 197, 94, 0.1);
+}
+
+/* 发光效果 */
+.glow {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.2),
+              0 0 40px rgba(59, 130, 246, 0.1);
+}
+
+.glow-green {
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.4),
+              0 0 30px rgba(34, 197, 94, 0.2);
+}
+
+.glow-orange {
+  box-shadow: 0 0 15px rgba(249, 115, 22, 0.4),
+              0 0 30px rgba(249, 115, 22, 0.2);
+}
+
+/* 状态指示灯动画 */
+@keyframes pulse-green {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6),
+                0 0 16px rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.8),
+                0 0 24px rgba(34, 197, 94, 0.4);
+  }
+}
+
+@keyframes pulse-orange {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6),
+                0 0 16px rgba(249, 115, 22, 0.3);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.8),
+                0 0 24px rgba(249, 115, 22, 0.4);
+  }
+}
+
+.pulse-indicator {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+.pulse-indicator-orange {
+  animation: pulse-orange 2s ease-in-out infinite;
+}
+
+/* 按钮悬停效果 */
+.btn-hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.btn-hover-glow {
+  transition: all 0.3s ease;
+}
+
+.btn-hover-glow:hover {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+}
+
+/* 设备卡片 */
+.device-card {
+  background: linear-gradient(135deg,
+    rgba(30, 41, 59, 0.9) 0%,
+    rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.device-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(59, 130, 246, 0.05),
+    transparent);
+  transition: left 0.5s ease;
+}
+
+.device-card:hover::before {
+  left: 100%;
+}
+
+.device-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: linear-gradient(135deg,
+    rgba(30, 41, 59, 0.95) 0%,
+    rgba(15, 23, 42, 1.0) 100%);
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 状态标签 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+
+.status-badge-active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.2);
+}
+
+.status-badge-inactive {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+/* 文本渐变 */
+.text-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #a855f7 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 扫描线效果 */
+.scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(59, 130, 246, 0.5),
+    transparent);
+  animation: scanline 3s linear infinite;
+}
+
+@keyframes scanline {
+  0% { top: 0; opacity: 0; }
+  50% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* 数据流动画 */
+.data-flow {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.2) 50%,
+    transparent 100%);
+  background-size: 200% 100%;
+  animation: dataFlow 2s linear infinite;
+}
+
+@keyframes dataFlow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ========== 移动端适配和动画优化 ========== */
+
+/* 底部抽屉动画 */
+.drawer-transition {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.drawer-closed {
+  transform: translateY(100%);
+}
+
+/* 按钮点按效果（中等反馈） */
+.btn-active {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-active:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  filter: brightness(0.9);
+}
+
+/* 移动端触摸优化 */
+@media (max-width: 639px) {
+  /* 增大点击区域 */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 优化按钮间距 */
+  .btn-hover-lift {
+    gap: 12px;
+  }
+
+  /* 优化触摸反馈 */
+  .btn-active:active {
+    transform: scale(0.95);
+  }
+
+  /* 减少动画复杂度，提升移动端性能 */
+  .device-card:hover {
+    transform: none;
+    box-shadow:
+      0 4px 20px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* 简化玻璃效果 */
+  .glass-enhanced {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  /* 优化滚动条 */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+}
+
+/* 移动端标签切换按钮动画 */
+.label-toggle-btn {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.label-toggle-btn:hover {
+  transform: scale(1.05);
+}
+
+.label-toggle-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
