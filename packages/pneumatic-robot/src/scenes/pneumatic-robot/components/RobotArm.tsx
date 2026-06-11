@@ -228,12 +228,25 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
   const postCenterZ = -baseD / 4;
   const cantCenterZ = postCenterZ + cantL / 2;
 
-  // 灯塔参数
-  const poleR = 0.012;
-  const poleH = 0.35;
-  const segR = 0.05;
-  const segH = 0.03;
-  const segGap = 0.08;
+  // 灯塔参数 — 工业 stack light 风格
+  const baseR = 0.055;
+  const baseH = 0.035;
+  const bodyR = 0.045;
+  const bodyH = 0.052;
+  const lensR = 0.03;
+  const lensH = 0.025;
+  const spacerH = 0.006;
+  const unitH = bodyH + spacerH; // 每层总高
+  const casingMat = matCantilever; // 外壳金属暗灰
+  const spacerMat = matPost;      // 垫圈稍浅灰
+
+  // 各段指示灯定义 [颜色, 材质key, 标签]
+  const segments = [
+    { yOff: baseH + bodyH * 0.5, matKey: 'home' as const, color: VISUAL.INDICATOR_HOME },
+    { yOff: baseH + bodyH * 0.5 + unitH, matKey: 'running' as const, color: VISUAL.INDICATOR_RUNNING },
+    { yOff: baseH + bodyH * 0.5 + unitH * 2, matKey: 'processing' as const, color: VISUAL.INDICATOR_PROCESSING },
+    { yOff: baseH + bodyH * 0.5 + unitH * 3, matKey: 'alarm' as const, color: VISUAL.INDICATOR_ALARM },
+  ];
 
   return (
     <group>
@@ -250,40 +263,36 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
         <boxGeometry args={COMPONENT.CANTILEVER_SIZE} />
       </mesh>
 
-      {/* 灯塔 — 立柱顶部 */}
+      {/* 灯塔 — 立柱顶部，工业 stack light */}
       <group position={[0, postTopY, postCenterZ]}>
-        {/* 灯柱 */}
-        <mesh position={[0, poleH / 2, 0]} material={matCantilever}>
-          <cylinderGeometry args={[poleR, poleR, poleH, 8]} />
+        {/* 底座 */}
+        <mesh position={[0, baseH / 2, 0]} material={matPost}>
+          <cylinderGeometry args={[baseR, baseR, baseH, 20]} />
         </mesh>
 
-        {/* 红 — 报警(最上) */}
-        <mesh position={[0, segGap * 3.5, 0]}
-          material={indicatorMats.alarm[indicators.alarm ? 'on' : 'off']}>
-          <cylinderGeometry args={[segR, segR, segH, 16]} />
-        </mesh>
+        {segments.map((seg, i) => (
+          <group key={seg.matKey}>
+            {/* 间隔垫圈（非首层） */}
+            {i > 0 && (
+              <mesh position={[0, seg.yOff - bodyH / 2 - spacerH / 2, 0]} material={spacerMat}>
+                <cylinderGeometry args={[bodyR + 0.002, bodyR + 0.002, spacerH, 20]} />
+              </mesh>
+            )}
+            {/* 外壳 */}
+            <mesh position={[0, seg.yOff, 0]} material={casingMat} castShadow>
+              <cylinderGeometry args={[bodyR, bodyR, bodyH, 20]} />
+            </mesh>
+            {/* 镜片（内嵌发光） */}
+            <mesh position={[0, seg.yOff, 0]}
+              material={indicatorMats[seg.matKey][indicators[seg.matKey] ? 'on' : 'off']}>
+              <cylinderGeometry args={[lensR, lensR, lensH, 16]} />
+            </mesh>
+          </group>
+        ))}
 
-        {/* 黄 — 加工 */}
-        <mesh position={[0, segGap * 2.5, 0]}
-          material={indicatorMats.processing[indicators.processing ? 'on' : 'off']}>
-          <cylinderGeometry args={[segR, segR, segH, 16]} />
-        </mesh>
-
-        {/* 绿 — 运行 */}
-        <mesh position={[0, segGap * 1.5, 0]}
-          material={indicatorMats.running[indicators.running ? 'on' : 'off']}>
-          <cylinderGeometry args={[segR, segR, segH, 16]} />
-        </mesh>
-
-        {/* 蓝 — 原点(最下) */}
-        <mesh position={[0, segGap * 0.5, 0]}
-          material={indicatorMats.home[indicators.home ? 'on' : 'off']}>
-          <cylinderGeometry args={[segR, segR, segH, 16]} />
-        </mesh>
-
-        {/* 顶部圆球 */}
-        <mesh position={[0, poleH / 2, 0]} material={matEndCap}>
-          <sphereGeometry args={[0.02, 8, 8]} />
+        {/* 顶部半球帽 */}
+        <mesh position={[0, segments[3].yOff + bodyH / 2, 0]} material={casingMat}>
+          <sphereGeometry args={[bodyR, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
         </mesh>
       </group>
     </group>
