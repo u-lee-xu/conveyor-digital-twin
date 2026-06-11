@@ -19,34 +19,6 @@ const matSensorOn = new THREE.MeshStandardMaterial({
   color: VISUAL.MAG_SENSOR_ON, emissive: VISUAL.MAG_SENSOR_ON, emissiveIntensity: 1.5,
 });
 const matSensorOff = new THREE.MeshStandardMaterial({ color: VISUAL.MAG_SENSOR_OFF });
-// 指示灯材质缓存（模块级只创建一次）
-// off: 深灰色无发光；on: 亮色强发光
-const darkOff = VISUAL.INDICATOR_OFF;
-const createIndicatorMat = (active: boolean, color: number) =>
-  new THREE.MeshStandardMaterial({
-    color: active ? color : darkOff,
-    emissive: active ? color : 0,
-    emissiveIntensity: active ? 5 : 0,
-    roughness: active ? 0.2 : 0.7,
-  });
-const indicatorMats = {
-  running: {
-    on: createIndicatorMat(true, VISUAL.INDICATOR_RUNNING),
-    off: createIndicatorMat(false, VISUAL.INDICATOR_RUNNING),
-  },
-  home: {
-    on: createIndicatorMat(true, VISUAL.INDICATOR_HOME),
-    off: createIndicatorMat(false, VISUAL.INDICATOR_HOME),
-  },
-  processing: {
-    on: createIndicatorMat(true, VISUAL.INDICATOR_PROCESSING),
-    off: createIndicatorMat(false, VISUAL.INDICATOR_PROCESSING),
-  },
-  alarm: {
-    on: createIndicatorMat(true, VISUAL.INDICATOR_ALARM),
-    off: createIndicatorMat(false, VISUAL.INDICATOR_ALARM),
-  },
-};
 
 function mkMat(color: number, metalness: number, roughness: number) {
   return new THREE.MeshStandardMaterial({ color, metalness, roughness });
@@ -247,12 +219,12 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
   const casingMat = matCantilever; // 外壳金属暗灰
   const spacerMat = matPost;      // 垫圈稍浅灰
 
-  // 各段指示灯定义 [颜色, 材质key, 标签]
-  const segments = [
-    { yOff: mountH + bodyH * 0.5, matKey: 'home' as const, color: VISUAL.INDICATOR_HOME },
-    { yOff: mountH + bodyH * 0.5 + unitH, matKey: 'running' as const, color: VISUAL.INDICATOR_RUNNING },
-    { yOff: mountH + bodyH * 0.5 + unitH * 2, matKey: 'processing' as const, color: VISUAL.INDICATOR_PROCESSING },
-    { yOff: mountH + bodyH * 0.5 + unitH * 3, matKey: 'alarm' as const, color: VISUAL.INDICATOR_ALARM },
+  // 各段指示灯定义
+  const segDefs = [
+    { yOff: mountH + bodyH * 0.5, key: 'home' as const, color: 0x3388FF },
+    { yOff: mountH + bodyH * 0.5 + unitH, key: 'running' as const, color: 0x16FF5E },
+    { yOff: mountH + bodyH * 0.5 + unitH * 2, key: 'processing' as const, color: 0xFFBB00 },
+    { yOff: mountH + bodyH * 0.5 + unitH * 3, key: 'alarm' as const, color: 0xFF3333 },
   ];
 
   return (
@@ -277,8 +249,16 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
           <cylinderGeometry args={[mountR, mountR, mountH, 20]} />
         </mesh>
 
-        {segments.map((seg, i) => (
-          <group key={seg.matKey}>
+        {segDefs.map((seg, i) => {
+            const active = indicators[seg.key];
+            const lensMat = new THREE.MeshStandardMaterial({
+              color: active ? seg.color : 0x1e293b,
+              emissive: active ? seg.color : 0,
+              emissiveIntensity: active ? 5 : 0,
+              roughness: active ? 0.2 : 0.7,
+            });
+            return (
+          <group key={seg.key}>
             {/* 间隔垫圈（非首层） */}
             {i > 0 && (
               <mesh position={[0, seg.yOff - bodyH / 2 - spacerH / 2, 0]} material={spacerMat}>
@@ -290,15 +270,15 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
               <cylinderGeometry args={[bodyR, bodyR, bodyH, 20]} />
             </mesh>
             {/* 镜片（内嵌发光） */}
-            <mesh position={[0, seg.yOff, 0]}
-              material={indicatorMats[seg.matKey][indicators[seg.matKey] ? 'on' : 'off']}>
+            <mesh position={[0, seg.yOff, 0]} material={lensMat}>
               <cylinderGeometry args={[lensR, lensR, lensH, 16]} />
             </mesh>
           </group>
-        ))}
+            );
+          })}
 
         {/* 顶部半球帽 */}
-        <mesh position={[0, segments[3].yOff + bodyH / 2, 0]} material={casingMat}>
+        <mesh position={[0, segDefs[3].yOff + bodyH / 2, 0]} material={casingMat}>
           <sphereGeometry args={[bodyR, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
         </mesh>
       </group>
