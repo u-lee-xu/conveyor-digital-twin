@@ -14,6 +14,35 @@ function IOLed({ label, active, addr }: { label: string; active: boolean; addr: 
   );
 }
 
+/** 灯塔指示灯（大号卡片式） */
+function IndicatorLight({ label, active, color, addr }: { label: string; active: boolean; color: string; addr: string }) {
+  return (
+    <div
+      className="flex flex-col items-center gap-1 py-1.5 rounded"
+      title={addr}
+      style={{
+        backgroundColor: active ? `${color}20` : '#1e293b',
+        border: `1px solid ${active ? color : '#334155'}`,
+      }}
+    >
+      <span
+        className="rounded-full"
+        style={{
+          width: '0.65rem',
+          height: '0.65rem',
+          backgroundColor: active ? color : '#475569',
+          boxShadow: active ? `0 0 8px ${color}` : 'none',
+        }}
+      />
+      <span
+        style={{ fontSize: '0.55rem', color: active ? color : '#64748b', fontWeight: 500 }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 // 上一轮电磁阀状态（上升沿检测用，双电控自锁）
 let prevSol = {
   fwdRetract: false, fwdExtend: false,
@@ -328,13 +357,18 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
               <IOLed label="夹爪松" active={!!ioSignals.solClampOpen} addr={`Y4/${SOLENOID.clamp.open.s7}`} />
               <IOLed label="夹爪紧" active={!!ioSignals.solClampClose} addr={`Y5/${SOLENOID.clamp.close.s7}`} />
             </div>
-            <div className="flex flex-nowrap gap-1">
-              <IOLed label="原点灯" active={!!ioSignals.indOrigin} addr={`Y6/${ia.origin.s7}`} />
-              <IOLed label="工作灯" active={!!ioSignals.indWorking} addr={`Y7/${ia.working.s7}`} />
-              <IOLed label="加工灯" active={!!ioSignals.indProcessing} addr={`Y10/${ia.processing.s7}`} />
-              <IOLed label="报警灯" active={!!ioSignals.indAlarm} addr={`Y11/${ia.alarm.s7}`} />
-            </div>
           </div>
+        </div>
+      </div>
+
+      {/* ===== 灯塔指示灯 ===== */}
+      <div className="card">
+        <div className="section-title !mb-1.5">灯塔指示灯</div>
+        <div className="grid grid-cols-4 gap-1">
+          <IndicatorLight label="原点" active={!!ioSignals.indOrigin} color="#3b82f6" addr={`Y6/${ia.origin.s7}`} />
+          <IndicatorLight label="运行" active={!!ioSignals.indWorking} color="#22c55e" addr={`Y7/${ia.working.s7}`} />
+          <IndicatorLight label="加工" active={!!ioSignals.indProcessing} color="#eab308" addr={`Y10/${ia.processing.s7}`} />
+          <IndicatorLight label="报警" active={!!ioSignals.indAlarm} color="#ef4444" addr={`Y11/${ia.alarm.s7}`} />
         </div>
       </div>
 

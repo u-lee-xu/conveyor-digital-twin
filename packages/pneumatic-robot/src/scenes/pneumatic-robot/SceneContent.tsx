@@ -4,8 +4,8 @@ import { RobotArm } from './components/RobotArm';
 import * as THREE from 'three';
 
 /** 物料地面位置 */
-const WORKPIECE_SPAWN: [number, number, number] = [0, 0.03, 1.02];   // A 工位（取料）
-const WORKPIECE_PLACE: [number, number, number] = [0, 0.03, 0.69];   // B 工位（放料）
+const WORKPIECE_SPAWN: [number, number, number] = [0, 0.03, 0.69];   // A 工位（取料）
+const WORKPIECE_PLACE: [number, number, number] = [0, 0.03, 1.02];   // B 工位（放料）
 const ringMatA = new THREE.MeshStandardMaterial({ color: '#f59e0b', roughness: 0.3, emissive: '#f59e0b', emissiveIntensity: 0.6 });
 const ringMatB = new THREE.MeshStandardMaterial({ color: '#3b82f6', roughness: 0.3, emissive: '#3b82f6', emissiveIntensity: 0.6 });
 
