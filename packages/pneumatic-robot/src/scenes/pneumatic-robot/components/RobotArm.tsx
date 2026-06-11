@@ -20,8 +20,15 @@ const matSensorOn = new THREE.MeshStandardMaterial({
 });
 const matSensorOff = new THREE.MeshStandardMaterial({ color: VISUAL.MAG_SENSOR_OFF });
 // 指示灯材质缓存（模块级只创建一次）
+// off: 深灰色无发光；on: 亮色强发光
+const darkOff = VISUAL.INDICATOR_OFF;
 const createIndicatorMat = (active: boolean, color: number) =>
-  new THREE.MeshStandardMaterial({ color, emissive: active ? color : 0, emissiveIntensity: active ? 2 : 0 });
+  new THREE.MeshStandardMaterial({
+    color: active ? color : darkOff,
+    emissive: active ? color : 0,
+    emissiveIntensity: active ? 5 : 0,
+    roughness: active ? 0.2 : 0.7,
+  });
 const indicatorMats = {
   running: {
     on: createIndicatorMat(true, VISUAL.INDICATOR_RUNNING),
@@ -234,7 +241,7 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
   const bodyR = 0.045;
   const bodyH = 0.052;
   const lensR = 0.052;    // 镜片略大于外壳，露出可见
-  const lensH = 0.025;
+  const lensH = 0.032;    // 镜片厚度，突出分明
   const spacerH = 0.006;
   const unitH = bodyH + spacerH; // 每层总高
   const casingMat = matCantilever; // 外壳金属暗灰
