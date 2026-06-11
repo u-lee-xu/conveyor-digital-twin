@@ -220,13 +220,20 @@ function MountPlate({ x, y, z }: { x: number; y: number; z: number }) {
 
 // ========== 单立柱机架 ==========
 function RobotFrame({ indicators }: { indicators: { running: boolean; home: boolean; processing: boolean; alarm: boolean } }) {
-  const [postW, postH] = COMPONENT.POST_SIZE;
+  const [, postH] = COMPONENT.POST_SIZE;
   const [_baseW, baseH, baseD] = COMPONENT.BASE_SIZE;
   const [_cantW, cantH, cantL] = COMPONENT.CANTILEVER_SIZE;
 
   const postTopY = postH + baseH;
   const postCenterZ = -baseD / 4;
   const cantCenterZ = postCenterZ + cantL / 2;
+
+  // 灯塔参数
+  const poleR = 0.012;
+  const poleH = 0.35;
+  const segR = 0.05;
+  const segH = 0.03;
+  const segGap = 0.08;
 
   return (
     <group>
@@ -242,20 +249,42 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
       <mesh position={[0, postTopY - cantH / 2, cantCenterZ]} material={matCantilever} castShadow>
         <boxGeometry args={COMPONENT.CANTILEVER_SIZE} />
       </mesh>
-      {/* 指示灯 */}
-      <group position={[postW / 2 + 0.03, postTopY - 0.15, postCenterZ]}>
-        <mesh geometry={new THREE.CylinderGeometry(STRUCT.INDICATOR_RADIUS, STRUCT.INDICATOR_RADIUS, 0.02, 16)}
-          material={indicatorMats.running[indicators.running ? 'on' : 'off']}
-          position={[0, STRUCT.INDICATOR_SPACING * 1.5, 0]} rotation={[0, 0, Math.PI / 2]} />
-        <mesh geometry={new THREE.CylinderGeometry(STRUCT.INDICATOR_RADIUS, STRUCT.INDICATOR_RADIUS, 0.02, 16)}
-          material={indicatorMats.home[indicators.home ? 'on' : 'off']}
-          position={[0, STRUCT.INDICATOR_SPACING * 0.5, 0]} rotation={[0, 0, Math.PI / 2]} />
-        <mesh geometry={new THREE.CylinderGeometry(STRUCT.INDICATOR_RADIUS, STRUCT.INDICATOR_RADIUS, 0.02, 16)}
-          material={indicatorMats.processing[indicators.processing ? 'on' : 'off']}
-          position={[0, -STRUCT.INDICATOR_SPACING * 0.5, 0]} rotation={[0, 0, Math.PI / 2]} />
-        <mesh geometry={new THREE.CylinderGeometry(STRUCT.INDICATOR_RADIUS, STRUCT.INDICATOR_RADIUS, 0.02, 16)}
-          material={indicatorMats.alarm[indicators.alarm ? 'on' : 'off']}
-          position={[0, -STRUCT.INDICATOR_SPACING * 1.5, 0]} rotation={[0, 0, Math.PI / 2]} />
+
+      {/* 灯塔 — 立柱顶部 */}
+      <group position={[0, postTopY, postCenterZ]}>
+        {/* 灯柱 */}
+        <mesh position={[0, poleH / 2, 0]} material={matCantilever}>
+          <cylinderGeometry args={[poleR, poleR, poleH, 8]} />
+        </mesh>
+
+        {/* 红 — 报警(最上) */}
+        <mesh position={[0, segGap * 3.5, 0]}
+          material={indicatorMats.alarm[indicators.alarm ? 'on' : 'off']}>
+          <cylinderGeometry args={[segR, segR, segH, 16]} />
+        </mesh>
+
+        {/* 黄 — 加工 */}
+        <mesh position={[0, segGap * 2.5, 0]}
+          material={indicatorMats.processing[indicators.processing ? 'on' : 'off']}>
+          <cylinderGeometry args={[segR, segR, segH, 16]} />
+        </mesh>
+
+        {/* 绿 — 运行 */}
+        <mesh position={[0, segGap * 1.5, 0]}
+          material={indicatorMats.running[indicators.running ? 'on' : 'off']}>
+          <cylinderGeometry args={[segR, segR, segH, 16]} />
+        </mesh>
+
+        {/* 蓝 — 原点(最下) */}
+        <mesh position={[0, segGap * 0.5, 0]}
+          material={indicatorMats.home[indicators.home ? 'on' : 'off']}>
+          <cylinderGeometry args={[segR, segR, segH, 16]} />
+        </mesh>
+
+        {/* 顶部圆球 */}
+        <mesh position={[0, poleH / 2, 0]} material={matEndCap}>
+          <sphereGeometry args={[0.02, 8, 8]} />
+        </mesh>
       </group>
     </group>
   );
