@@ -233,7 +233,7 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
   const mountH = 0.035;
   const bodyR = 0.045;
   const bodyH = 0.052;
-  const lensR = 0.03;
+  const lensR = 0.052;    // 镜片略大于外壳，露出可见
   const lensH = 0.025;
   const spacerH = 0.006;
   const unitH = bodyH + spacerH; // 每层总高
