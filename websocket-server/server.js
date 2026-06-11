@@ -988,11 +988,11 @@ class MitsubishiMX {
       `        else { Write-Host ('{"ok":false,"err":"' + ($e -join ',') + '"}') }`,
       `      }`,
       `      'exit' {`,
-      `        Write-Host '{"ok":true}'`,
       `        $null = $p.Close()`,
       `        [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($p) | Out-Null`,
       `        [System.GC]::Collect()`,
       `        [System.GC]::WaitForPendingFinalizers()`,
+      `        Write-Host '{"ok":true}'`,
       `        exit 0`,
       `      }`,
       `      default { Write-Host '{"error":"unknown command"}' }`,
@@ -1171,7 +1171,10 @@ class MitsubishiMX {
           await this._sendCommand({ type: 'exit' });
         } catch {}
       }
-      this._killPS();
+      // PS 进程已在 exit 命令中自行清理退出，不调用 _killPS() 强杀
+      this._ps = null;
+      this.connected = false;
+      this._ready = false;
       return { success: true };
     } finally { this._unlock(); }
   }
