@@ -229,8 +229,8 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
   const cantCenterZ = postCenterZ + cantL / 2;
 
   // 灯塔参数 — 工业 stack light 风格
-  const baseR = 0.055;
-  const baseH = 0.035;
+  const mountR = 0.055;
+  const mountH = 0.035;
   const bodyR = 0.045;
   const bodyH = 0.052;
   const lensR = 0.03;
@@ -242,10 +242,10 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
 
   // 各段指示灯定义 [颜色, 材质key, 标签]
   const segments = [
-    { yOff: baseH + bodyH * 0.5, matKey: 'home' as const, color: VISUAL.INDICATOR_HOME },
-    { yOff: baseH + bodyH * 0.5 + unitH, matKey: 'running' as const, color: VISUAL.INDICATOR_RUNNING },
-    { yOff: baseH + bodyH * 0.5 + unitH * 2, matKey: 'processing' as const, color: VISUAL.INDICATOR_PROCESSING },
-    { yOff: baseH + bodyH * 0.5 + unitH * 3, matKey: 'alarm' as const, color: VISUAL.INDICATOR_ALARM },
+    { yOff: mountH + bodyH * 0.5, matKey: 'home' as const, color: VISUAL.INDICATOR_HOME },
+    { yOff: mountH + bodyH * 0.5 + unitH, matKey: 'running' as const, color: VISUAL.INDICATOR_RUNNING },
+    { yOff: mountH + bodyH * 0.5 + unitH * 2, matKey: 'processing' as const, color: VISUAL.INDICATOR_PROCESSING },
+    { yOff: mountH + bodyH * 0.5 + unitH * 3, matKey: 'alarm' as const, color: VISUAL.INDICATOR_ALARM },
   ];
 
   return (
@@ -266,8 +266,8 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
       {/* 灯塔 — 立柱顶部，工业 stack light */}
       <group position={[0, postTopY, postCenterZ]}>
         {/* 底座 */}
-        <mesh position={[0, baseH / 2, 0]} material={matPost}>
-          <cylinderGeometry args={[baseR, baseR, baseH, 20]} />
+        <mesh position={[0, mountH / 2, 0]} material={matPost}>
+          <cylinderGeometry args={[mountR, mountR, mountH, 20]} />
         </mesh>
 
         {segments.map((seg, i) => (
