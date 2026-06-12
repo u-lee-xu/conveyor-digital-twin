@@ -968,7 +968,7 @@ class MitsubishiMX {
       `      'read' {`,
       `        $o = @{}`,
       `        foreach ($d in $cmd.devices) {`,
-      `          try { $v = 0; $null = $p.GetDevice($d, [ref]$v); $o[$d] = $v }`,
+      `          try { $v = 0; $rc = $p.GetDevice($d, [ref]$v); $o[$d] = if ($rc -eq 0) { $v } else { -1 } }`,
       `          catch { $o[$d] = -1 }`,
       `        }`,
       `        Write-Host ($o | ConvertTo-Json -Compress)`,
