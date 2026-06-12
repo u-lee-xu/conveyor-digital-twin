@@ -197,6 +197,15 @@ function MountPlate({ x, y, z }: { x: number; y: number; z: number }) {
   );
 }
 
+// 灯塔镜片预创建材质 — 避免 render 内重复 new MeshBasicMaterial
+const BEACON_COLORS: Record<string, number> = { home: 0x3388FF, running: 0x16FF5E, processing: 0xFFBB00, alarm: 0xFF3333 };
+const BEACON_MAT_ON: Record<string, THREE.MeshBasicMaterial> = {};
+const BEACON_MAT_OFF: Record<string, THREE.MeshBasicMaterial> = {};
+for (const [key, color] of Object.entries(BEACON_COLORS)) {
+  BEACON_MAT_ON[key] = new THREE.MeshBasicMaterial({ color });
+  BEACON_MAT_OFF[key] = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+}
+
 // ========== 单立柱机架 ==========
 function RobotFrame({ indicators }: { indicators: { running: boolean; home: boolean; processing: boolean; alarm: boolean } }) {
   const [, postH] = COMPONENT.POST_SIZE;
@@ -219,12 +228,12 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
   const casingMat = matCantilever; // 外壳金属暗灰
   const spacerMat = matPost;      // 垫圈稍浅灰
 
-  // 各段指示灯定义
+  // 各段指示灯定义 & 预创建材质（避免 render 内重复 new）
   const segDefs = [
-    { yOff: mountH + bodyH * 0.5, key: 'home' as const, color: 0x3388FF },
-    { yOff: mountH + bodyH * 0.5 + unitH, key: 'running' as const, color: 0x16FF5E },
-    { yOff: mountH + bodyH * 0.5 + unitH * 2, key: 'processing' as const, color: 0xFFBB00 },
-    { yOff: mountH + bodyH * 0.5 + unitH * 3, key: 'alarm' as const, color: 0xFF3333 },
+    { yOff: mountH + bodyH * 0.5, key: 'home' as const },
+    { yOff: mountH + bodyH * 0.5 + unitH, key: 'running' as const },
+    { yOff: mountH + bodyH * 0.5 + unitH * 2, key: 'processing' as const },
+    { yOff: mountH + bodyH * 0.5 + unitH * 3, key: 'alarm' as const },
   ];
 
   return (
@@ -251,12 +260,6 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
 
         {segDefs.map((seg, i) => {
             const active = indicators[seg.key];
-            const lensMat = new THREE.MeshStandardMaterial({
-              color: active ? seg.color : 0x1e293b,
-              emissive: active ? seg.color : 0,
-              emissiveIntensity: active ? 5 : 0,
-              roughness: active ? 0.2 : 0.7,
-            });
             return (
           <group key={seg.key}>
             {/* 间隔垫圈（非首层） */}
@@ -270,7 +273,7 @@ function RobotFrame({ indicators }: { indicators: { running: boolean; home: bool
               <cylinderGeometry args={[bodyR, bodyR, bodyH, 20]} />
             </mesh>
             {/* 镜片（内嵌发光） */}
-            <mesh position={[0, seg.yOff, 0]} material={lensMat}>
+            <mesh position={[0, seg.yOff, 0]} material={active ? BEACON_MAT_ON[seg.key] : BEACON_MAT_OFF[seg.key]}>
               <cylinderGeometry args={[lensR, lensR, lensH, 16]} />
             </mesh>
           </group>

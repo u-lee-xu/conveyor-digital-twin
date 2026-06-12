@@ -1,11 +1,33 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, utilityProcess } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
+let wsServerProcess: Electron.UtilityProcess | null = null;
+
+function startWebSocketServer(): void {
+  const serverPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'websocket-server', 'server.js')
+    : path.join(__dirname, '../../../websocket-server/server.js');
+
+  console.log('[Main] Starting WebSocket server:', serverPath);
+  if (!fs.existsSync(serverPath)) {
+    console.error('[Main] WS server.js not found at:', serverPath);
+    return;
+  }
+  try {
+    wsServerProcess = utilityProcess.fork(serverPath, [], { stdio: 'pipe' });
+    wsServerProcess.on('exit', (code) => console.log('[WS] Server exited with code:', code));
+    wsServerProcess.stdout?.on('data', (d) => console.log('[WS]', d.toString().trim()));
+    wsServerProcess.stderr?.on('data', (d) => console.error('[WS]', d.toString().trim()));
+  } catch (err) {
+    console.error('[Main] Failed to start WS server:', err);
+  }
+}
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -20,6 +42,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    startWebSocketServer();
     createWindow();
 
     app.on('activate', () => {
@@ -66,5 +89,12 @@ function createWindow(): void {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  if (wsServerProcess) {
+    wsServerProcess.kill();
+    wsServerProcess = null;
   }
 });
