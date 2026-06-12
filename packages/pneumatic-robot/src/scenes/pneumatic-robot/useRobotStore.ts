@@ -61,13 +61,13 @@ function defaultCylinder(): CylinderState {
   return { extended: false, position: 0, magFront: false, magRear: true };
 }
 
-const WORKPIECE_INITIAL: [number, number, number] = [0, 0.03, 1.02];
+const WORKPIECE_INITIAL: [number, number, number] = [0, 0.03, 0.69]; // A 工位
 
 export const useRobotStore = create<RobotStoreState>((set) => ({
   cylinders: {
     lift: defaultCylinder(),
     forward: defaultCylinder(),
-    clamp: defaultCylinder(),
+    clamp: { extended: true, position: 1, magFront: true, magRear: false },
   },
   indicators: {
     running: false,
@@ -133,7 +133,7 @@ export const useRobotStore = create<RobotStoreState>((set) => ({
     cylinders: {
       lift: defaultCylinder(),
       forward: defaultCylinder(),
-      clamp: defaultCylinder(),
+      clamp: { extended: true, position: 1, magFront: true, magRear: false },
     },
     indicators: { running: false, home: true, processing: false, alarm: false },
     workpiece: { exists: true, held: false, pos: [...WORKPIECE_INITIAL] as [number, number, number], offsetY: 0, velY: 0 },

@@ -1,12 +1,11 @@
 import { useRobotStore, type CylinderName } from '../useRobotStore';
-import { ADDRESS } from '../constants';
 
 type CylData = ReturnType<typeof useRobotStore.getState>['cylinders'][CylinderName];
 
-const META: Record<CylinderName, { label: string; up: string; dn: string; dot: string; arrow: string }> = {
-  forward: { label: '前后', up: '伸出', dn: '缩回', dot: 'bg-blue-500', arrow: '\u2192' },
-  lift:    { label: '升降', up: '下降', dn: '升起', dot: 'bg-amber-500', arrow: '\u2193' },
-  clamp:   { label: '夹爪', up: '张开', dn: '夹紧', dot: 'bg-emerald-500', arrow: '\u21C4' },
+const META: Record<CylinderName, { label: string; left: string; leftExt: boolean; right: string; rightExt: boolean; dot: string; arrow: string }> = {
+  forward: { label: '前后', left: '伸出', leftExt: true,  right: '缩回', rightExt: false, dot: 'bg-blue-500', arrow: '\u2192' },
+  lift:    { label: '升降', left: '下降', leftExt: true,  right: '升起', rightExt: false, dot: 'bg-amber-500', arrow: '\u2193' },
+  clamp:   { label: '夹爪', left: '夹紧', leftExt: false, right: '张开', rightExt: true,  dot: 'bg-emerald-500', arrow: '\u21C4' },
 };
 
 export function ManualPanel() {
@@ -22,15 +21,13 @@ export function ManualPanel() {
 
       <div className="space-y-2">
         {(Object.entries(cylinders) as [CylinderName, CylData][]).map(([name, cyl]) => {
-          const { label, up, dn, dot, arrow } = META[name];
+          const { label, left, leftExt, right, rightExt, dot, arrow } = META[name];
           const ext = cyl.extended;
           const pct = Math.round(cyl.position * 100);
-          const sa = ADDRESS.SOLENOID[name];
-          const ma = ADDRESS.MAG[name];
-          // SOLENOID now has extend/retract (or open/close for clamp),
-          // MAG has front/rear (or open/close for clamp)
-          const saList = ('extend' in sa) ? [sa.extend, sa.retract] : [sa.open, sa.close];
-          const maList = ('front' in ma) ? [ma.front, ma.rear] : [ma.open, ma.close];
+          const barPct = name === 'clamp' ? 100 - pct : pct;
+          // 夹爪亮灭顺序与前后/升降对齐：extended→右LED亮，retracted→左LED亮
+          const ledLeft  = name === 'clamp' ? cyl.magRear : cyl.magFront;
+          const ledRight = name === 'clamp' ? cyl.magFront : cyl.magRear;
 
           return (
             <div key={name} className="rounded-lg border border-slate-700/25 bg-slate-800/25 p-2">
@@ -42,39 +39,37 @@ export function ManualPanel() {
                   <span className="text-[0.7rem] font-bold text-slate-200">{label}</span>
                 </div>
                 <span className={`motion-indicator ${ext ? 'motion-extend' : 'motion-retract'}`}>
-                  {ext ? up : dn}&ensp;{arrow}
+                  {ext === leftExt ? left : right}&ensp;{arrow}
                 </span>
               </div>
 
-              {/* 按钮行 */}
+              {/* 按钮行：左绿右蓝 */}
               <div className="flex gap-1.5 mb-1.5">
                 <button
                   className="btn btn-xs btn-success flex-1 touch-manipulation"
-                  onClick={() => setCylinder(name, true)}
-                  disabled={ext}
-                  aria-label={`${label}${up}`}
+                  onClick={() => setCylinder(name, leftExt)}
+                  disabled={ext === leftExt}
+                  aria-label={`${label}${left}`}
                 >
-                  {up}
+                  {left}
                 </button>
                 <button
-                  className="btn btn-xs btn-outline flex-1 touch-manipulation"
-                  onClick={() => setCylinder(name, false)}
-                  disabled={!ext}
-                  aria-label={`${label}${dn}`}
+                  className="btn btn-xs btn-primary flex-1 touch-manipulation"
+                  onClick={() => setCylinder(name, rightExt)}
+                  disabled={ext === rightExt}
+                  aria-label={`${label}${right}`}
                 >
-                  {dn}
+                  {right}
                 </button>
               </div>
 
-              {/* 进度条 + 地址 + LED 行 */}
+              {/* 进度条 + LED 行 */}
               <div className="flex items-center gap-1.5">
                 <div className="progress-bar flex-1">
-                  <div className="progress-fill" style={{ width: `${pct}%` }} />
+                  <div className="progress-fill" style={{ width: `${barPct}%` }} />
                 </div>
-                <span className="addr-tag">{maList[0].s7}</span>
-                <span className="addr-tag">{saList[0].s7}</span>
-                <span className={`sensor-led ${cyl.magFront ? 'sensor-led-on' : 'sensor-led-off'}`} />
-                <span className={`sensor-led ${cyl.magRear ? 'sensor-led-on' : 'sensor-led-off'}`} />
+                <span className={`sensor-led ${ledLeft ? 'sensor-led-on' : 'sensor-led-off'}`} />
+                <span className={`sensor-led ${ledRight ? 'sensor-led-on' : 'sensor-led-off'}`} />
               </div>
             </div>
           );

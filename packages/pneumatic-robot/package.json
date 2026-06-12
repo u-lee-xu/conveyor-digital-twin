@@ -21,7 +21,8 @@
   "dependencies": {
     "@digital-twin/shared": "*",
     "@react-three/drei": "^10.7.7",
-    "@react-three/rapier": "^2.2.0"
+    "@react-three/rapier": "^2.2.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -59,21 +60,32 @@
     "appId": "com.digital-twin.pneumatic-robot",
     "productName": "气动机械手数字孪生系统",
     "directories": {
-      "output": "release"
+      "output": "release_v2"
     },
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
     ],
-    "electronLanguages": ["zh-CN"],
+    "electronLanguages": [
+      "zh-CN"
+    ],
     "cscLink": null,
+    "npmRebuild": false,
+    "extraResources": [
+      {
+        "from": "../../websocket-server",
+        "to": "websocket-server"
+      }
+    ],
     "win": {
       "artifactName": "${productName}-三菱FX3U-Setup-${version}.${ext}",
       "signingHashAlgorithms": [],
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },

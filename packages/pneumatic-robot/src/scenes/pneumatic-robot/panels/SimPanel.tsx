@@ -140,8 +140,8 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
         const magForwardFront = cyls.forward.magFront;
         const magLiftRear = cyls.lift.magRear;
         const magLiftFront = cyls.lift.magFront;
-        const magClampOpen = cyls.clamp.magRear;
-        const magClampClose = cyls.clamp.magFront;
+        const magClampOpen = cyls.clamp.magFront;   // magFront=true 表示夹爪张开
+        const magClampClose = cyls.clamp.magRear;  // magRear=true 表示夹爪夹紧
 
         const varNames = [
           'MAG_FORWARD_REAR', 'MAG_FORWARD_FRONT',
