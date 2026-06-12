@@ -81,6 +81,29 @@ const MITSUBISHI_VARIABLES = {
   INDICATOR_ALARM:      'Y11',
 };
 
+/** 气动机械手 Modbus 变量映射（变量名 → 线圈地址） */
+const PNEUMATIC_MODBUS_VARS = {
+  BUTTON_START: 0,
+  BUTTON_ESTOP: 1,
+  BUTTON_STOP:  2,
+  MAG_FORWARD_REAR:   3,
+  MAG_FORWARD_FRONT:  4,
+  MAG_LIFT_REAR:      5,
+  MAG_LIFT_FRONT:     6,
+  MAG_CLAMP_OPEN:     7,
+  MAG_CLAMP_CLOSE:    8,
+  SOLENOID_FORWARD_RETRACT: 10,
+  SOLENOID_FORWARD_EXTEND:  11,
+  SOLENOID_LIFT_RETRACT:    12,
+  SOLENOID_LIFT_EXTEND:     13,
+  SOLENOID_CLAMP_OPEN:      14,
+  SOLENOID_CLAMP_CLOSE:     15,
+  INDICATOR_ORIGIN:     16,
+  INDICATOR_WORKING:    17,
+  INDICATOR_PROCESSING: 18,
+  INDICATOR_ALARM:      19,
+};
+
 class SimpleModbusTCP {
   constructor() {
     this.client = null;
@@ -379,6 +402,42 @@ class SimpleModbusTCP {
         this.client.write(buffer);
       } catch (e) { resolve({ success: false, error: e.message }); }
     });
+  }
+
+  /** 批量读取变量（气动机械手 - 一次读取全部 20 个线圈） */
+  async readVars(varNames) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    try {
+      // 一次读取线圈 0~19（20 个），映射回变量名
+      const result = await this.readCoils(0, 20);
+      if (!result.success) return result;
+      const values = {};
+      for (const name of varNames) {
+        const addr = PNEUMATIC_MODBUS_VARS[name];
+        if (addr !== undefined && addr < result.values.length) {
+          values[name] = !!result.values[addr];
+        }
+      }
+      return { success: true, values };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  /** 批量写入变量（逐个写线圈） */
+  async writeVars(varNames, values) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    try {
+      for (let i = 0; i < varNames.length; i++) {
+        const addr = PNEUMATIC_MODBUS_VARS[varNames[i]];
+        if (addr !== undefined) {
+          await this.writeCoil(addr, !!values[i]);
+        }
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   }
 }
 
@@ -1390,6 +1449,8 @@ wss.on('connection', (ws) => {
         case 'write-vars':
           if (currentProtocol === 'mitsubishi') {
             result = await mitsubishiClient.writeVars(parsedData.names, parsedData.values);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.writeVars(parsedData.names, parsedData.values);
           } else {
             result = await s7Client.writeVars(parsedData.names, parsedData.values);
           }
@@ -1398,6 +1459,8 @@ wss.on('connection', (ws) => {
         case 'read-vars':
           if (currentProtocol === 'mitsubishi') {
             result = await mitsubishiClient.readVars(parsedData.names);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.readVars(parsedData.names);
           } else {
             result = await s7Client.readVars(parsedData.names);
           }

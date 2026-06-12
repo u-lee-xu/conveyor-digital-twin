@@ -1,8 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from '../../../stores/useAppStore';
 import { useRobotStore } from '../useRobotStore';
-import { ADDRESS, MITSUBISHI_READ_VARS } from '../constants';
+import {
+  ADDRESS, MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS,
+} from '../constants';
 import { plcService } from '../../../services/plc-websocket';
+import type { ProtocolType } from '../../../services/plc-websocket';
 
 /** 单个IO信号LED指示灯 */
 function IOLed({ label, active, addr }: { label: string; active: boolean; addr: string }) {
@@ -43,17 +46,40 @@ function IndicatorLight({ label, active, color, addr }: { label: string; active:
   );
 }
 
-// 上一轮电磁阀状态（上升沿检测用，双电控自锁）
-let prevSol = {
-  fwdRetract: false, fwdExtend: false,
-  liftRetract: false, liftExtend: false,
-  clampOpen: false, clampClose: false,
+const PROTOCOL_OPTIONS: { value: ProtocolType; label: string }[] = [
+  { value: 'modbus', label: 'ModbusTCP' },
+  { value: 's7', label: 'Siemens S7' },
+  { value: 'mitsubishi', label: '三菱 MX' },
+];
+
+const DEFAULT_PARAMS: Record<ProtocolType, { host: string; port: number; rack?: number; slot?: number }> = {
+  modbus: { host: 'localhost', port: 502 },
+  s7: { host: 'localhost', port: 102, rack: 0, slot: 1 },
+  mitsubishi: { host: 'localhost', port: 0 },
 };
+
+function getReadVars(protocol: ProtocolType) {
+  if (protocol === 'modbus') return MODBUS_READ_VARS;
+  if (protocol === 's7') return S7_VARS;
+  return MITSUBISHI_READ_VARS;
+}
 
 export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
   const simRunning = useAppStore((s) => s.simRunning);
   const simEStop = useAppStore((s) => s.simEStop);
   const setSimEStop = useAppStore((s) => s.setSimEStop);
+
+  // 协议 & 连接参数
+  const [protocol, setProtocol] = useState<ProtocolType>('mitsubishi');
+  const [host, setHost] = useState('localhost');
+  const [port, setPort] = useState('0');
+  const [rack, setRack] = useState('0');
+  const [slot, setSlot] = useState('1');
+
+  // 电磁阀类型：单电控(弹簧复位) / 双电控(自保持)
+  const [solenoidType, setSolenoidType] = useState<'single' | 'double'>('double');
+  const solenoidTypeRef = useRef(solenoidType);
+  solenoidTypeRef.current = solenoidType;
 
   // PLC 连接状态
   const [plcConnected, setPlcConnected] = useState(false);
@@ -63,26 +89,48 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
   // IO 信号实时状态（从 PLC 读取）
   const [ioSignals, setIoSignals] = useState<Record<string, boolean>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollingRef = useRef(false); // 防重入锁
+  const pollingRef = useRef(false);
+  const protocolRef = useRef(protocol);
+  protocolRef.current = protocol;
+  const stopPollingRef = useRef<(() => void) | null>(null);
+
+  // 上一轮电磁阀状态（上升沿检测用，双电控自锁）
+  const prevSolRef = useRef({
+    fwdRetract: false, fwdExtend: false,
+    liftRetract: false, liftExtend: false,
+    clampOpen: false, clampClose: false,
+  });
+
+  /* ---- 协议切换时更新默认参数 ---- */
+  const handleProtocolChange = (p: ProtocolType) => {
+    setProtocol(p);
+    const d = DEFAULT_PARAMS[p];
+    setHost(d.host);
+    setPort(String(d.port));
+    setRack(String(d.rack ?? 0));
+    setSlot(String(d.slot ?? 1));
+  };
 
   /* ---- PLC 断连回调 ---- */
   useEffect(() => {
     plcService.setOnDisconnected(() => {
       setPlcConnected(false);
       setConnMsg('PLC 连接已断开');
-      stopPolling();
+      stopPollingRef.current?.();
     });
-    return () => { plcService.setOnDisconnected(null); stopPolling(); };
+    return () => { plcService.setOnDisconnected(null); stopPollingRef.current?.(); };
   }, []);
 
-  /* ---- IO 轮询（双向同步，三菱 MX 协议） ---- */
+  /* ---- IO 轮询（双向同步） ---- */
   const startPolling = useCallback(() => {
-    stopPolling();
+    stopPollingRef.current?.();
     const poll = async () => {
       if (!plcService.connected || pollingRef.current) return;
       pollingRef.current = true;
       try {
-        const allNames = Object.keys(MITSUBISHI_READ_VARS);
+        const proto = protocolRef.current;
+        const readVars = getReadVars(proto);
+        const allNames = Object.keys(readVars);
         const res = await plcService.readVars(allNames);
         if (!res.success || !res.values) return;
 
@@ -100,33 +148,44 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
         };
         setIoSignals(signals);
 
-        // ===== PLC → 模型：双电控电磁阀（上升沿触发 + 自锁保持） =====
+        // ===== PLC → 模型 =====
         const store = useRobotStore.getState();
+        const isSingle = solenoidTypeRef.current === 'single';
 
-        const fwdExtendRising = signals.solForwardExtend && !prevSol.fwdExtend;
-        const fwdRetractRising = signals.solForwardRetract && !prevSol.fwdRetract;
-        const liftExtendRising = signals.solLiftExtend && !prevSol.liftExtend;
-        const liftRetractRising = signals.solLiftRetract && !prevSol.liftRetract;
-        const clampOpenRising = signals.solClampOpen && !prevSol.clampOpen;
-        const clampCloseRising = signals.solClampClose && !prevSol.clampClose;
+        if (isSingle) {
+          // 单电控：直接跟随伸出/夹紧线圈电平，失电→弹簧复位
+          store.setCylinder('forward', !!signals.solForwardExtend);
+          store.setCylinder('lift', !!signals.solLiftExtend);
+          // 夹爪：CLAMP_CLOSE=ON→夹紧(extended=false)，OFF→松开(extended=true)
+          store.setCylinder('clamp', !signals.solClampClose);
+        } else {
+          // 双电控：上升沿触发 + 自锁保持
+          const p = prevSolRef.current;
+          const fwdExtendRising = signals.solForwardExtend && !p.fwdExtend;
+          const fwdRetractRising = signals.solForwardRetract && !p.fwdRetract;
+          const liftExtendRising = signals.solLiftExtend && !p.liftExtend;
+          const liftRetractRising = signals.solLiftRetract && !p.liftRetract;
+          const clampOpenRising = signals.solClampOpen && !p.clampOpen;
+          const clampCloseRising = signals.solClampClose && !p.clampClose;
 
-        if (fwdExtendRising) store.setCylinder('forward', true);
-        else if (fwdRetractRising) store.setCylinder('forward', false);
+          if (fwdExtendRising) store.setCylinder('forward', true);
+          else if (fwdRetractRising) store.setCylinder('forward', false);
 
-        if (liftExtendRising) store.setCylinder('lift', true);
-        else if (liftRetractRising) store.setCylinder('lift', false);
+          if (liftExtendRising) store.setCylinder('lift', true);
+          else if (liftRetractRising) store.setCylinder('lift', false);
 
-        if (clampOpenRising) store.setCylinder('clamp', true);
-        else if (clampCloseRising) store.setCylinder('clamp', false);
+          if (clampOpenRising) store.setCylinder('clamp', true);
+          else if (clampCloseRising) store.setCylinder('clamp', false);
 
-        prevSol = {
-          fwdRetract: !!signals.solForwardRetract,
-          fwdExtend: !!signals.solForwardExtend,
-          liftRetract: !!signals.solLiftRetract,
-          liftExtend: !!signals.solLiftExtend,
-          clampOpen: !!signals.solClampOpen,
-          clampClose: !!signals.solClampClose,
-        };
+          prevSolRef.current = {
+            fwdRetract: !!signals.solForwardRetract,
+            fwdExtend: !!signals.solForwardExtend,
+            liftRetract: !!signals.solLiftRetract,
+            liftExtend: !!signals.solLiftExtend,
+            clampOpen: !!signals.solClampOpen,
+            clampClose: !!signals.solClampClose,
+          };
+        }
 
         // 指示灯
         store.setIndicator('home', !!signals.indOrigin);
@@ -136,22 +195,15 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
 
         // ===== 模型 → PLC：磁性开关写入 PLC 输入 =====
         const cyls = store.cylinders;
-        const magForwardRear = cyls.forward.magRear;
-        const magForwardFront = cyls.forward.magFront;
-        const magLiftRear = cyls.lift.magRear;
-        const magLiftFront = cyls.lift.magFront;
-        const magClampOpen = cyls.clamp.magRear;
-        const magClampClose = cyls.clamp.magFront;
-
         const varNames = [
           'MAG_FORWARD_REAR', 'MAG_FORWARD_FRONT',
           'MAG_LIFT_REAR', 'MAG_LIFT_FRONT',
           'MAG_CLAMP_OPEN', 'MAG_CLAMP_CLOSE',
         ];
         await plcService.writeVars(varNames, [
-          magForwardRear, magForwardFront,
-          magLiftRear, magLiftFront,
-          magClampOpen, magClampClose,
+          cyls.forward.magRear, cyls.forward.magFront,
+          cyls.lift.magRear, cyls.lift.magFront,
+          cyls.clamp.magFront, cyls.clamp.magRear,
         ]);
       } catch (e) {
         console.error('[轮询] 失败:', e instanceof Error ? e.message : String(e));
@@ -167,19 +219,28 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
+  // 保持 ref 同步
+  stopPollingRef.current = stopPolling;
+
   /* ---- 连接/断开 ---- */
   const handleConnect = async () => {
     setBusy(true);
     setConnMsg('');
     try {
-      const result = await plcService.connect({
-        host: 'localhost',
-        port: 0,
-        protocol: 'mitsubishi',
-      });
+      const config: Parameters<typeof plcService.connect>[0] = {
+        host,
+        port: parseInt(port, 10) || 0,
+        protocol,
+      };
+      if (protocol === 's7') {
+        config.rack = parseInt(rack, 10) || 0;
+        config.slot = parseInt(slot, 10) || 1;
+      }
+      const result = await plcService.connect(config);
       if (!result.success) throw new Error(result.error || '连接失败');
       setPlcConnected(true);
-      setConnMsg('已连接 三菱 MX Component');
+      const protoLabel = PROTOCOL_OPTIONS.find((o) => o.value === protocol)?.label || protocol;
+      setConnMsg(`已连接 ${protoLabel}`);
       startPolling();
     } catch (e) {
       setPlcConnected(false);
@@ -192,7 +253,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
   const handleDisconnect = async () => {
     setBusy(true);
     stopPolling();
-    prevSol = { fwdRetract: false, fwdExtend: false, liftRetract: false, liftExtend: false, clampOpen: false, clampClose: false };
+    prevSolRef.current = { fwdRetract: false, fwdExtend: false, liftRetract: false, liftExtend: false, clampOpen: false, clampClose: false };
     try { await plcService.disconnect(); } catch {}
     setPlcConnected(false);
     setConnMsg('已断开');
@@ -213,6 +274,34 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
   const ia = ADDRESS.INDICATOR;
   const { MAG, SOLENOID } = ADDRESS;
 
+  type AddrInfo = { coil: number; s7: string; mitsubishi: string };
+
+  // 生成 IO 地址 tooltip 文本
+  const getAddr = (key: keyof typeof ba) => {
+    const b = ba[key];
+    if (protocol === 'mitsubishi') return b.mitsubishi;
+    if (protocol === 's7') return b.s7;
+    return `Coil ${b.coil}`;
+  };
+  const getMagAddr = <G extends keyof typeof MAG>(group: G, pos: keyof typeof MAG[G]) => {
+    const m = MAG[group][pos] as AddrInfo;
+    if (protocol === 'mitsubishi') return m.mitsubishi;
+    if (protocol === 's7') return m.s7;
+    return `Coil ${m.coil}`;
+  };
+  const getSolAddr = <G extends keyof typeof SOLENOID>(group: G, dir: keyof typeof SOLENOID[G]) => {
+    const s = SOLENOID[group][dir] as AddrInfo;
+    if (protocol === 'mitsubishi') return s.mitsubishi;
+    if (protocol === 's7') return s.s7;
+    return `Coil ${s.coil}`;
+  };
+  const getIndAddr = (color: keyof typeof ia) => {
+    const i = ia[color];
+    if (protocol === 'mitsubishi') return i.mitsubishi;
+    if (protocol === 's7') return i.s7;
+    return `Coil ${i.coil}`;
+  };
+
   return (
     <div className="space-y-2">
       {/* ===== PLC 连接 ===== */}
@@ -226,7 +315,73 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
           </div>
         </div>
 
-        <div className="text-[0.5rem] text-slate-500 mb-2">三菱 FX3U (MX Component)</div>
+        {/* 协议选择 */}
+        <div className="flex gap-1 mb-2">
+          {PROTOCOL_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              className={`btn btn-xs flex-1 touch-manipulation ${
+                protocol === opt.value ? 'btn-primary' : 'btn-outline'
+              }`}
+              style={{ fontSize: '0.55rem' }}
+              onClick={() => handleProtocolChange(opt.value)}
+              disabled={plcConnected}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 连接参数 */}
+        <div className="space-y-1.5 mb-2">
+          <div className="flex gap-1">
+            <input
+              type="text"
+              className="input input-xs flex-1"
+              placeholder="主机地址"
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              disabled={plcConnected}
+              style={{ fontSize: '0.55rem', minWidth: 0 }}
+            />
+            <input
+              type="number"
+              className="input input-xs"
+              placeholder="端口"
+              value={port}
+              onChange={(e) => setPort(e.target.value)}
+              disabled={plcConnected}
+              style={{ fontSize: '0.55rem', width: '4rem', minWidth: 0 }}
+            />
+          </div>
+
+          {protocol === 's7' && (
+            <div className="flex gap-1">
+              <label className="flex items-center gap-1 text-[0.5rem] text-slate-400">
+                Rack
+                <input
+                  type="number"
+                  className="input input-xs"
+                  value={rack}
+                  onChange={(e) => setRack(e.target.value)}
+                  disabled={plcConnected}
+                  style={{ fontSize: '0.55rem', width: '3rem' }}
+                />
+              </label>
+              <label className="flex items-center gap-1 text-[0.5rem] text-slate-400">
+                Slot
+                <input
+                  type="number"
+                  className="input input-xs"
+                  value={slot}
+                  onChange={(e) => setSlot(e.target.value)}
+                  disabled={plcConnected}
+                  style={{ fontSize: '0.55rem', width: '3rem' }}
+                />
+              </label>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-nowrap gap-1.5">
           <button
@@ -257,6 +412,32 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
       {/* ===== 自复位控制按钮 ===== */}
       <div className="card">
         <div className="section-title !mb-2">控制按钮（自复位）</div>
+
+        {/* 电磁阀类型切换 */}
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="text-[0.5rem] text-slate-500 shrink-0">电磁阀</span>
+          <div className="flex gap-0.5 flex-1">
+            <button
+              className={`btn btn-xs flex-1 touch-manipulation ${
+                solenoidType === 'double' ? 'btn-primary' : 'btn-outline'
+              }`}
+              style={{ fontSize: '0.55rem' }}
+              onClick={() => setSolenoidType('double')}
+            >
+              双电控
+            </button>
+            <button
+              className={`btn btn-xs flex-1 touch-manipulation ${
+                solenoidType === 'single' ? 'btn-primary' : 'btn-outline'
+              }`}
+              style={{ fontSize: '0.55rem' }}
+              onClick={() => setSolenoidType('single')}
+            >
+              单电控
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-nowrap gap-1.5 mb-2">
           <button
             className="btn btn-xs btn-success flex-1 touch-manipulation"
@@ -322,21 +503,21 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
           <div>
             <div className="text-[0.5rem] text-slate-500 mb-0.5">输入信号</div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="启动" active={!!ioSignals.start} addr={`X0/${ba.start.s7}`} />
-              <IOLed label="急停" active={!!ioSignals.estop} addr={`X1/${ba.estop.s7}`} />
-              <IOLed label="停止" active={!!ioSignals.stop} addr={`X2/${ba.stop.s7}`} />
+              <IOLed label="启动" active={!!ioSignals.start} addr={getAddr('start')} />
+              <IOLed label="急停" active={!!ioSignals.estop} addr={getAddr('estop')} />
+              <IOLed label="停止" active={!!ioSignals.stop} addr={getAddr('stop')} />
             </div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="水平原点" active={!!ioSignals.magForwardRear} addr={`X3/${MAG.forward.rear.s7}`} />
-              <IOLed label="水平动点" active={!!ioSignals.magForwardFront} addr={`X4/${MAG.forward.front.s7}`} />
+              <IOLed label="水平原点" active={!!ioSignals.magForwardRear} addr={getMagAddr('forward', 'rear')} />
+              <IOLed label="水平动点" active={!!ioSignals.magForwardFront} addr={getMagAddr('forward', 'front')} />
             </div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="升降原点" active={!!ioSignals.magLiftRear} addr={`X5/${MAG.lift.rear.s7}`} />
-              <IOLed label="升降动点" active={!!ioSignals.magLiftFront} addr={`X6/${MAG.lift.front.s7}`} />
+              <IOLed label="升降原点" active={!!ioSignals.magLiftRear} addr={getMagAddr('lift', 'rear')} />
+              <IOLed label="升降动点" active={!!ioSignals.magLiftFront} addr={getMagAddr('lift', 'front')} />
             </div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="夹爪松位" active={!!ioSignals.magClampOpen} addr={`X7/${MAG.clamp.open.s7}`} />
-              <IOLed label="夹爪紧位" active={!!ioSignals.magClampClose} addr={`X10/${MAG.clamp.close.s7}`} />
+              <IOLed label="夹爪松位" active={!!ioSignals.magClampOpen} addr={getMagAddr('clamp', 'open')} />
+              <IOLed label="夹爪紧位" active={!!ioSignals.magClampClose} addr={getMagAddr('clamp', 'close')} />
             </div>
           </div>
 
@@ -346,16 +527,28 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
           <div>
             <div className="text-[0.5rem] text-slate-500 mb-0.5">输出信号</div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="水平缩" active={!!ioSignals.solForwardRetract} addr={`Y0/${SOLENOID.forward.retract.s7}`} />
-              <IOLed label="水平伸" active={!!ioSignals.solForwardExtend} addr={`Y1/${SOLENOID.forward.extend.s7}`} />
+              <IOLed
+                label={solenoidType === 'single' ? '水平缩（未使用）' : '水平缩'}
+                active={solenoidType === 'double' && !!ioSignals.solForwardRetract}
+                addr={getSolAddr('forward', 'retract')}
+              />
+              <IOLed label="水平伸" active={!!ioSignals.solForwardExtend} addr={getSolAddr('forward', 'extend')} />
             </div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="升降缩" active={!!ioSignals.solLiftRetract} addr={`Y2/${SOLENOID.lift.retract.s7}`} />
-              <IOLed label="升降伸" active={!!ioSignals.solLiftExtend} addr={`Y3/${SOLENOID.lift.extend.s7}`} />
+              <IOLed
+                label={solenoidType === 'single' ? '升降缩（未使用）' : '升降缩'}
+                active={solenoidType === 'double' && !!ioSignals.solLiftRetract}
+                addr={getSolAddr('lift', 'retract')}
+              />
+              <IOLed label="升降伸" active={!!ioSignals.solLiftExtend} addr={getSolAddr('lift', 'extend')} />
             </div>
             <div className="flex flex-nowrap gap-1">
-              <IOLed label="夹爪松" active={!!ioSignals.solClampOpen} addr={`Y4/${SOLENOID.clamp.open.s7}`} />
-              <IOLed label="夹爪紧" active={!!ioSignals.solClampClose} addr={`Y5/${SOLENOID.clamp.close.s7}`} />
+              <IOLed
+                label={solenoidType === 'single' ? '夹爪松（未使用）' : '夹爪松'}
+                active={solenoidType === 'double' && !!ioSignals.solClampOpen}
+                addr={getSolAddr('clamp', 'open')}
+              />
+              <IOLed label="夹爪紧" active={!!ioSignals.solClampClose} addr={getSolAddr('clamp', 'close')} />
             </div>
           </div>
         </div>
@@ -365,10 +558,10 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
       <div className="card">
         <div className="section-title !mb-1.5">灯塔指示灯</div>
         <div className="grid grid-cols-4 gap-1">
-          <IndicatorLight label="原点" active={!!ioSignals.indOrigin} color="#3b82f6" addr={`Y6/${ia.origin.s7}`} />
-          <IndicatorLight label="运行" active={!!ioSignals.indWorking} color="#22c55e" addr={`Y7/${ia.working.s7}`} />
-          <IndicatorLight label="加工" active={!!ioSignals.indProcessing} color="#eab308" addr={`Y10/${ia.processing.s7}`} />
-          <IndicatorLight label="报警" active={!!ioSignals.indAlarm} color="#ef4444" addr={`Y11/${ia.alarm.s7}`} />
+          <IndicatorLight label="原点" active={!!ioSignals.indOrigin} color="#3b82f6" addr={getIndAddr('origin')} />
+          <IndicatorLight label="运行" active={!!ioSignals.indWorking} color="#22c55e" addr={getIndAddr('working')} />
+          <IndicatorLight label="加工" active={!!ioSignals.indProcessing} color="#eab308" addr={getIndAddr('processing')} />
+          <IndicatorLight label="报警" active={!!ioSignals.indAlarm} color="#ef4444" addr={getIndAddr('alarm')} />
         </div>
       </div>
 

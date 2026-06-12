@@ -157,8 +157,65 @@ export const ANIMATION = {
 } as const;
 
 // ============================================================
-// S7 变量名 → 地址 映射（用于 read-vars / write-vars）
+// ModbusTCP 变量名 → 线圈地址 映射
 // ============================================================
+
+export const MODBUS_READ_VARS = {
+  BUTTON_START: 0,
+  BUTTON_ESTOP: 1,
+  BUTTON_STOP:  2,
+  MAG_FORWARD_REAR:  3,
+  MAG_FORWARD_FRONT: 4,
+  MAG_LIFT_REAR:     5,
+  MAG_LIFT_FRONT:    6,
+  MAG_CLAMP_OPEN:    7,
+  MAG_CLAMP_CLOSE:   8,
+  SOLENOID_FORWARD_RETRACT: 10,
+  SOLENOID_FORWARD_EXTEND:  11,
+  SOLENOID_LIFT_RETRACT:    12,
+  SOLENOID_LIFT_EXTEND:     13,
+  SOLENOID_CLAMP_OPEN:      14,
+  SOLENOID_CLAMP_CLOSE:     15,
+  INDICATOR_ORIGIN:     16,
+  INDICATOR_WORKING:    17,
+  INDICATOR_PROCESSING: 18,
+  INDICATOR_ALARM:      19,
+} as const;
+
+export const MODBUS_WRITE_VARS = {
+  BUTTON_START: 0,
+  BUTTON_ESTOP: 1,
+  BUTTON_STOP:  2,
+  MAG_FORWARD_REAR:  3,
+  MAG_FORWARD_FRONT: 4,
+  MAG_LIFT_REAR:     5,
+  MAG_LIFT_FRONT:    6,
+  MAG_CLAMP_OPEN:    7,
+  MAG_CLAMP_CLOSE:   8,
+} as const;
+
+/** Modbus 线圈地址 (Coil 地址) */
+export const MODBUS_DISPLAY_VARS = {
+  BUTTON_START: 'Coil 0',
+  BUTTON_ESTOP: 'Coil 1',
+  BUTTON_STOP:  'Coil 2',
+  MAG_FORWARD_REAR:   'Coil 3',
+  MAG_FORWARD_FRONT:  'Coil 4',
+  MAG_LIFT_REAR:      'Coil 5',
+  MAG_LIFT_FRONT:     'Coil 6',
+  MAG_CLAMP_OPEN:     'Coil 7',
+  MAG_CLAMP_CLOSE:    'Coil 8',
+  SOLENOID_FORWARD_RETRACT: 'Coil 10',
+  SOLENOID_FORWARD_EXTEND:  'Coil 11',
+  SOLENOID_LIFT_RETRACT:    'Coil 12',
+  SOLENOID_LIFT_EXTEND:     'Coil 13',
+  SOLENOID_CLAMP_OPEN:      'Coil 14',
+  SOLENOID_CLAMP_CLOSE:     'Coil 15',
+  INDICATOR_ORIGIN:     'Coil 16',
+  INDICATOR_WORKING:    'Coil 17',
+  INDICATOR_PROCESSING: 'Coil 18',
+  INDICATOR_ALARM:      'Coil 19',
+} as const;
 
 export const S7_VARS = {
   BUTTON_START: 'M0.0',
@@ -181,6 +238,9 @@ export const S7_VARS = {
   INDICATOR_PROCESSING: 'M11.0',
   INDICATOR_ALARM:      'M11.1',
 } as const;
+
+/** S7 地址（用于 UI 显示） */
+export const S7_DISPLAY_VARS = S7_VARS;
 
 // ============================================================
 // 三菱 MC 变量名 → 地址 映射
