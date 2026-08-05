@@ -16,8 +16,10 @@ export function ManualPanel() {
   const cleanUpWorkpiece = useRobotStore((s) => s.cleanUpWorkpiece);
 
   return (
-    <div className="card !p-2.5">
-      <div className="section-title !mb-1.5">手动控制</div>
+    <div className="device-card">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm font-semibold text-white">手动控制</span>
+      </div>
 
       <div className="space-y-2">
         {(Object.entries(cylinders) as [CylinderName, CylData][]).map(([name, cyl]) => {
@@ -43,7 +45,7 @@ export function ManualPanel() {
               {/* 按钮行：左绿右蓝 */}
               <div className="flex gap-1.5 mb-1.5">
                 <button
-                  className="btn btn-xs btn-success flex-1 touch-manipulation"
+                  className="btn btn-sm btn-success flex-1 touch-manipulation"
                   onClick={() => setCylinder(name, leftExt)}
                   disabled={ext === leftExt}
                   aria-label={`${label}${left}`}
@@ -51,7 +53,7 @@ export function ManualPanel() {
                   {left}
                 </button>
                 <button
-                  className="btn btn-xs btn-primary flex-1 touch-manipulation"
+                  className="btn btn-sm btn-primary flex-1 touch-manipulation"
                   onClick={() => setCylinder(name, rightExt)}
                   disabled={ext === rightExt}
                   aria-label={`${label}${right}`}
@@ -72,7 +74,7 @@ export function ManualPanel() {
       <div className="divider !my-1.5" />
       <div className="flex gap-1.5 mb-1">
         <button
-          className="btn btn-xs btn-success flex-1 touch-manipulation"
+          className="btn btn-sm btn-success flex-1 touch-manipulation"
           onClick={spawnWorkpiece}
           disabled={workpiece.exists}
           aria-label="生成物料"
@@ -80,7 +82,7 @@ export function ManualPanel() {
           生成物料
         </button>
         <button
-          className="btn btn-xs btn-danger flex-1 touch-manipulation"
+          className="btn btn-sm btn-danger flex-1 touch-manipulation"
           onClick={cleanUpWorkpiece}
           disabled={!workpiece.exists}
           aria-label="清理物料"
@@ -89,7 +91,7 @@ export function ManualPanel() {
         </button>
       </div>
       <button
-        className="btn btn-xs btn-ghost w-full touch-manipulation"
+        className="btn btn-sm btn-ghost w-full touch-manipulation"
         onClick={() => useRobotStore.getState().resetAll()}
       >
         全部复位
