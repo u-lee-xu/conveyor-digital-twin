@@ -76,7 +76,7 @@ export class PlcWebSocketService {
 
   private clearHandlers() {
     this.messageHandlers.forEach((h) => {
-      try { h({ success: false, error: 'WebSocket连接已断开' }); } catch {}
+      try { h({ success: false, error: 'WebSocket连接已断开' }); } catch { /* 处理器自身异常忽略 */ }
     });
     this.messageHandlers.clear();
   }

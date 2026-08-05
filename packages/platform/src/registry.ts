@@ -1,5 +1,6 @@
 import type { DeviceDefinition } from './types';
 import { conveyorDevice } from '@digital-twin/conveyor-sorting';
+import { pneumaticDevice } from '@digital-twin/pneumatic-robot';
 
 /**
  * 设备注册表：平台统一外壳 + 设备插件列表。
@@ -7,6 +8,7 @@ import { conveyorDevice } from '@digital-twin/conveyor-sorting';
  */
 export const devices: DeviceDefinition[] = [
   conveyorDevice,
+  pneumaticDevice,
 ];
 
 export function getDevice(id: string): DeviceDefinition | undefined {

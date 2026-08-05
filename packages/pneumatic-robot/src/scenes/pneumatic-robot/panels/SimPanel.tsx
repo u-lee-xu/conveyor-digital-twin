@@ -254,7 +254,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
     setBusy(true);
     stopPolling();
     prevSolRef.current = { fwdRetract: false, fwdExtend: false, liftRetract: false, liftExtend: false, clampOpen: false, clampClose: false };
-    try { await plcService.disconnect(); } catch {}
+    try { await plcService.disconnect(); } catch { /* 断开失败无需处理 */ }
     setPlcConnected(false);
     setConnMsg('已断开');
     setIoSignals({});
@@ -267,7 +267,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
     const varMap = {
       start: 'BUTTON_START', estop: 'BUTTON_ESTOP', stop: 'BUTTON_STOP',
     };
-    try { await plcService.writeVar(varMap[key], value); } catch {}
+    try { await plcService.writeVar(varMap[key], value); } catch { /* 写入失败由轮询状态反馈 */ }
   }, [plcConnected]);
 
   const ba = ADDRESS.BUTTON;

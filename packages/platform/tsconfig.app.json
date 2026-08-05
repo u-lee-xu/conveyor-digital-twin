@@ -23,8 +23,10 @@
       "@digital-twin/shared": ["../shared/src"],
       "@digital-twin/shared/*": ["../shared/src/*"],
       "@digital-twin/conveyor-sorting": ["../conveyor-sorting/src"],
-      "@digital-twin/conveyor-sorting/*": ["../conveyor-sorting/src/*"]
+      "@digital-twin/conveyor-sorting/*": ["../conveyor-sorting/src/*"],
+      "@digital-twin/pneumatic-robot": ["../pneumatic-robot/src"],
+      "@digital-twin/pneumatic-robot/*": ["../pneumatic-robot/src/*"]
     }
   },
-  "include": ["src", "../shared/src", "../conveyor-sorting/src"]
+  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src"]
 }
