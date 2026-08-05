@@ -1,12 +1,21 @@
 import React from 'react';
 import type { Mode } from '../../types';
 
+export interface ModeOption {
+  id: Mode;
+  label: string;
+  icon: string;
+  color: string;
+}
+
 interface ModeSelectorProps {
   currentMode: Mode;
   onModeChange: (mode: Mode) => void;
+  /** 设备声明实现的模式列表；缺省时显示全部 4 种 */
+  modes?: ModeOption[];
 }
 
-const modes: { id: Mode; label: string; icon: string; color: string }[] = [
+const DEFAULT_MODES: ModeOption[] = [
   { id: 'manual', label: '手动', icon: '🎮', color: 'from-blue-500 to-cyan-500' },
   { id: 'auto', label: '自动', icon: '🤖', color: 'from-purple-500 to-pink-500' },
   { id: 'scoring', label: '评分', icon: '🏆', color: 'from-green-500 to-emerald-500' },
@@ -16,9 +25,15 @@ const modes: { id: Mode; label: string; icon: string; color: string }[] = [
 export const ModeSelector: React.FC<ModeSelectorProps> = ({
   currentMode,
   onModeChange,
+  modes = DEFAULT_MODES,
 }) => {
+  const columns = Math.min(Math.max(modes.length, 1), 4);
+
   return (
-    <div className="grid grid-cols-4 gap-3">
+    <div
+      className="grid gap-3"
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+    >
       {modes.map((mode) => (
         <button
           key={mode.id}
