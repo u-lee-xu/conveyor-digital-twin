@@ -25,9 +25,6 @@ export function ManualPanel() {
           const ext = cyl.extended;
           const pct = Math.round(cyl.position * 100);
           const barPct = name === 'clamp' ? 100 - pct : pct;
-          // 夹爪亮灭顺序与前后/升降对齐：extended→右LED亮，retracted→左LED亮
-          const ledLeft  = name === 'clamp' ? cyl.magRear : cyl.magFront;
-          const ledRight = name === 'clamp' ? cyl.magFront : cyl.magRear;
 
           return (
             <div key={name} className="rounded-lg border border-slate-700/25 bg-slate-800/25 p-2">
@@ -63,13 +60,9 @@ export function ManualPanel() {
                 </button>
               </div>
 
-              {/* 进度条 + LED 行 */}
-              <div className="flex items-center gap-1.5">
-                <div className="progress-bar flex-1">
-                  <div className="progress-fill" style={{ width: `${barPct}%` }} />
-                </div>
-                <span className={`sensor-led ${ledLeft ? 'sensor-led-on' : 'sensor-led-off'}`} />
-                <span className={`sensor-led ${ledRight ? 'sensor-led-on' : 'sensor-led-off'}`} />
+              {/* 进度条 */}
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${barPct}%` }} />
               </div>
             </div>
           );
