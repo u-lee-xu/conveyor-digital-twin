@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@config "../tailwind.config.js";
+@source "../../shared/src";
 
 /* 全局样式 */
 * {
