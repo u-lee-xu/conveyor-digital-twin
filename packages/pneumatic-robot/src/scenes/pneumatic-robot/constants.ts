@@ -146,6 +146,65 @@ export function rodTipLocalY(bodyLength: number, strokeLength: number, position:
 }
 
 // ============================================================
+// KINEMATICS 运动学世界坐标（标签/标注用，与 RobotArm 一致）
+// ============================================================
+
+export interface RobotKinematics {
+  /** 前后气缸缸体中心 Y */
+  fwdWorldY: number;
+  /** 前后气缸缸体中心 Z */
+  fwdWorldZ: number;
+  /** 升降气缸缸体中心 Y（随前后气缸前伸） */
+  liftWorldY: number;
+  /** 升降气缸缸体中心 Z */
+  liftWorldZ: number;
+  /** 夹爪中心 Y（随升降气缸） */
+  gripperY: number;
+  /** 夹爪中心 Z */
+  gripperZ: number;
+  /** 信号灯塔顶部 Y */
+  towerY: number;
+  /** 信号灯塔 Z */
+  towerZ: number;
+}
+
+export function computeKinematics(forwardPos: number, liftPos: number): RobotKinematics {
+  const baseH = COMPONENT.BASE_SIZE[1];
+  const baseD = COMPONENT.BASE_SIZE[2];
+  const postH = COMPONENT.POST_SIZE[1];
+  const cantH = COMPONENT.CANTILEVER_SIZE[1];
+  const fBodyR = COMPONENT.FORWARD_CYLINDER_BODY_RADIUS;
+  const fBodyL = COMPONENT.FORWARD_CYLINDER_BODY_LENGTH;
+  const fStroke = COMPONENT.FORWARD_CYLINDER_STROKE;
+  const lBodyL = COMPONENT.LIFT_CYLINDER_BODY_LENGTH;
+  const lStroke = COMPONENT.LIFT_CYLINDER_STROKE;
+  const plateThick = COMPONENT.MOUNT_PLATE_SIZE[1];
+
+  const cantBottomY = postH + baseH - cantH;
+  const fwdWorldY = cantBottomY - fBodyR - STRUCT.MOUNT_GAP;
+  const cantStartZ = -baseD / 4;
+  const fwdWorldZ = cantStartZ + fBodyL / 2;
+  const fwdRodTipWorldZ = fwdWorldZ + rodTipLocalY(fBodyL, fStroke, forwardPos);
+
+  const lHalf = lBodyL / 2;
+  const liftWorldY = fwdWorldY - lHalf - plateThick / 2 - STRUCT.PLATE_GAP;
+  const liftWorldZ = fwdRodTipWorldZ;
+  const liftRodTipWorldY = liftWorldY - rodTipLocalY(lBodyL, lStroke, liftPos);
+  const gripperY = liftRodTipWorldY - plateThick / 2 - STRUCT.PLATE_GAP;
+  const gripperZ = liftWorldZ;
+
+  const postTopY = postH + baseH;
+  const postCenterZ = -baseD / 4;
+  // 灯塔顶部：安装座 + 4 段（外壳+垫圈）+ 顶部半球
+  const mountH = 0.035;
+  const bodyH = 0.052;
+  const spacerH = 0.006;
+  const towerY = postTopY + mountH + bodyH * 0.5 + 3 * (bodyH + spacerH) + bodyH / 2;
+
+  return { fwdWorldY, fwdWorldZ, liftWorldY, liftWorldZ, gripperY, gripperZ, towerY, towerZ: postCenterZ };
+}
+
+// ============================================================
 // ANIMATION 动画参数
 // ============================================================
 
