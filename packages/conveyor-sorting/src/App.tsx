@@ -16,9 +16,6 @@ function App() {
   const mode = useDeviceStore((s) => s.mode);
   const setMode = useDeviceStore((s) => s.setMode);
   const isConnected = useDeviceStore((s) => s.isConnected);
-  const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
-  const cylinders = useDeviceStore((s) => s.cylinders);
-  const sensors = useDeviceStore((s) => s.sensors);
 
   const [showPlcHelp, setShowPlcHelp] = useState(false);
   const isMobile = useMobile();
@@ -87,8 +84,7 @@ function App() {
         <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 shadow-xl">
           <SimPanel
             step={simStep} isSimulationRunning={simRunning} errorMessage={simError}
-            stats={simStats} controlSignals={simControlSignals} sensors={sensors}
-            cylinders={cylinders} conveyorRunning={conveyorRunning}
+            stats={simStats} controlSignals={simControlSignals}
             onPublishAllFeedback={simPublishFeedback} onSimulationStart={simStart}
             onSimulationStop={simStop} onSimulationReset={simReset}
             onSpawnMaterial={simSpawnMaterial} onInitialize={simInitialize}

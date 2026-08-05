@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier';
@@ -25,9 +25,20 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
   SceneContent, 
   cameraPosition = [0, 5, 8] 
 }) => {
+  const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      setIsHidden(document.hidden);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#1e293b' }}>
       <Canvas
+        frameloop={isHidden ? 'never' : 'always'}
         camera={{ position: cameraPosition, fov: 45, near: 0.1, far: 1000 }}
         gl={{ antialias: true }}
         onCreated={({ gl }) => {

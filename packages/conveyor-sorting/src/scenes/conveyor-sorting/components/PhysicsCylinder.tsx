@@ -25,8 +25,7 @@ function DebugBox({ args, color = 0x00ff00, opacity = 0.25 }: {
 }
 
 export function PhysicsCylinder({ name, position }: { name: string; position: [number, number, number] }) {
-  const cylinders = useDeviceStore((s) => s.cylinders);
-  const cylinder = cylinders[name as keyof typeof cylinders];
+  const extended = useDeviceStore((s) => s.cylinders[name as keyof typeof s.cylinders].extended);
   const updateCylinderExtension = useDeviceStore((s) => s.updateCylinderExtension);
   const rodRef = useRef<Group>(null);
   const led1Ref = useRef<Mesh>(null);
@@ -37,11 +36,11 @@ export function PhysicsCylinder({ name, position }: { name: string; position: [n
 
   const targetExtend = isFeed ? CYLINDER_EXTEND_POS_FEED : CYLINDER_EXTEND_POS_SORT;
   const targetRetract = CYLINDER_RETRACT_POS;
-  const targetValue = cylinder.extended ? targetExtend : targetRetract;
+  const targetValue = extended ? targetExtend : targetRetract;
 
-  const currentExtensionRef = useRef(isFeed ? (cylinder.extended ? 0.405 : -0.22) : (cylinder.extended ? 0.33 : -0.22));
+  const currentExtensionRef = useRef(isFeed ? (extended ? 0.405 : -0.22) : (extended ? 0.33 : -0.22));
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!rodRef.current) return;
 
     const current = currentExtensionRef.current;
@@ -49,7 +48,8 @@ export function PhysicsCylinder({ name, position }: { name: string; position: [n
 
     let newExt = current;
     if (Math.abs(diff) > COMPONENT.CYLINDER_THRESHOLD) {
-      newExt = current + diff * COMPONENT.CYLINDER_SMOOTH_FACTOR;
+      const factor = 1 - Math.pow(1 - COMPONENT.CYLINDER_SMOOTH_FACTOR, delta * 60);
+      newExt = current + diff * factor;
     } else if (current !== targetValue) {
       newExt = targetValue;
     } else {

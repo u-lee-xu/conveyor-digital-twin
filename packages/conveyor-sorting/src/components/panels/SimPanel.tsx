@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SimStep } from '../../hooks/useSimMode';
+import { useDeviceStore } from '../../stores';
 
 interface SimPanelProps {
   step: SimStep;
@@ -19,17 +20,6 @@ interface SimPanelProps {
     sorting2CylinderValve: boolean;
     conveyor: boolean;
   };
-  sensors: {
-    feed: boolean;
-    color: boolean;
-    material: boolean;
-  };
-  cylinders: {
-    feed: { extended: boolean };
-    sorting1: { extended: boolean };
-    sorting2: { extended: boolean };
-  };
-  conveyorRunning: boolean;
   onPublishAllFeedback: () => void;
   onSimulationStart: (signal: boolean) => void;
   onSimulationStop: (signal: boolean) => void;
@@ -86,8 +76,6 @@ export const SimPanel: React.FC<SimPanelProps> = ({
   errorMessage,
   stats,
   controlSignals,
-  sensors,
-  cylinders,
   onPublishAllFeedback,
   onSimulationStart,
   onSimulationStop,
@@ -95,6 +83,10 @@ export const SimPanel: React.FC<SimPanelProps> = ({
   onSpawnMaterial,
   onInitialize,
 }) => {
+  const sensors = useDeviceStore((s) => s.sensors);
+  const feedExtended = useDeviceStore((s) => s.cylinders.feed.extended);
+  const sorting1Extended = useDeviceStore((s) => s.cylinders.sorting1.extended);
+  const sorting2Extended = useDeviceStore((s) => s.cylinders.sorting2.extended);
   if (step === 'DISCONNECTED' || step === 'ERROR') {
     return (
       <div className="space-y-3">
@@ -222,12 +214,12 @@ export const SimPanel: React.FC<SimPanelProps> = ({
         <div>
           <SectionHeader title="反馈信号" subtitle="仿真系统 -> PLC" color="green" />
           <div className="space-y-1">
-            <SignalRow modbusAddr={2} plcAddr="M2" label="上料缩回限位" val={!cylinders.feed.extended} color="green" />
-            <SignalRow modbusAddr={3} plcAddr="M3" label="上料伸出限位" val={cylinders.feed.extended} color="green" />
-            <SignalRow modbusAddr={4} plcAddr="M4" label="分拣1缩回限位" val={!cylinders.sorting1.extended} color="green" />
-            <SignalRow modbusAddr={5} plcAddr="M5" label="分拣1伸出限位" val={cylinders.sorting1.extended} color="green" />
-            <SignalRow modbusAddr={6} plcAddr="M6" label="分拣2缩回限位" val={!cylinders.sorting2.extended} color="green" />
-            <SignalRow modbusAddr={7} plcAddr="M7" label="分拣2伸出限位" val={cylinders.sorting2.extended} color="green" />
+            <SignalRow modbusAddr={2} plcAddr="M2" label="上料缩回限位" val={!feedExtended} color="green" />
+            <SignalRow modbusAddr={3} plcAddr="M3" label="上料伸出限位" val={feedExtended} color="green" />
+            <SignalRow modbusAddr={4} plcAddr="M4" label="分拣1缩回限位" val={!sorting1Extended} color="green" />
+            <SignalRow modbusAddr={5} plcAddr="M5" label="分拣1伸出限位" val={sorting1Extended} color="green" />
+            <SignalRow modbusAddr={6} plcAddr="M6" label="分拣2缩回限位" val={!sorting2Extended} color="green" />
+            <SignalRow modbusAddr={7} plcAddr="M7" label="分拣2伸出限位" val={sorting2Extended} color="green" />
             <SignalRow modbusAddr={8} plcAddr="M8" label="上料传感器" val={sensors.feed} color="green" />
             <SignalRow modbusAddr={9} plcAddr="M9" label="色标传感器" val={sensors.color} color="green" />
             <SignalRow modbusAddr={10} plcAddr="M10" label="物料传感器" val={sensors.material} color="green" />
