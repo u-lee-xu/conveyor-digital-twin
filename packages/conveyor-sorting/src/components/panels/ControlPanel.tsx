@@ -228,40 +228,39 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
               <span className={`w-3 h-3 rounded-full ${signalTower.red ? 'bg-red-500' : 'bg-gray-600'}`}></span>
               <span className="text-xs font-medium text-gray-300">红灯</span>
             </div>
-            <Button
+            <button
+              className={`btn btn-sm ${signalTower.red ? 'btn-danger' : 'btn-outline'} touch-manipulation`}
               onClick={() => setSignalTower({ red: !signalTower.red })}
-              variant={signalTower.red ? 'danger' : 'default'}
-              size="sm"
+              aria-label="红灯指示灯"
             >
               {signalTower.red ? '熄灭' : '点亮'}
-            </Button>
+            </button>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded-full ${signalTower.yellow ? 'bg-yellow-500' : 'bg-gray-600'}`}></span>
               <span className="text-xs font-medium text-gray-300">黄灯</span>
             </div>
-            <Button
+            <button
+              className={`btn btn-sm ${signalTower.yellow ? 'btn-warning' : 'btn-outline'} touch-manipulation`}
               onClick={() => setSignalTower({ yellow: !signalTower.yellow })}
-              variant={signalTower.yellow ? 'warning' : 'default'}
-              size="sm"
-              className="text-white"
+              aria-label="黄灯指示灯"
             >
               {signalTower.yellow ? '熄灭' : '点亮'}
-            </Button>
+            </button>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={`w-3 h-3 rounded-full ${signalTower.green ? 'bg-green-500' : 'bg-gray-600'}`}></span>
               <span className="text-xs font-medium text-gray-300">绿灯</span>
             </div>
-            <Button
+            <button
+              className={`btn btn-sm ${signalTower.green ? 'btn-success' : 'btn-outline'} touch-manipulation`}
               onClick={() => setSignalTower({ green: !signalTower.green })}
-              variant={signalTower.green ? 'success' : 'default'}
-              size="sm"
+              aria-label="绿灯指示灯"
             >
               {signalTower.green ? '熄灭' : '点亮'}
-            </Button>
+            </button>
           </div>
         </div>
       </div>

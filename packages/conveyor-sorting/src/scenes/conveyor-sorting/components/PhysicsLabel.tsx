@@ -9,7 +9,7 @@ export function PhysicsLabel({ text, position, offset = [0, 0.5, 0], color = 'bl
   if (!showLabels) return null;
   const c = VISUAL.LABEL_COLORS[color] || VISUAL.LABEL_COLORS.blue;
   return (
-    <Html position={[position[0] + offset[0], position[1] + offset[1], position[2] + offset[2]]} center>
+    <Html position={[position[0] + offset[0], position[1] + offset[1], position[2] + offset[2]]} center zIndexRange={[1, 0]}>
       <div style={{
         padding: '4px 10px',
         borderRadius: '6px',
