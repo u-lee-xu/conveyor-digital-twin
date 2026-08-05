@@ -209,8 +209,8 @@ for (const [key, color] of Object.entries(BEACON_COLORS)) {
 // ========== 单立柱机架 ==========
 function RobotFrame({ indicators }: { indicators: { running: boolean; home: boolean; processing: boolean; alarm: boolean } }) {
   const [, postH] = COMPONENT.POST_SIZE;
-  const [_baseW, baseH, baseD] = COMPONENT.BASE_SIZE;
-  const [_cantW, cantH, cantL] = COMPONENT.CANTILEVER_SIZE;
+  const [, baseH, baseD] = COMPONENT.BASE_SIZE;
+  const [, cantH, cantL] = COMPONENT.CANTILEVER_SIZE;
 
   const postTopY = postH + baseH;
   const postCenterZ = -baseD / 4;

@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       '@digital-twin/shared': path.resolve(__dirname, '../shared/src'),
       '@digital-twin/conveyor-sorting': path.resolve(__dirname, '../conveyor-sorting/src'),
+      '@digital-twin/pneumatic-robot': path.resolve(__dirname, '../pneumatic-robot/src'),
     },
   },
   server: {

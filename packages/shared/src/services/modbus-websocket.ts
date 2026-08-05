@@ -65,7 +65,7 @@ export const S7_VARIABLES = {
   SENSOR_MATERIAL: 'M20.0',
 } as const;
 
-export type ProtocolType = 'modbus' | 's7';
+export type ProtocolType = 'modbus' | 's7' | 'mitsubishi';
 
 export interface ModbusConfig {
   host: string;
