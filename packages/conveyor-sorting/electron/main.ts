@@ -60,6 +60,7 @@ function createWindow(): void {
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.webContents.setFrameRate(30);
   }
 
   mainWindow.once('ready-to-show', () => {

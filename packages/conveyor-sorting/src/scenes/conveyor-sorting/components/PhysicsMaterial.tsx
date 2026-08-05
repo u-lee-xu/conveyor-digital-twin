@@ -26,7 +26,8 @@ function DebugBox({ args, color = 0x00ff00, opacity = 0.25 }: {
 }
 
 export function PhysicsMaterial() {
-  const material = useDeviceStore((s) => s.material);
+  const materialVisible = useDeviceStore((s) => s.material.visible);
+  const materialColor = useDeviceStore((s) => s.material.color);
   const clearMaterial = useDeviceStore((s) => s.clearMaterial);
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const lastVisible = useRef(false);
@@ -34,9 +35,10 @@ export function PhysicsMaterial() {
   const conveyorYRef = useRef<number>(COMPONENT.CONVEYOR_SURFACE_Y);
 
   useEffect(() => {
-    if (rigidBodyRef.current && material.visible && !lastVisible.current) {
+    if (rigidBodyRef.current && materialVisible && !lastVisible.current) {
+      const spawnPos = useDeviceStore.getState().material.position;
       rigidBodyRef.current.setTranslation(
-        { x: material.position[0], y: material.position[1], z: material.position[2] },
+        { x: spawnPos[0], y: spawnPos[1], z: spawnPos[2] },
         true
       );
       rigidBodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -46,11 +48,11 @@ export function PhysicsMaterial() {
         isKinematicRef.current = false;
       }
     }
-    lastVisible.current = material.visible;
-  }, [material.visible, material.position]);
+    lastVisible.current = materialVisible;
+  }, [materialVisible]);
 
   useFrame((_, delta) => {
-    if (!rigidBodyRef.current || !material.visible) return;
+    if (!rigidBodyRef.current || !materialVisible) return;
 
     const pos = rigidBodyRef.current.translation();
 
@@ -139,7 +141,7 @@ export function PhysicsMaterial() {
       const inRange = dx < PHYSICS.SENSOR_DETECT_RANGE_X && dz < PHYSICS.SENSOR_DETECT_RANGE_Z;
 
       if (sen.name === 'color') {
-        state.setSensor('color', inRange && material.color === 'black');
+        state.setSensor('color', inRange && materialColor === 'black');
       } else {
         state.setSensor(sen.name, inRange);
       }
@@ -149,7 +151,7 @@ export function PhysicsMaterial() {
   });
 
   useEffect(() => {
-    if (!material.visible || !rigidBodyRef.current) return;
+    if (!materialVisible || !rigidBodyRef.current) return;
     const checkPosition = () => {
       const pos = rigidBodyRef.current?.translation();
       if (pos && (pos.x > CONVEYOR_END_X || pos.z < CONVEYOR_Z_MIN + PHYSICS.CONVEYOR_Z_MARGIN || pos.y < PHYSICS.FALL_RECOVERY_Y)) {
@@ -158,9 +160,9 @@ export function PhysicsMaterial() {
     };
     const interval = setInterval(checkPosition, 100);
     return () => clearInterval(interval);
-  }, [material.visible, clearMaterial]);
+  }, [materialVisible, clearMaterial]);
 
-  if (!material.visible) return null;
+  if (!materialVisible) return null;
 
   return (
     <RigidBody
@@ -177,7 +179,7 @@ export function PhysicsMaterial() {
       <group visible={!COLLIDERS_ONLY}>
         <mesh
           geometry={geometries.material}
-          material={material.color === 'blue' ? materials.materialBlue : materials.materialBlack}
+          material={materialColor === 'blue' ? materials.materialBlue : materials.materialBlack}
         />
       </group>
     </RigidBody>
