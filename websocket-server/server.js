@@ -1,6 +1,19 @@
 const WebSocket = require('ws');
 const net = require('net');
 const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { spawn } = require('child_process');
+
+// 获取桌面路径，用于输出延迟测试报告
+function getDesktopPath() {
+  const desktop = path.join(os.homedir(), 'Desktop');
+  if (fs.existsSync(desktop)) return desktop;
+  // 中文系统桌面可能是"桌面"
+  const cn = path.join(os.homedir(), '桌面');
+  if (fs.existsSync(cn)) return cn;
+  return __dirname;
+}
 
 const MODBUS_ADDRESSES = {
   START: 0,
@@ -42,6 +55,55 @@ const S7_VARIABLES = {
   STOP: 'M21.0',
 };
 
+const MITSUBISHI_VARIABLES = {
+  // 输入 — 面板按钮 (X0~X2)
+  BUTTON_START: 'X0',
+  BUTTON_ESTOP: 'X1',
+  BUTTON_STOP:  'X2',
+  // 输入 — 磁性开关 (X3~X7, X10)
+  MAG_FORWARD_REAR:  'X3',
+  MAG_FORWARD_FRONT: 'X4',
+  MAG_LIFT_REAR:     'X5',
+  MAG_LIFT_FRONT:    'X6',
+  MAG_CLAMP_OPEN:    'X7',
+  MAG_CLAMP_CLOSE:   'X10',
+  // 输出 — 电磁阀线圈 (Y0~Y5)
+  SOLENOID_FORWARD_RETRACT: 'Y0',
+  SOLENOID_FORWARD_EXTEND:  'Y1',
+  SOLENOID_LIFT_RETRACT:    'Y2',
+  SOLENOID_LIFT_EXTEND:     'Y3',
+  SOLENOID_CLAMP_OPEN:      'Y4',
+  SOLENOID_CLAMP_CLOSE:     'Y5',
+  // 输出 — 指示灯 (Y6~Y7, Y10~Y11)
+  INDICATOR_ORIGIN:     'Y6',
+  INDICATOR_WORKING:    'Y7',
+  INDICATOR_PROCESSING: 'Y10',
+  INDICATOR_ALARM:      'Y11',
+};
+
+/** 气动机械手 Modbus 变量映射（变量名 → 线圈地址） */
+const PNEUMATIC_MODBUS_VARS = {
+  BUTTON_START: 0,
+  BUTTON_ESTOP: 1,
+  BUTTON_STOP:  2,
+  MAG_FORWARD_REAR:   3,
+  MAG_FORWARD_FRONT:  4,
+  MAG_LIFT_REAR:      5,
+  MAG_LIFT_FRONT:     6,
+  MAG_CLAMP_OPEN:     7,
+  MAG_CLAMP_CLOSE:    8,
+  SOLENOID_FORWARD_RETRACT: 10,
+  SOLENOID_FORWARD_EXTEND:  11,
+  SOLENOID_LIFT_RETRACT:    12,
+  SOLENOID_LIFT_EXTEND:     13,
+  SOLENOID_CLAMP_OPEN:      14,
+  SOLENOID_CLAMP_CLOSE:     15,
+  INDICATOR_ORIGIN:     16,
+  INDICATOR_WORKING:    17,
+  INDICATOR_PROCESSING: 18,
+  INDICATOR_ALARM:      19,
+};
+
 class SimpleModbusTCP {
   constructor() {
     this.client = null;
@@ -57,7 +119,7 @@ class SimpleModbusTCP {
       last10Write: [] // 最近10次写延迟
     };
     // 日志文件路径（延迟测试用）
-    this.latencyLogFile = 'latency_modbus.log';
+    this.latencyLogFile = path.join(getDesktopPath(), 'latency_modbus.log');
   }
 
   async connect(host, port) {
@@ -164,7 +226,7 @@ class SimpleModbusTCP {
           this.connected = false;
           this.client = null;
           console.log('ModbusTCP连接已断开');
-          this._printLatencyStats(); // 断开连接时也打印一次统计
+          this._printLatencyStats(true); // 断开连接时输出最终汇总报告
           resolve({ success: true });
         });
       });
@@ -174,7 +236,7 @@ class SimpleModbusTCP {
     return { success: true };
   }
 
-  _printLatencyStats() {
+  _printLatencyStats(isFinal = false) {
     const read = this.latencyStats.read;
     const write = this.latencyStats.write;
     if (read.length + write.length === 0) return;
@@ -204,8 +266,48 @@ class SimpleModbusTCP {
 
     // 输出到控制台
     console.log(output);
-    // 输出到文件
+    // 输出到日志文件
     fs.appendFileSync(this.latencyLogFile, output);
+
+    // 断开连接时输出格式化汇总报告到桌面
+    if (isFinal) {
+      const now = new Date();
+      const dateStr = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0');
+      const reportFile = path.join(__dirname, `延迟测试报告_ModbusTCP_${dateStr}.txt`);
+      const report =
+        `通信延迟测试报告 - ModbusTCP协议\n` +
+        `测试时间: ${now.toLocaleString('zh-CN')}\n` +
+        `测试环境: AutoShop仿真\n` +
+        `${'='.repeat(50)}\n` +
+        `\n` +
+        `读操作:\n` +
+        `  请求次数: ${read.length}\n` +
+        `  平均延迟: ${readStats.avg}ms\n` +
+        `  P95延迟:  ${readStats.p95}ms\n` +
+        `  最小延迟: ${readStats.min}ms\n` +
+        `  最大延迟: ${readStats.max}ms\n` +
+        `\n` +
+        `写操作:\n` +
+        `  请求次数: ${write.length}\n` +
+        `  平均延迟: ${writeStats.avg}ms\n` +
+        `  P95延迟:  ${writeStats.p95}ms\n` +
+        `  最小延迟: ${writeStats.min}ms\n` +
+        `  最大延迟: ${writeStats.max}ms\n` +
+        `\n` +
+        `${'='.repeat(50)}\n` +
+        `论文表3填写参考:\n` +
+        `  读操作平均延迟: ${readStats.avg}ms\n` +
+        `  读操作P95延迟:  ${readStats.p95}ms\n` +
+        `  写操作平均延迟: ${writeStats.avg}ms\n` +
+        `  写操作P95延迟:  ${writeStats.p95}ms\n` +
+        `  最大延迟: ${Math.max(readStats.max, writeStats.max)}ms\n`;
+      fs.writeFileSync(reportFile, report, 'utf-8');
+      console.log(`\n延迟测试报告已保存到: ${reportFile}`);
+    }
   }
 
   async readCoils(address, length) {
@@ -301,6 +403,42 @@ class SimpleModbusTCP {
       } catch (e) { resolve({ success: false, error: e.message }); }
     });
   }
+
+  /** 批量读取变量（气动机械手 - 一次读取全部 20 个线圈） */
+  async readVars(varNames) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    try {
+      // 一次读取线圈 0~19（20 个），映射回变量名
+      const result = await this.readCoils(0, 20);
+      if (!result.success) return result;
+      const values = {};
+      for (const name of varNames) {
+        const addr = PNEUMATIC_MODBUS_VARS[name];
+        if (addr !== undefined && addr < result.values.length) {
+          values[name] = !!result.values[addr];
+        }
+      }
+      return { success: true, values };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  /** 批量写入变量（逐个写线圈） */
+  async writeVars(varNames, values) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    try {
+      for (let i = 0; i < varNames.length; i++) {
+        const addr = PNEUMATIC_MODBUS_VARS[varNames[i]];
+        if (addr !== undefined) {
+          await this.writeCoil(addr, !!values[i]);
+        }
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
 }
 
 class SimpleS7Client {
@@ -321,7 +459,7 @@ class SimpleS7Client {
       last10Write: []
     };
     // 日志文件路径（延迟测试用）
-    this.latencyLogFile = 'latency_s7.log';
+    this.latencyLogFile = path.join(getDesktopPath(), 'latency_s7.log');
   }
 
   _cleanup() {
@@ -381,7 +519,7 @@ class SimpleS7Client {
     return this.nodes7.isoConnectionState === 4;
   }
 
-  _printLatencyStats() {
+  _printLatencyStats(isFinal = false) {
     const read = this.latencyStats.read;
     const write = this.latencyStats.write;
     if (read.length + write.length === 0) return;
@@ -411,8 +549,48 @@ class SimpleS7Client {
 
     // 输出到控制台
     console.log(output);
-    // 输出到文件
+    // 输出到日志文件
     fs.appendFileSync(this.latencyLogFile, output);
+
+    // 断开连接时输出格式化汇总报告到桌面
+    if (isFinal) {
+      const now = new Date();
+      const dateStr = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0');
+      const reportFile = path.join(__dirname, `延迟测试报告_S7_${dateStr}.txt`);
+      const report =
+        `通信延迟测试报告 - S7 Communication协议\n` +
+        `测试时间: ${now.toLocaleString('zh-CN')}\n` +
+        `测试环境: TIA Portal + PLCSIM + NetToPLCSim\n` +
+        `${'='.repeat(50)}\n` +
+        `\n` +
+        `读操作:\n` +
+        `  请求次数: ${read.length}\n` +
+        `  平均延迟: ${readStats.avg}ms\n` +
+        `  P95延迟:  ${readStats.p95}ms\n` +
+        `  最小延迟: ${readStats.min}ms\n` +
+        `  最大延迟: ${readStats.max}ms\n` +
+        `\n` +
+        `写操作:\n` +
+        `  请求次数: ${write.length}\n` +
+        `  平均延迟: ${writeStats.avg}ms\n` +
+        `  P95延迟:  ${writeStats.p95}ms\n` +
+        `  最小延迟: ${writeStats.min}ms\n` +
+        `  最大延迟: ${writeStats.max}ms\n` +
+        `\n` +
+        `${'='.repeat(50)}\n` +
+        `论文表3填写参考:\n` +
+        `  读操作平均延迟: ${readStats.avg}ms\n` +
+        `  读操作P95延迟:  ${readStats.p95}ms\n` +
+        `  写操作平均延迟: ${writeStats.avg}ms\n` +
+        `  写操作P95延迟:  ${writeStats.p95}ms\n` +
+        `  最大延迟: ${Math.max(readStats.max, writeStats.max)}ms\n`;
+      fs.writeFileSync(reportFile, report, 'utf-8');
+      console.log(`\n延迟测试报告已保存到: ${reportFile}`);
+    }
   }
 
   _startConnCheck() {
@@ -524,7 +702,7 @@ class SimpleS7Client {
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
           console.log('[S7] 断开超时，强制清理');
-          this._printLatencyStats();
+          this._printLatencyStats(true);
           resolve({ success: true });
         }, 3000);
 
@@ -532,17 +710,17 @@ class SimpleS7Client {
           oldNodes7.dropConnection(() => {
             clearTimeout(timeout);
             console.log('[S7] 连接已断开');
-            this._printLatencyStats();
+            this._printLatencyStats(true);
             resolve({ success: true });
           });
         } catch {
           clearTimeout(timeout);
-          this._printLatencyStats();
+          this._printLatencyStats(true);
           resolve({ success: true });
         }
       });
     }
-    this._printLatencyStats();
+    this._printLatencyStats(true);
     return { success: true };
   }
 
@@ -722,13 +900,449 @@ class SimpleS7Client {
   }
 }
 
+class MitsubishiMX {
+  constructor() {
+    this.connected = false;
+    this.variables = {};
+    this._station = 0;
+    this._ps = null;
+    this._psExe = '';
+    this._busy = false;
+    this._queue = [];
+    this._pending = null;
+    this._lineBuffer = '';
+    this._ready = false;
+    this._cmdId = 0;
+    this.latencyStats = { read: [], write: [], last10Read: [], last10Write: [] };
+    this.latencyLogFile = path.join(__dirname, 'latency_mitsubishi.log');
+  }
+
+  async _lock() {
+    if (!this._busy) { this._busy = true; return; }
+    return new Promise((resolve) => { this._queue.push(resolve); });
+  }
+
+  _unlock() {
+    if (this._queue.length > 0) {
+      const next = this._queue.shift();
+      next();
+    } else {
+      this._busy = false;
+    }
+  }
+
+  _printLatencyStats(isFinal = false) {
+    const read = this.latencyStats.read;
+    const write = this.latencyStats.write;
+    if (read.length + write.length === 0) return;
+
+    const calcStats = (arr) => {
+      if (arr.length === 0) return { avg: 0, min: 0, max: 0, p95: 0 };
+      const sorted = [...arr].sort((a, b) => a - b);
+      return {
+        avg: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
+        min: sorted[0],
+        max: sorted[sorted.length - 1],
+        p95: sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1]
+      };
+    };
+
+    const readStats = calcStats(read);
+    const writeStats = calcStats(write);
+
+    const timestamp = new Date().toISOString();
+    const output =
+      '\n' +
+      '='.repeat(60) + '\n' +
+      `[三菱MX 通信延迟统计] ${timestamp}\n` +
+      `读请求次数: ${read.length}, 平均: ${readStats.avg}ms, 最小: ${readStats.min}ms, 最大: ${readStats.max}ms, P95: ${readStats.p95}ms\n` +
+      `写请求次数: ${write.length}, 平均: ${writeStats.avg}ms, 最小: ${writeStats.min}ms, 最大: ${writeStats.max}ms, P95: ${writeStats.p95}ms\n` +
+      '='.repeat(60) + '\n';
+
+    console.log(output);
+    fs.appendFileSync(this.latencyLogFile, output);
+
+    if (isFinal) {
+      const now = new Date();
+      const dateStr = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0');
+      const reportFile = path.join(__dirname, `延迟测试报告_三菱MX_${dateStr}.txt`);
+      const report =
+        `通信延迟测试报告 - 三菱MX Component\n` +
+        `测试时间: ${now.toLocaleString('zh-CN')}\n` +
+        `测试环境: 三菱FX3U via MX Component + GX Simulator 2\n` +
+        `${'='.repeat(50)}\n` +
+        `\n` +
+        `读操作:\n` +
+        `  请求次数: ${read.length}\n` +
+        `  平均延迟: ${readStats.avg}ms\n` +
+        `  P95延迟:  ${readStats.p95}ms\n` +
+        `  最小延迟: ${readStats.min}ms\n` +
+        `  最大延迟: ${readStats.max}ms\n` +
+        `\n` +
+        `写操作:\n` +
+        `  请求次数: ${write.length}\n` +
+        `  平均延迟: ${writeStats.avg}ms\n` +
+        `  P95延迟:  ${writeStats.p95}ms\n` +
+        `  最小延迟: ${writeStats.min}ms\n` +
+        `  最大延迟: ${writeStats.max}ms\n` +
+        `\n` +
+        `${'='.repeat(50)}\n` +
+        `论文表3填写参考:\n` +
+        `  读操作平均延迟: ${readStats.avg}ms\n` +
+        `  读操作P95延迟:  ${readStats.p95}ms\n` +
+        `  写操作平均延迟: ${writeStats.avg}ms\n` +
+        `  写操作P95延迟:  ${writeStats.p95}ms\n` +
+        `  最大延迟: ${Math.max(readStats.max, writeStats.max)}ms\n`;
+      fs.writeFileSync(reportFile, report, 'utf-8');
+      console.log(`\n延迟测试报告已保存到: ${reportFile}`);
+    }
+  }
+
+  _buildPSScript(station) {
+    return [
+      '[Console]::InputEncoding = [System.Text.Encoding]::UTF8',
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+      '$ErrorActionPreference = "Stop"',
+      `try {`,
+      `  $p = New-Object -ComObject 'ActUtlType.ActUtlType'`,
+      `  $p.ActLogicalStationNumber = ${station}`,
+      `  $r = $p.Open(); if ($r -ne 0) { throw 'Open failed (logical station not configured or MX Component not installed)' }`,
+      `  $v = -1; $r = $p.GetDevice('D0', [ref]$v)`,
+      `  if ($r -ne 0) { throw "GetDevice failed (code=$r, is GX Simulator2 running?)" }`,
+      `  Write-Host 'READY'`,
+      `} catch {`,
+      `  Write-Host ('ERRINIT:' + $_.Exception.Message)`,
+      `  exit 1`,
+      `}`,
+      `while ($line = [Console]::In.ReadLine()) {`,
+      `  $line = $line.Trim()`,
+      `  if ($line -eq '') { continue }`,
+      `  try {`,
+      `    $cmd = $line | ConvertFrom-Json`,
+      `    switch ($cmd.type) {`,
+      `      'read' {`,
+      `        $o = @{}`,
+      `        foreach ($d in $cmd.devices) {`,
+      `          try { $v = 0; $rc = $p.GetDevice($d, [ref]$v); $o[$d] = if ($rc -eq 0) { $v } else { -1 } }`,
+      `          catch { $o[$d] = -1 }`,
+      `        }`,
+      `        Write-Host ($o | ConvertTo-Json -Compress)`,
+      `      }`,
+      `      'write' {`,
+      `        $r = $p.SetDevice($cmd.device, $cmd.value)`,
+      `        if ($r -eq 0) { Write-Host '{"ok":true}' }`,
+      `        else { Write-Host ('{"ok":false,"err":"' + $r + '"}') }`,
+      `      }`,
+      `      'write-batch' {`,
+      `        $e = @()`,
+      `        for ($i = 0; $i -lt $cmd.devices.Count; $i++) {`,
+      `          $r = $p.SetDevice($cmd.devices[$i], $cmd.values[$i])`,
+      `          if ($r -ne 0) { $e += ($cmd.devices[$i] + ':' + $r) }`,
+      `        }`,
+      `        if ($e.Count -eq 0) { Write-Host '{"ok":true}' }`,
+      `        else { Write-Host ('{"ok":false,"err":"' + ($e -join ',') + '"}') }`,
+      `      }`,
+      `      'exit' {`,
+      `        $null = $p.Close()`,
+      `        [System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($p) | Out-Null`,
+      `        [System.GC]::Collect()`,
+      `        [System.GC]::WaitForPendingFinalizers()`,
+      `        Write-Host '{"ok":true}'`,
+      `        exit 0`,
+      `      }`,
+      `      default { Write-Host '{"error":"unknown command"}' }`,
+      `    }`,
+      `  } catch {`,
+      `    $msg = $_.Exception.Message -replace '"', "'"`,
+      `    Write-Host ('{"error":"' + $msg + '"}')`,
+      `  }`,
+      `}`,
+      `try { $null = $p.Close() } catch {}`,
+    ].join('\n');
+  }
+
+  _sendCommand(cmd) {
+    return new Promise((resolve, reject) => {
+      if (!this._ps || this._ps.killed) {
+        reject(new Error('PS进程未运行'));
+        return;
+      }
+      if (this._pending) {
+        reject(new Error('上一个命令尚未完成'));
+        return;
+      }
+      const timeout = setTimeout(() => {
+        this._pending = null;
+        reject(new Error('命令超时(15s)'));
+      }, 15000);
+      this._pending = { resolve, reject, timeout };
+      try {
+        this._ps.stdin.write(JSON.stringify(cmd) + '\n');
+      } catch (e) {
+        clearTimeout(timeout);
+        this._pending = null;
+        reject(e);
+      }
+    });
+  }
+
+  _resolvePending(data) {
+    if (!this._pending) return;
+    const { resolve, reject, timeout } = this._pending;
+    this._pending = null;
+    clearTimeout(timeout);
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.error) {
+        reject(new Error(parsed.error));
+      } else {
+        resolve(parsed);
+      }
+    } catch (e) {
+      reject(new Error('PS 响应解析失败: ' + data));
+    }
+  }
+
+  _rejectPending(err) {
+    if (!this._pending) return;
+    const { reject, timeout } = this._pending;
+    this._pending = null;
+    clearTimeout(timeout);
+    reject(err);
+  }
+
+  async connect(host, port) {
+    await this._lock();
+    try {
+      if (this._ps) {
+        this._killPS();
+      }
+
+      this._station = port ?? 0;
+      this._psExe = process.env.SystemRoot
+        ? path.join(process.env.SystemRoot, 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+        : 'powershell.exe';
+
+      console.log(`[三菱MX] 正在启动持久化PS进程，站号=${this._station}`);
+
+      const script = this._buildPSScript(this._station);
+      const tmpFile = path.join(__dirname, '_mx_bridge.ps1');
+      fs.writeFileSync(tmpFile, script, 'utf-8');
+
+      return new Promise((resolveConnect) => {
+        this._ready = false;
+        this._lineBuffer = '';
+
+        this._ps = spawn(this._psExe, [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpFile,
+        ], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true,
+        });
+
+        const startTimeout = setTimeout(() => {
+          this._killPS();
+          try { fs.unlinkSync(tmpFile); } catch {}
+          resolveConnect({ success: false, error: 'PS进程启动超时(30s)' });
+        }, 30000);
+
+        this._ps.stdout.on('data', (data) => {
+          this._lineBuffer += data.toString();
+          const lines = this._lineBuffer.split(/\r?\n/);
+          this._lineBuffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            if (!this._ready) {
+              if (trimmed === 'READY') {
+                this._ready = true;
+                this.connected = true;
+                clearTimeout(startTimeout);
+                try { fs.unlinkSync(tmpFile); } catch {}
+                console.log(`[三菱MX] 持久化PS进程就绪，站号=${this._station}`);
+                resolveConnect({ success: true });
+              } else if (trimmed.startsWith('ERRINIT:')) {
+                clearTimeout(startTimeout);
+                this._killPS();
+                try { fs.unlinkSync(tmpFile); } catch {}
+                console.log(`[三菱MX] COM初始化失败: ${trimmed}`);
+                resolveConnect({ success: false, error: trimmed.slice(8) });
+              }
+              continue;
+            }
+
+            this._resolvePending(trimmed);
+          }
+        });
+
+        this._ps.stderr.on('data', (data) => {
+          console.error('[三菱MX PS stderr]', data.toString().trim());
+        });
+
+        this._ps.on('close', (code) => {
+          clearTimeout(startTimeout);
+          try { fs.unlinkSync(tmpFile); } catch {}
+          this._rejectPending(new Error('PS进程意外退出(code=' + code + ')'));
+          this._ps = null;
+          this.connected = false;
+          this._ready = false;
+          console.log(`[三菱MX] PS进程退出, code=${code}`);
+        });
+
+        this._ps.on('error', (e) => {
+          clearTimeout(startTimeout);
+          try { fs.unlinkSync(tmpFile); } catch {}
+          this._rejectPending(e);
+          this._ps = null;
+          this.connected = false;
+          this._ready = false;
+          console.error('[三菱MX] PS进程错误:', e.message);
+          if (!this._ready) {
+            resolveConnect({ success: false, error: e.message });
+          }
+        });
+      });
+    } finally { this._unlock(); }
+  }
+
+  _killPS() {
+    if (this._ps && !this._ps.killed) {
+      try { this._ps.stdin.end(); } catch {}
+      try { this._ps.kill(); } catch {}
+    }
+    this._ps = null;
+    this.connected = false;
+    this._ready = false;
+  }
+
+  async disconnect() {
+    await this._lock();
+    try {
+      this._printLatencyStats(true);
+      if (this._ps && this._ready) {
+        try {
+          await this._sendCommand({ type: 'exit' });
+        } catch {}
+      }
+      // PS 进程已在 exit 命令中自行清理退出，不调用 _killPS() 强杀
+      this._ps = null;
+      this.connected = false;
+      this._ready = false;
+      return { success: true };
+    } finally { this._unlock(); }
+  }
+
+  shutdown() {
+    this._printLatencyStats(true);
+    this._killPS();
+  }
+
+  async readVars(varNames) {
+    if (!this.connected || !this._ps) {
+      return { success: false, error: '三菱MX未连接' };
+    }
+    await this._lock();
+    try {
+      const startTime = Date.now();
+      const devices = varNames.map(name => this.variables[name] || name);
+
+      const result = await this._sendCommand({ type: 'read', devices });
+
+      const latency = Date.now() - startTime;
+      this.latencyStats.read.push(latency);
+      this.latencyStats.last10Read.push(latency);
+      if (this.latencyStats.last10Read.length > 10) this.latencyStats.last10Read.shift();
+      const total = this.latencyStats.read.length + this.latencyStats.write.length;
+      if (total % 50 === 0) this._printLatencyStats();
+
+      const values = {};
+      let trueCount = 0;
+      for (let i = 0; i < varNames.length; i++) {
+        const val = result[devices[i]];
+        values[varNames[i]] = !!val;
+        if (val) trueCount++;
+      }
+      console.log('[三菱MX] 读取完成: ' + trueCount + '/' + varNames.length + ' 个为true, 延迟=' + latency + 'ms');
+      return { success: true, values };
+    } catch (e) {
+      console.error('[三菱MX] 读取失败:', e.message);
+      return { success: false, error: e.message };
+    } finally { this._unlock(); }
+  }
+
+  async writeVar(varName, value) {
+    if (!this.connected || !this._ps) {
+      return { success: false, error: '三菱MX未连接' };
+    }
+    await this._lock();
+    try {
+      const startTime = Date.now();
+      const device = this.variables[varName] || varName;
+
+      await this._sendCommand({ type: 'write', device, value: value ? 1 : 0 });
+
+      const latency = Date.now() - startTime;
+      this.latencyStats.write.push(latency);
+      this.latencyStats.last10Write.push(latency);
+      if (this.latencyStats.last10Write.length > 10) this.latencyStats.last10Write.shift();
+      const total = this.latencyStats.read.length + this.latencyStats.write.length;
+      if (total % 50 === 0) this._printLatencyStats();
+
+      console.log('[三菱MX] 写入成功:', varName, '=', value, '延迟=' + latency + 'ms');
+      return { success: true };
+    } catch (e) {
+      console.error('[三菱MX] 写入失败:', varName, e.message);
+      return { success: false, error: e.message };
+    } finally { this._unlock(); }
+  }
+
+  async writeVars(varNames, values) {
+    if (!this.connected || !this._ps) {
+      return { success: false, error: '三菱MX未连接' };
+    }
+    await this._lock();
+    try {
+      const startTime = Date.now();
+      const devices = varNames.map(name => this.variables[name] || name);
+      const vals = values.map(v => v ? 1 : 0);
+
+      const result = await this._sendCommand({ type: 'write-batch', devices, values: vals });
+
+      const latency = Date.now() - startTime;
+      this.latencyStats.write.push(latency);
+      this.latencyStats.last10Write.push(latency);
+      if (this.latencyStats.last10Write.length > 10) this.latencyStats.last10Write.shift();
+      const total = this.latencyStats.read.length + this.latencyStats.write.length;
+      if (total % 50 === 0) this._printLatencyStats();
+
+      if (result.ok) {
+        console.log('[三菱MX] 批量写入成功:', varNames.join(','), '延迟=' + latency + 'ms');
+        return { success: true };
+      } else {
+        console.error('[三菱MX] 批量写入失败:', varNames, result.err);
+        return { success: false, error: result.err };
+      }
+    } catch (e) {
+      console.error('[三菱MX] 批量写入失败:', varNames, e.message);
+      return { success: false, error: e.message };
+    } finally { this._unlock(); }
+  }
+}
+
 const wss = new WebSocket.Server({ port: 8081 });
 const modbusClient = new SimpleModbusTCP();
 const s7Client = new SimpleS7Client();
+const mitsubishiClient = new MitsubishiMX();
 let currentProtocol = null;
 
 console.log('WebSocket服务器启动在端口 8081');
-console.log('支持协议: Modbus TCP, Siemens S7 (ISO over TCP)');
+console.log('支持协议: Modbus TCP, Siemens S7 (ISO over TCP), 三菱 MX Component (via PowerShell)');
 
 async function gracefulShutdown() {
   console.log('正在优雅关闭...');
@@ -736,7 +1350,10 @@ async function gracefulShutdown() {
     await s7Client.disconnect();
   } else if (currentProtocol === 'modbus' && modbusClient.connected) {
     await modbusClient.disconnect();
+  } else if (currentProtocol === 'mitsubishi' && mitsubishiClient.connected) {
+    await mitsubishiClient.disconnect();
   }
+  mitsubishiClient.shutdown();
   wss.close();
   process.exit(0);
 }
@@ -752,6 +1369,7 @@ process.stdin.on('data', (data) => {
 
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
+process.on('exit', () => { mitsubishiClient.shutdown(); });
 
 wss.on('connection', (ws) => {
   ws.on('message', async (message) => {
@@ -771,6 +1389,9 @@ wss.on('connection', (ws) => {
               parsedData.rack || 0,
               parsedData.slot || 1
             );
+          } else if (currentProtocol === 'mitsubishi') {
+            mitsubishiClient.variables = parsedData.variables || MITSUBISHI_VARIABLES;
+            result = await mitsubishiClient.connect(parsedData.host, parsedData.port ?? 0);
           } else {
             result = await modbusClient.connect(parsedData.host, parsedData.port || 502);
           }
@@ -779,6 +1400,8 @@ wss.on('connection', (ws) => {
         case 'disconnect':
           if (currentProtocol === 's7') {
             result = await s7Client.disconnect();
+          } else if (currentProtocol === 'mitsubishi') {
+            result = await mitsubishiClient.disconnect();
           } else {
             result = await modbusClient.disconnect();
           }
@@ -788,6 +1411,8 @@ wss.on('connection', (ws) => {
         case 'write-coil':
           if (currentProtocol === 's7') {
             result = { success: false, error: 'S7协议使用write-var替代write-coil' };
+          } else if (currentProtocol === 'mitsubishi') {
+            result = { success: false, error: '三菱MC协议使用write-var替代write-coil' };
           } else {
             result = await modbusClient.writeCoil(parsedData.address, parsedData.value);
           }
@@ -796,6 +1421,8 @@ wss.on('connection', (ws) => {
         case 'write-coils':
           if (currentProtocol === 's7') {
             result = { success: false, error: 'S7协议使用write-vars替代write-coils' };
+          } else if (currentProtocol === 'mitsubishi') {
+            result = { success: false, error: '三菱MC协议使用write-vars替代write-coils' };
           } else {
             result = await modbusClient.writeCoils(parsedData.address, parsedData.values);
           }
@@ -804,26 +1431,46 @@ wss.on('connection', (ws) => {
         case 'read-coils':
           if (currentProtocol === 's7') {
             result = { success: false, error: 'S7协议使用read-vars替代read-coils' };
+          } else if (currentProtocol === 'mitsubishi') {
+            result = { success: false, error: '三菱MC协议使用read-vars替代read-coils' };
           } else {
             result = await modbusClient.readCoils(parsedData.address, parsedData.length);
           }
           break;
 
         case 'write-var':
-          result = await s7Client.writeVar(parsedData.name, parsedData.value);
+          if (currentProtocol === 'mitsubishi') {
+            result = await mitsubishiClient.writeVar(parsedData.name, parsedData.value);
+          } else {
+            result = await s7Client.writeVar(parsedData.name, parsedData.value);
+          }
           break;
 
         case 'write-vars':
-          result = await s7Client.writeVars(parsedData.names, parsedData.values);
+          if (currentProtocol === 'mitsubishi') {
+            result = await mitsubishiClient.writeVars(parsedData.names, parsedData.values);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.writeVars(parsedData.names, parsedData.values);
+          } else {
+            result = await s7Client.writeVars(parsedData.names, parsedData.values);
+          }
           break;
 
         case 'read-vars':
-          result = await s7Client.readVars(parsedData.names);
+          if (currentProtocol === 'mitsubishi') {
+            result = await mitsubishiClient.readVars(parsedData.names);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.readVars(parsedData.names);
+          } else {
+            result = await s7Client.readVars(parsedData.names);
+          }
           break;
 
         case 'get-status':
           if (currentProtocol === 's7') {
             result = { success: true, connected: s7Client.connected, protocol: 's7' };
+          } else if (currentProtocol === 'mitsubishi') {
+            result = { success: true, connected: mitsubishiClient.connected, protocol: 'mitsubishi' };
           } else {
             result = { success: true, connected: modbusClient.connected, protocol: 'modbus' };
           }
@@ -837,5 +1484,17 @@ wss.on('connection', (ws) => {
     } catch (error) {
       ws.send(JSON.stringify({ id: parsedData?.id || 'unknown', success: false, error: error.message }));
     }
+  });
+
+  ws.on('close', async () => {
+    console.log('[WS] 客户端断开，清理PLC连接');
+    if (currentProtocol === 's7' && s7Client.connected) {
+      await s7Client.disconnect();
+    } else if (currentProtocol === 'modbus' && modbusClient.connected) {
+      await modbusClient.disconnect();
+    } else if (currentProtocol === 'mitsubishi' && mitsubishiClient.connected) {
+      await mitsubishiClient.disconnect();
+    }
+    currentProtocol = null;
   });
 });
