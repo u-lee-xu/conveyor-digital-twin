@@ -79,7 +79,7 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({ mode }) 
     setPlcConfig({
       host: host.trim() || '127.0.0.1',
       port: Number.isFinite(nextPort) ? nextPort : 502,
-      protocol,
+      protocol: protocol === 's7' ? 's7' : 'modbus',
       rack: Number.isFinite(nextRack) ? nextRack : 0,
       slot: Number.isFinite(nextSlot) ? nextSlot : 1,
     });

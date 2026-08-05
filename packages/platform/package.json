@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@digital-twin/conveyor-sorting": "*",
+    "@digital-twin/pneumatic-robot": "*",
     "@digital-twin/shared": "*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

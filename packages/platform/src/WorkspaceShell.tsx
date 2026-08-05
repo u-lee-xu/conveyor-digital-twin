@@ -30,11 +30,12 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const ModePanel = activeMode?.panel;
   const Extras = device.sidebarExtras;
   const Effects = device.effects;
+  const Scene = device.SceneWrapper ?? PhysicsScene;
 
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
       <div className="absolute inset-0">
-        <PhysicsScene SceneContent={device.SceneContent} cameraPosition={device.cameraPosition} />
+        <Scene SceneContent={device.SceneContent} cameraPosition={device.cameraPosition} />
       </div>
 
       {Effects && <Effects />}

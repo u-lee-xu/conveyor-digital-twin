@@ -40,6 +40,11 @@ export interface DeviceDefinition {
   /** 3D 场景内容（设备包内的 SceneContent） */
   SceneContent: ComponentType;
   cameraPosition?: [number, number, number];
+  /**
+   * 自定义场景容器（如设备场景自带 Physics/Canvas，无法放进平台默认 PhysicsScene）。
+   * 缺省使用平台 PhysicsScene。
+   */
+  SceneWrapper?: ComponentType<{ SceneContent: ComponentType; cameraPosition?: [number, number, number] }>;
   /** 侧边栏常驻扩展（如视角控制） */
   sidebarExtras?: ComponentType;
   /** 常驻副作用（如评分监听 gate、调试钩子），工作区内始终挂载 */
