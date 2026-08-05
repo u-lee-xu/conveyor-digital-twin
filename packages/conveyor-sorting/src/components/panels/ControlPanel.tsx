@@ -1,6 +1,26 @@
 import React from 'react';
 import { Button } from '@digital-twin/shared';
 import { useDeviceStore } from '../../stores';
+import type { CylinderName } from '../../types';
+import { CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT } from '../scene/shared';
+
+function cylinderPct(extension: number, extendPos: number) {
+  const span = extendPos - CYLINDER_RETRACT_POS;
+  const pct = ((extension - CYLINDER_RETRACT_POS) / span) * 100;
+  return Math.round(Math.min(100, Math.max(0, pct)));
+}
+
+/** 气缸伸出进度条（与气动机械手风格统一） */
+function CylinderProgress({ name, extendPos }: { name: CylinderName; extendPos: number }) {
+  const currentExtension = useDeviceStore((s) => s.cylinders[name].currentExtension);
+  const pct = cylinderPct(currentExtension, extendPos);
+
+  return (
+    <div className="progress-bar flex-1">
+      <div className="progress-fill" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
 
 interface ControlPanelProps {
   isMobile?: boolean;
@@ -99,6 +119,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
               ↙ 缩回
             </Button>
           </div>
+          <div className="mt-2">
+            <CylinderProgress name="feed" extendPos={CYLINDER_EXTEND_POS_FEED} />
+          </div>
         </div>
 
         {/* 分拣1气缸 */}
@@ -127,6 +150,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
               ↙ 缩回
             </Button>
           </div>
+          <div className="mt-2">
+            <CylinderProgress name="sorting1" extendPos={CYLINDER_EXTEND_POS_SORT} />
+          </div>
         </div>
 
         {/* 分拣2气缸 */}
@@ -154,6 +180,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
             >
               ↙ 缩回
             </Button>
+          </div>
+          <div className="mt-2">
+            <CylinderProgress name="sorting2" extendPos={CYLINDER_EXTEND_POS_SORT} />
           </div>
         </div>
       </div>
