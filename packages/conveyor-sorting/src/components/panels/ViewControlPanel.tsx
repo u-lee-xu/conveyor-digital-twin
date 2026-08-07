@@ -3,7 +3,8 @@ import { Button } from '@digital-twin/shared';
 import { useDeviceStore } from '../../stores';
 
 export const ViewControlPanel: React.FC = () => {
-  const { showLabels, toggleLabels } = useDeviceStore();
+  const showLabels = useDeviceStore((s) => s.showLabels);
+  const toggleLabels = useDeviceStore((s) => s.toggleLabels);
 
   return (
     <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">

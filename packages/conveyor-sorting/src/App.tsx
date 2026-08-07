@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene, ModeSelector, modbusService, useMobile } from '@digital-twin/shared';
-import { ControlPanel, StatusPanel, DemoPanel, PlcConnectionPanel, ScoringPanel, SimPanel, ViewControlPanel, PlcHelpPanel } from './components/panels';
+import { PhysicsScene, ModeSelector, HelpPanel, modbusService, useMobile } from '@digital-twin/shared';
+import { ControlPanel, StatusPanel, DemoPanel, ScoringPanel, SimPanel, ViewControlPanel } from './components/panels';
+import { ConveyorPlcConnection } from './platform/ConveyorPlcConnection';
+import { buildHelpContent } from './constants/plc-addresses';
 import { useDeviceStore } from './stores';
 import { useDemoMode } from './hooks/useDemoMode';
 import { useSimMode } from './hooks/useSimMode';
@@ -17,9 +19,9 @@ function App() {
   const setMode = useDeviceStore((s) => s.setMode);
   const isConnected = useDeviceStore((s) => s.isConnected);
 
-  const [showPlcHelp, setShowPlcHelp] = useState(false);
   const isMobile = useMobile();
   const prevModeRef = useRef(mode);
+  const [showHelp, setShowHelp] = useState(false);
 
   const { state: demoState, isStarted: demoStarted, isPaused: demoPaused, startDemoMode, togglePause: demoTogglePause, resetDemo: demoReset } = useDemoMode();
 
@@ -70,7 +72,7 @@ function App() {
     if (mode === 'scoring') {
       return (
         <>
-          <PlcConnectionPanel mode="scoring" />
+          <ConveyorPlcConnection modeLabel="评分模式" />
           <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
             <ScoringPanel />
           </div>
@@ -80,7 +82,7 @@ function App() {
     // sim mode
     return (
       <>
-        <PlcConnectionPanel mode="sim" />
+        <ConveyorPlcConnection modeLabel="仿真模式" />
         <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 shadow-xl">
           <SimPanel
             step={simStep} isSimulationRunning={simRunning} errorMessage={simError}
@@ -129,11 +131,19 @@ function App() {
       {isMobile && (
         <div className="absolute bottom-4 left-4 right-4 z-10">
           <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl">
-            <ModeSelector currentMode={mode} onModeChange={setMode} />
+            <div className="flex items-center justify-between mb-3">
+              <ModeSelector currentMode={mode} onModeChange={setMode} />
+              <button
+                onClick={() => setShowHelp(true)}
+                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-xl"
+              >
+                ❓
+              </button>
+            </div>
             <div className="mt-4">
               {mode === 'manual' && <ControlPanel isMobile={true} />}
               {mode === 'auto' && <DemoPanel demoState={demoState} isStarted={demoStarted} isPaused={demoPaused} onStart={startDemoMode} onTogglePause={demoTogglePause} onReset={demoReset} />}
-              {mode === 'scoring' && (<><PlcConnectionPanel mode="scoring" /><ScoringPanel /></>)}
+              {mode === 'scoring' && (<><ConveyorPlcConnection modeLabel="评分模式" /><ScoringPanel /></>)}
               {mode === 'sim' && <div className="text-white text-center py-4">请在电脑端运行仿真</div>}
             </div>
           </div>
@@ -142,7 +152,7 @@ function App() {
 
       <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
 
-      {showPlcHelp && <PlcHelpPanel onClose={() => setShowPlcHelp(false)} />}
+      {showHelp && <HelpPanel content={buildHelpContent()} onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
