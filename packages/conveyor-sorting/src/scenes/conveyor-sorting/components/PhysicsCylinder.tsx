@@ -1,9 +1,10 @@
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/rapier';
 import { DoubleSide, type Group, type Mesh, type MeshStandardMaterial } from 'three';
 import { useDeviceStore } from '../../../stores';
 import { geometries, materials } from '../../../components/scene/shared';
+import { type CylinderName } from '../../../types/device';
 import {
   CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT,
   VISUAL, COMPONENT,
@@ -24,8 +25,8 @@ function DebugBox({ args, color = 0x00ff00, opacity = 0.25 }: {
   );
 }
 
-export function PhysicsCylinder({ name, position }: { name: string; position: [number, number, number] }) {
-  const extended = useDeviceStore((s) => s.cylinders[name as keyof typeof s.cylinders].extended);
+export function PhysicsCylinder({ name, position }: { name: CylinderName; position: [number, number, number] }) {
+  const extended = useDeviceStore((s) => s.cylinders[name].extended);
   const updateCylinderExtension = useDeviceStore((s) => s.updateCylinderExtension);
   const rodRef = useRef<Group>(null);
   const led1Ref = useRef<Mesh>(null);
@@ -38,7 +39,19 @@ export function PhysicsCylinder({ name, position }: { name: string; position: [n
   const targetRetract = CYLINDER_RETRACT_POS;
   const targetValue = extended ? targetExtend : targetRetract;
 
-  const currentExtensionRef = useRef(isFeed ? (extended ? 0.405 : -0.22) : (extended ? 0.33 : -0.22));
+  // 初始伸出位置：仅挂载时确定；后续由 useFrame 直接更新 three 对象，重渲染不会重置
+  const [initialExtension] = useState(isFeed ? (extended ? 0.405 : -0.22) : (extended ? 0.33 : -0.22));
+  const currentExtensionRef = useRef(initialExtension);
+
+  // 每实例创建一次 LED 材质（useFrame 中可变修改，不能共享单例），卸载时释放
+  const ledMats = useMemo(() => {
+    const base = materials.ledInactive;
+    return [base.clone(), base.clone()];
+  }, []);
+
+  useEffect(() => {
+    return () => ledMats.forEach((m) => m.dispose());
+  }, [ledMats]);
 
   useFrame((_, delta) => {
     if (!rodRef.current) return;
@@ -78,7 +91,7 @@ export function PhysicsCylinder({ name, position }: { name: string; position: [n
 
     currentExtensionRef.current = newExt;
     rodRef.current.position.y = newExt;
-    updateCylinderExtension(name as any, newExt);
+    updateCylinderExtension(name, newExt);
 
     if (pushPlateRef.current) {
       const pushPlateZ = getPushPlateWorldZ(position[2], newExt) + COMPONENT.CYLINDER_PUSH_OFFSET;
@@ -127,17 +140,17 @@ export function PhysicsCylinder({ name, position }: { name: string; position: [n
           ))}
 
           {[
-            { y: COMPONENT.CYLINDER_BODY_HALF_LEN - 0.1, ledRef: led1Ref, key: 'sw-ext' },
-            { y: -COMPONENT.CYLINDER_BODY_HALF_LEN + 0.1, ledRef: led2Ref, key: 'sw-ret' },
-          ].map(({ y, ledRef: ref, key }) => (
+            { y: COMPONENT.CYLINDER_BODY_HALF_LEN - 0.1, ledRef: led1Ref, mat: ledMats[0], key: 'sw-ext' },
+            { y: -COMPONENT.CYLINDER_BODY_HALF_LEN + 0.1, ledRef: led2Ref, mat: ledMats[1], key: 'sw-ret' },
+          ].map(({ y, ledRef: ref, mat, key }) => (
             <group key={key}>
               <mesh geometry={geometries.magneticSwitch} material={materials.magneticSwitch} position={[0, y, -0.1]}>
-                <mesh ref={ref} geometry={geometries.led} material={materials.ledInactive.clone()} position={[0, 0.01, -0.03]} />
+                <mesh ref={ref} geometry={geometries.led} material={mat} position={[0, 0.01, -0.03]} />
               </mesh>
             </group>
           ))}
 
-          <group ref={rodRef} position={[0, currentExtensionRef.current, 0]}>
+          <group ref={rodRef} position={[0, initialExtension, 0]}>
             <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, COMPONENT.CYLINDER_ROD_LEN / 2, 0]} />
             <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, COMPONENT.CYLINDER_ROD_LEN, 0]} />
           </group>

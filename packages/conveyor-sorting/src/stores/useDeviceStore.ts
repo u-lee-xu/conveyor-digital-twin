@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Mode, CylinderName, SensorName, MaterialColor } from '../types';
+import type { ProtocolType } from '@digital-twin/shared';
 
 export interface TraceEntry {
   timestamp: number;
@@ -23,7 +24,7 @@ interface DeviceStore {
     host: string;
     port: number;
     unitId: number;
-    protocol: 'modbus' | 's7';
+    protocol: ProtocolType;
     rack: number;
     slot: number;
   };
@@ -65,7 +66,10 @@ interface DeviceStore {
 
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
-  setPlcConfig: (config: Partial<{ host: string; port: number; unitId: number; protocol: 'modbus' | 's7'; rack: number; slot: number }>) => void;
+  setPlcConfig: (config: Partial<{ host: string; port: number; unitId: number; protocol: ProtocolType; rack: number; slot: number }>) => void;
+  /** 外部 PLC 断连通知计数（连接面板据此复位连接状态） */
+  plcDisconnectTick: number;
+  bumpPlcDisconnectTick: () => void;
 
   startRecording: () => void;
   stopRecording: () => void;
@@ -137,6 +141,7 @@ const initialState = {
   scoringComplete: false,
   scoringPrompt: '',
   isConnected: false,
+  plcDisconnectTick: 0,
 };
 
 function getInitialPlcConfig() {
@@ -170,7 +175,7 @@ function getInitialPlcConfig() {
   }
 }
 
-function persistPlcConfig(config: { host: string; port: number; unitId: number; protocol: 'modbus' | 's7'; rack: number; slot: number }) {
+function persistPlcConfig(config: { host: string; port: number; unitId: number; protocol: ProtocolType; rack: number; slot: number }) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem('plc-config', JSON.stringify(config));
 }
@@ -180,6 +185,7 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
 
   setMode: (mode: Mode) => set({ mode }),
   setConnected: (connected: boolean) => set({ isConnected: connected }),
+  bumpPlcDisconnectTick: () => set((s) => ({ plcDisconnectTick: s.plcDisconnectTick + 1 })),
   setPlcConfig: (config) => set((state) => {
     const nextConfig = {
       ...state.plcConfig,

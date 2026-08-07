@@ -1,4 +1,5 @@
-import { PlcConnectionPanel, SimPanel } from '../components/panels';
+import { ConveyorPlcConnection } from './ConveyorPlcConnection';
+import { SimPanel } from '../components/panels';
 import { useSimMode } from '../hooks/useSimMode';
 
 export function SimModePanel({ isMobile }: { isMobile?: boolean }) {
@@ -22,7 +23,7 @@ export function SimModePanel({ isMobile }: { isMobile?: boolean }) {
 
   return (
     <>
-      <PlcConnectionPanel mode="sim" />
+      <ConveyorPlcConnection modeLabel="仿真模式" />
       <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 shadow-xl">
         <SimPanel
           step={simStep}

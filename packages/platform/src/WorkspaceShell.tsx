@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { PhysicsScene, ModeSelector, useMobile } from '@digital-twin/shared';
+import { useEffect, useRef, useState } from 'react';
+import { PhysicsScene, ModeSelector, HelpPanel, useMobile } from '@digital-twin/shared';
 import type { DeviceDefinition } from './types';
 
 interface WorkspaceShellProps {
@@ -9,6 +9,7 @@ interface WorkspaceShellProps {
 
 export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const isMobile = useMobile();
+  const [showHelp, setShowHelp] = useState(false);
   const { mode, setMode } = device.useModeState();
   const onModeChangeRef = useRef(device.onModeChange);
   onModeChangeRef.current = device.onModeChange;
@@ -61,6 +62,15 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
                 <h1 className="text-lg font-bold text-white">{device.name}</h1>
                 <p className="text-xs text-gray-500">V{device.version} · 老徐</p>
               </div>
+              {device.helpContent && (
+                <button
+                  onClick={() => setShowHelp(true)}
+                  title="使用说明与地址映射"
+                  className="ml-auto w-9 h-9 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-lg"
+                >
+                  ❓
+                </button>
+              )}
             </div>
           </div>
 
@@ -86,6 +96,15 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
                 <span>返回</span>
               </button>
               <span className="text-sm font-bold text-white">{device.icon} {device.name}</span>
+              {device.helpContent && (
+                <button
+                  onClick={() => setShowHelp(true)}
+                  title="使用说明与地址映射"
+                  className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-lg"
+                >
+                  ❓
+                </button>
+              )}
             </div>
             <ModeSelector currentMode={mode} onModeChange={setMode} modes={device.modes} />
             <div className="mt-4">
@@ -96,6 +115,10 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
       )}
 
       <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
+
+      {device.helpContent && showHelp && (
+        <HelpPanel content={device.helpContent} onClose={() => setShowHelp(false)} />
+      )}
     </div>
   );
 }

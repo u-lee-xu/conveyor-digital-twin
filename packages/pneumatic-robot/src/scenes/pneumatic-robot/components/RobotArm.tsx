@@ -24,6 +24,8 @@ function mkMat(color: number, metalness: number, roughness: number) {
   return new THREE.MeshStandardMaterial({ color, metalness, roughness });
 }
 
+const CYLINDER_NAMES: CylinderName[] = ['forward', 'lift', 'clamp'];
+
 const sensorGeo = new THREE.BoxGeometry(
   STRUCT.SENSOR_DISPLAY_SIZE, STRUCT.SENSOR_DISPLAY_SIZE, STRUCT.SENSOR_DISPLAY_SIZE,
 );
@@ -302,7 +304,7 @@ export function RobotArm() {
   // 平滑动画
   useFrame((_, delta) => {
     const speed = ANIMATION.CYLINDER_SPEED * delta;
-    for (const name of ['forward', 'lift', 'clamp'] as CylinderName[]) {
+    for (const name of CYLINDER_NAMES) {
       const cyl = useRobotStore.getState().cylinders[name];
       const t = cyl.extended ? 1 : 0;
       if (Math.abs(cyl.position - t) > 0.001) {

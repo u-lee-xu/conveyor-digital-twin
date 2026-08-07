@@ -25,12 +25,14 @@ interface DemoPanelProps {
 }
 
 export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState, isStarted, isPaused, onStart, onTogglePause, onReset }) => {
-  const {
-    conveyorRunning,
-    cylinders,
-    sensors,
-    material,
-  } = useDeviceStore();
+  // 字段级选择器：避免整 store 订阅被物料位置等高频更新每帧触发重渲染
+  const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
+  const materialVisible = useDeviceStore((s) => s.material.visible);
+  const materialColor = useDeviceStore((s) => s.material.color);
+  const sensors = useDeviceStore((s) => s.sensors);
+  const feedExtended = useDeviceStore((s) => s.cylinders.feed.extended);
+  const sorting1Extended = useDeviceStore((s) => s.cylinders.sorting1.extended);
+  const sorting2Extended = useDeviceStore((s) => s.cylinders.sorting2.extended);
 
   const currentState = STATE_LABELS[demoState] || STATE_LABELS.IDLE;
 
@@ -115,11 +117,11 @@ export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState, isStarted, isPa
         {/* 物料信息 */}
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs text-gray-400">当前物料</span>
-          <span className={`status-badge ${material.visible ? 'status-badge-active' : 'status-badge-inactive'}`}>
-            {material.visible ? (
+          <span className={`status-badge ${materialVisible ? 'status-badge-active' : 'status-badge-inactive'}`}>
+            {materialVisible ? (
               <>
-                <span className={`w-2 h-2 rounded-full mr-1 ${material.color === 'blue' ? 'bg-blue-400' : 'bg-gray-800'}`}></span>
-                {material.color === 'blue' ? '蓝色' : '黑色'}
+                <span className={`w-2 h-2 rounded-full mr-1 ${materialColor === 'blue' ? 'bg-blue-400' : 'bg-gray-800'}`}></span>
+                {materialColor === 'blue' ? '蓝色' : '黑色'}
               </>
             ) : '无物料'}
           </span>
@@ -170,11 +172,11 @@ export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState, isStarted, isPa
               <span className="text-xs text-gray-400">上料气缸</span>
               <div className="flex gap-3">
                 <div className="flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${cylinders.feed.extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                  <span className={`w-2 h-2 rounded-full ${feedExtended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
                   <span className="text-xs text-gray-500">伸出</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${!cylinders.feed.extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                  <span className={`w-2 h-2 rounded-full ${!feedExtended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
                   <span className="text-xs text-gray-500">缩回</span>
                 </div>
               </div>
@@ -183,11 +185,11 @@ export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState, isStarted, isPa
               <span className="text-xs text-gray-400">分拣1气缸</span>
               <div className="flex gap-3">
                 <div className="flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${cylinders.sorting1.extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                  <span className={`w-2 h-2 rounded-full ${sorting1Extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
                   <span className="text-xs text-gray-500">伸出</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${!cylinders.sorting1.extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                  <span className={`w-2 h-2 rounded-full ${!sorting1Extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
                   <span className="text-xs text-gray-500">缩回</span>
                 </div>
               </div>
@@ -196,11 +198,11 @@ export const DemoPanel: React.FC<DemoPanelProps> = ({ demoState, isStarted, isPa
               <span className="text-xs text-gray-400">分拣2气缸</span>
               <div className="flex gap-3">
                 <div className="flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${cylinders.sorting2.extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                  <span className={`w-2 h-2 rounded-full ${sorting2Extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
                   <span className="text-xs text-gray-500">伸出</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${!cylinders.sorting2.extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
+                  <span className={`w-2 h-2 rounded-full ${!sorting2Extended ? 'bg-green-400' : 'bg-gray-600'}`}></span>
                   <span className="text-xs text-gray-500">缩回</span>
                 </div>
               </div>

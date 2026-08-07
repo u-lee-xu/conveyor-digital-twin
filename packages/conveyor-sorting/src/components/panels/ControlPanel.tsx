@@ -28,19 +28,20 @@ interface ControlPanelProps {
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, onPanelClose }) => {
-  const {
-    conveyorRunning,
-    cylinders,
-    material,
-    signalTower,
-    startConveyor,
-    stopConveyor,
-    extendCylinder,
-    retractCylinder,
-    spawnMaterial,
-    clearMaterial,
-    setSignalTower,
-  } = useDeviceStore();
+  // 字段级选择器：避免整 store 订阅被物料位置等高频更新每帧触发重渲染
+  const conveyorRunning = useDeviceStore((s) => s.conveyorRunning);
+  const feedExtended = useDeviceStore((s) => s.cylinders.feed.extended);
+  const sorting1Extended = useDeviceStore((s) => s.cylinders.sorting1.extended);
+  const sorting2Extended = useDeviceStore((s) => s.cylinders.sorting2.extended);
+  const materialVisible = useDeviceStore((s) => s.material.visible);
+  const signalTower = useDeviceStore((s) => s.signalTower);
+  const startConveyor = useDeviceStore((s) => s.startConveyor);
+  const stopConveyor = useDeviceStore((s) => s.stopConveyor);
+  const extendCylinder = useDeviceStore((s) => s.extendCylinder);
+  const retractCylinder = useDeviceStore((s) => s.retractCylinder);
+  const spawnMaterial = useDeviceStore((s) => s.spawnMaterial);
+  const clearMaterial = useDeviceStore((s) => s.clearMaterial);
+  const setSignalTower = useDeviceStore((s) => s.setSignalTower);
 
   return (
     <div className="space-y-3">
@@ -97,14 +98,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-300">上料气缸</span>
-            <span className={`status-badge ${cylinders.feed.extended ? 'status-badge-active' : 'status-badge-inactive'}`}>
-              {cylinders.feed.extended ? '伸出' : '缩回'}
+            <span className={`status-badge ${feedExtended ? 'status-badge-active' : 'status-badge-inactive'}`}>
+              {feedExtended ? '伸出' : '缩回'}
             </span>
           </div>
           <div className="flex gap-3">
             <Button 
               onClick={() => extendCylinder('feed')}
-              variant={cylinders.feed.extended ? 'primary' : 'default'}
+              variant={feedExtended ? 'primary' : 'default'}
               size="sm"
               className="flex-1 btn-hover-lift"
             >
@@ -112,7 +113,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
             </Button>
             <Button 
               onClick={() => retractCylinder('feed')}
-              variant={!cylinders.feed.extended ? 'warning' : 'default'}
+              variant={!feedExtended ? 'warning' : 'default'}
               size="sm"
               className="flex-1 btn-hover-lift text-white"
             >
@@ -128,14 +129,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-300">分拣1</span>
-            <span className={`status-badge ${cylinders.sorting1.extended ? 'status-badge-active' : 'status-badge-inactive'}`}>
-              {cylinders.sorting1.extended ? '伸出' : '缩回'}
+            <span className={`status-badge ${sorting1Extended ? 'status-badge-active' : 'status-badge-inactive'}`}>
+              {sorting1Extended ? '伸出' : '缩回'}
             </span>
           </div>
           <div className="flex gap-3">
             <Button 
               onClick={() => extendCylinder('sorting1')}
-              variant={cylinders.sorting1.extended ? 'primary' : 'default'}
+              variant={sorting1Extended ? 'primary' : 'default'}
               size="sm"
               className="flex-1 btn-hover-lift"
             >
@@ -143,7 +144,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
             </Button>
             <Button 
               onClick={() => retractCylinder('sorting1')}
-              variant={!cylinders.sorting1.extended ? 'warning' : 'default'}
+              variant={!sorting1Extended ? 'warning' : 'default'}
               size="sm"
               className="flex-1 btn-hover-lift text-white"
             >
@@ -159,14 +160,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-300">分拣2</span>
-            <span className={`status-badge ${cylinders.sorting2.extended ? 'status-badge-active' : 'status-badge-inactive'}`}>
-              {cylinders.sorting2.extended ? '伸出' : '缩回'}
+            <span className={`status-badge ${sorting2Extended ? 'status-badge-active' : 'status-badge-inactive'}`}>
+              {sorting2Extended ? '伸出' : '缩回'}
             </span>
           </div>
           <div className="flex gap-3">
             <Button 
               onClick={() => extendCylinder('sorting2')}
-              variant={cylinders.sorting2.extended ? 'primary' : 'default'}
+              variant={sorting2Extended ? 'primary' : 'default'}
               size="sm"
               className="flex-1 btn-hover-lift"
             >
@@ -174,7 +175,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
             </Button>
             <Button 
               onClick={() => retractCylinder('sorting2')}
-              variant={!cylinders.sorting2.extended ? 'warning' : 'default'}
+              variant={!sorting2Extended ? 'warning' : 'default'}
               size="sm"
               className="flex-1 btn-hover-lift text-white"
             >
@@ -191,14 +192,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
       <div className="device-card">
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm font-semibold text-white">物料</span>
-          <span className={`status-badge ${material.visible ? 'status-badge-active' : 'status-badge-inactive'}`}>
-            {material.visible ? '已生成' : '无物料'}
+          <span className={`status-badge ${materialVisible ? 'status-badge-active' : 'status-badge-inactive'}`}>
+            {materialVisible ? '已生成' : '无物料'}
           </span>
         </div>
         <div className="flex gap-3">
           <Button 
             onClick={spawnMaterial}
-            variant={material.visible ? 'default' : 'success'}
+            variant={materialVisible ? 'default' : 'success'}
             size="md"
             className="flex-1 btn-hover-lift"
             glow
@@ -207,7 +208,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
           </Button>
           <Button 
             onClick={clearMaterial}
-            variant={material.visible ? 'danger' : 'default'}
+            variant={materialVisible ? 'danger' : 'default'}
             size="md"
             className="flex-1 btn-hover-lift"
             glow

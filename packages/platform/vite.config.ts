@@ -9,11 +9,13 @@ export default defineConfig({
       '@digital-twin/shared': path.resolve(__dirname, '../shared/src'),
       '@digital-twin/conveyor-sorting': path.resolve(__dirname, '../conveyor-sorting/src'),
       '@digital-twin/pneumatic-robot': path.resolve(__dirname, '../pneumatic-robot/src'),
+      '@digital-twin/traffic-light': path.resolve(__dirname, '../traffic-light/src'),
     },
   },
   server: {
     host: '0.0.0.0',
     port: 5174,
+    allowedHosts: ['siit.duckdns.org'],
   },
   build: {
     rollupOptions: {

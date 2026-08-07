@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type AppMode = 'manual' | 'sim';
+export type AppMode = 'manual' | 'auto' | 'sim' | 'scoring';
 
 interface AppStoreState {
   mode: AppMode;

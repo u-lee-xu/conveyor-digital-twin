@@ -111,6 +111,8 @@ class SimpleModbusTCP {
     this.transactionId = 0;
     this.pendingRequests = new Map();
     this.receiveBuffer = Buffer.alloc(0);
+    // 变量名 → 线圈地址 映射（connect 消息下发，缺省气动机械手）
+    this.variables = {};
     // 延迟统计
     this.latencyStats = {
       read: [], // 读延迟
@@ -404,16 +406,19 @@ class SimpleModbusTCP {
     });
   }
 
-  /** 批量读取变量（气动机械手 - 一次读取全部 20 个线圈） */
+  /** 批量读取变量（按 connect 下发的变量名→线圈地址映射） */
   async readVars(varNames) {
     if (!this.connected) return { success: false, error: 'Modbus未连接' };
     try {
-      // 一次读取线圈 0~19（20 个），映射回变量名
-      const result = await this.readCoils(0, 20);
+      const vars = this.variables || PNEUMATIC_MODBUS_VARS;
+      // 一次读取 0~最大地址（缺省 20 个线圈），映射回变量名
+      const addrs = Object.values(vars).filter((v) => typeof v === 'number');
+      const maxAddr = addrs.length > 0 ? Math.max(...addrs) : 19;
+      const result = await this.readCoils(0, maxAddr + 1);
       if (!result.success) return result;
       const values = {};
       for (const name of varNames) {
-        const addr = PNEUMATIC_MODBUS_VARS[name];
+        const addr = vars[name];
         if (addr !== undefined && addr < result.values.length) {
           values[name] = !!result.values[addr];
         }
@@ -424,12 +429,27 @@ class SimpleModbusTCP {
     }
   }
 
+  /** 写入单个变量（按名称写线圈） */
+  async writeVar(varName, value) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    const vars = this.variables || PNEUMATIC_MODBUS_VARS;
+    const addr = vars[varName];
+    if (addr === undefined) return { success: false, error: `未知变量名: ${varName}` };
+    try {
+      const result = await this.writeCoil(addr, !!value);
+      return result;
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
   /** 批量写入变量（逐个写线圈） */
   async writeVars(varNames, values) {
     if (!this.connected) return { success: false, error: 'Modbus未连接' };
     try {
+      const vars = this.variables || PNEUMATIC_MODBUS_VARS;
       for (let i = 0; i < varNames.length; i++) {
-        const addr = PNEUMATIC_MODBUS_VARS[varNames[i]];
+        const addr = vars[varNames[i]];
         if (addr !== undefined) {
           await this.writeCoil(addr, !!values[i]);
         }
@@ -1393,6 +1413,7 @@ wss.on('connection', (ws) => {
             mitsubishiClient.variables = parsedData.variables || MITSUBISHI_VARIABLES;
             result = await mitsubishiClient.connect(parsedData.host, parsedData.port ?? 0);
           } else {
+            modbusClient.variables = parsedData.variables || PNEUMATIC_MODBUS_VARS;
             result = await modbusClient.connect(parsedData.host, parsedData.port || 502);
           }
           break;
@@ -1441,6 +1462,8 @@ wss.on('connection', (ws) => {
         case 'write-var':
           if (currentProtocol === 'mitsubishi') {
             result = await mitsubishiClient.writeVar(parsedData.name, parsedData.value);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.writeVar(parsedData.name, parsedData.value);
           } else {
             result = await s7Client.writeVar(parsedData.name, parsedData.value);
           }

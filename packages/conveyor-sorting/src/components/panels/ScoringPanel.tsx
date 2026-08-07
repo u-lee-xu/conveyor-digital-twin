@@ -26,18 +26,17 @@ const STATUS_BG: Record<ScoringItemStatus, string> = {
 };
 
 export const ScoringPanel: React.FC = () => {
-  const {
-    isScoringRunning,
-    scoringComplete,
-    setScoringRunning,
-    score,
-    scoringStatus,
-    scoringLog,
-    scoringPrompt,
-    resetScore,
-    clearTrace,
-    isConnected,
-  } = useDeviceStore();
+  // 字段级选择器：避免整 store 订阅被物料位置等高频更新每帧触发重渲染
+  const isScoringRunning = useDeviceStore((s) => s.isScoringRunning);
+  const scoringComplete = useDeviceStore((s) => s.scoringComplete);
+  const setScoringRunning = useDeviceStore((s) => s.setScoringRunning);
+  const score = useDeviceStore((s) => s.score);
+  const scoringStatus = useDeviceStore((s) => s.scoringStatus);
+  const scoringLog = useDeviceStore((s) => s.scoringLog);
+  const scoringPrompt = useDeviceStore((s) => s.scoringPrompt);
+  const resetScore = useDeviceStore((s) => s.resetScore);
+  const clearTrace = useDeviceStore((s) => s.clearTrace);
+  const isConnected = useDeviceStore((s) => s.isConnected);
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
