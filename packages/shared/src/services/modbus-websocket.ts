@@ -65,6 +65,29 @@ export const S7_VARIABLES = {
   SENSOR_MATERIAL: 'M20.0',
 } as const;
 
+/** 三菱 MC 变量名 → 软元件地址（输入用 X，输出用 Y） */
+export const MITSUBISHI_VARIABLES = {
+  START: 'X0',
+  RESET: 'X1',
+  STOP: 'X13',
+  FEED_CYLINDER_VALVE: 'Y0',
+  SORTING1_CYLINDER_VALVE: 'Y1',
+  SORTING2_CYLINDER_VALVE: 'Y2',
+  CONVEYOR: 'Y3',
+  SIGNAL_TOWER_RED: 'Y4',
+  SIGNAL_TOWER_GREEN: 'Y5',
+  SIGNAL_TOWER_YELLOW: 'Y6',
+  MAGNETIC_FEED_RETRACT: 'X2',
+  MAGNETIC_FEED_EXTEND: 'X3',
+  MAGNETIC_SORTING1_RETRACT: 'X4',
+  MAGNETIC_SORTING1_EXTEND: 'X5',
+  MAGNETIC_SORTING2_RETRACT: 'X6',
+  MAGNETIC_SORTING2_EXTEND: 'X7',
+  SENSOR_FEED: 'X10',
+  SENSOR_COLOR: 'X11',
+  SENSOR_MATERIAL: 'X12',
+} as const;
+
 export type ProtocolType = 'modbus' | 's7' | 'mitsubishi';
 
 export interface ModbusConfig {
@@ -154,8 +177,8 @@ export class ModbusService {
     this.heartbeatTimer = setInterval(async () => {
       try {
         let result;
-        if (this.currentProtocol === 's7') {
-          result = await this.readVarsS7(['START']);
+        if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
+          result = await this.readVars(['START']);
         } else {
           result = await this.readCoilsWithoutRecord(0, 1);
         }
@@ -340,6 +363,18 @@ export class ModbusService {
           this.startHeartbeat();
         }
         return { success: result.success, error: result.error };
+      } else if (protocol === 'mitsubishi') {
+        const result = await this.sendMessage({
+          type: 'connect',
+          protocol: 'mitsubishi',
+          host: config.host,
+          port: config.port || 0,
+        });
+        if (result.success) {
+          this.consecutiveErrors = 0;
+          this.startHeartbeat();
+        }
+        return { success: result.success, error: result.error };
       } else {
         const result = await this.sendMessage({
           type: 'connect',
@@ -382,7 +417,7 @@ export class ModbusService {
   }
 
   async writeCoils(address: number, values: boolean[]): Promise<ModbusResult> {
-    if (this.currentProtocol === 's7') {
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
       return { success: false, error: '当前使用S7协议，请使用writeVar方法' };
     }
     try {
@@ -418,7 +453,7 @@ export class ModbusService {
     return this.writeCoils(2, data);
   }
 
-  async writeFeedbackBatchS7(values: {
+  async writeFeedbackBatchVars(values: {
     magneticExtend: { feed: boolean, sort1: boolean, sort2: boolean },
     magneticRetract: { feed: boolean, sort1: boolean, sort2: boolean },
     sensors: { feed: boolean, color: boolean, material: boolean }
@@ -440,7 +475,7 @@ export class ModbusService {
       values.sensors.color,
       values.sensors.material
     ];
-    return this.writeVarsS7(names, vals);
+    return this.writeVars(names, vals);
   }
 
   async writeFeedbackBatch(values: {
@@ -448,15 +483,15 @@ export class ModbusService {
     magneticRetract: { feed: boolean, sort1: boolean, sort2: boolean },
     sensors: { feed: boolean, color: boolean, material: boolean }
   }): Promise<ModbusResult> {
-    if (this.currentProtocol === 's7') {
-      return this.writeFeedbackBatchS7(values);
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
+      return this.writeFeedbackBatchVars(values);
     } else {
       return this.writeFeedbackBatchModbus(values);
     }
   }
 
   async writeCoil(address: number, value: boolean): Promise<ModbusResult> {
-    if (this.currentProtocol === 's7') {
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
       return { success: false, error: '请使用writeVar方法' };
     }
     try {
@@ -473,7 +508,7 @@ export class ModbusService {
     }
   }
 
-  async writeVarS7(name: string, value: boolean): Promise<ModbusResult> {
+  async writeVar(name: string, value: boolean): Promise<ModbusResult> {
     try {
       const result = await this.sendMessage({
         type: 'write-var',
@@ -488,7 +523,7 @@ export class ModbusService {
     }
   }
 
-  async writeVarsS7(names: string[], values: boolean[]): Promise<ModbusResult> {
+  async writeVars(names: string[], values: boolean[]): Promise<ModbusResult> {
     try {
       const result = await this.sendMessage({
         type: 'write-vars',
@@ -504,8 +539,8 @@ export class ModbusService {
   }
 
   async readCoils(address: number, length: number): Promise<ModbusReadResult> {
-    if (this.currentProtocol === 's7') {
-      return { success: false, error: '请使用readVarsS7方法' };
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
+      return { success: false, error: '当前协议请使用readVars方法' };
     }
     try {
       const result = await this.sendMessage({
@@ -525,7 +560,7 @@ export class ModbusService {
     }
   }
 
-  async readVarsS7(varNames: string[]): Promise<{ success: boolean; values?: Record<string, boolean>; error?: string }> {
+  async readVars(varNames: string[]): Promise<{ success: boolean; values?: Record<string, boolean>; error?: string }> {
     try {
       const result = await this.sendMessage({
         type: 'read-vars',
@@ -578,22 +613,22 @@ export class ModbusService {
   }
 
   async writeFeedSensor(active: boolean): Promise<ModbusResult> {
-    if (this.currentProtocol === 's7') {
-      return this.writeVarS7('SENSOR_FEED', active);
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
+      return this.writeVar('SENSOR_FEED', active);
     }
     return this.writeCoil(MODBUS_ADDRESSES.SENSOR_FEED, active);
   }
 
   async writeColorSensor(active: boolean): Promise<ModbusResult> {
-    if (this.currentProtocol === 's7') {
-      return this.writeVarS7('SENSOR_COLOR', active);
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
+      return this.writeVar('SENSOR_COLOR', active);
     }
     return this.writeCoil(MODBUS_ADDRESSES.SENSOR_COLOR, active);
   }
 
   async writeMaterialSensor(active: boolean): Promise<ModbusResult> {
-    if (this.currentProtocol === 's7') {
-      return this.writeVarS7('SENSOR_MATERIAL', active);
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
+      return this.writeVar('SENSOR_MATERIAL', active);
     }
     return this.writeCoil(MODBUS_ADDRESSES.SENSOR_MATERIAL, active);
   }
@@ -603,7 +638,7 @@ export class ModbusService {
       return { success: false, error: '未连接' };
     }
 
-    if (this.currentProtocol === 's7') {
+    if (this.currentProtocol === 's7' || this.currentProtocol === 'mitsubishi') {
       const varMap = {
         feed: { extend: 'MAGNETIC_FEED_EXTEND', retract: 'MAGNETIC_FEED_RETRACT' },
         sorting1: { extend: 'MAGNETIC_SORTING1_EXTEND', retract: 'MAGNETIC_SORTING1_RETRACT' },
@@ -612,8 +647,8 @@ export class ModbusService {
       const vars = varMap[name];
       try {
         await Promise.all([
-          this.writeVarS7(vars.extend, extended),
-          this.writeVarS7(vars.retract, !extended),
+          this.writeVar(vars.extend, extended),
+          this.writeVar(vars.retract, !extended),
         ]);
         return { success: true };
       } catch (error) {
@@ -662,7 +697,7 @@ export class ModbusService {
           'FEED_CYLINDER_VALVE', 'SORTING1_CYLINDER_VALVE', 'SORTING2_CYLINDER_VALVE',
           'CONVEYOR', 'SIGNAL_TOWER_RED', 'SIGNAL_TOWER_GREEN', 'SIGNAL_TOWER_YELLOW'
         ];
-        const result = await this.readVarsS7(varNames);
+        const result = await this.readVars(varNames);
         if (result.success && result.values) {
           const values = new Array(107).fill(false);
           const v = result.values;
@@ -688,6 +723,34 @@ export class ModbusService {
           return { success: true, values };
         }
         console.warn('[S7] readAllControlSignals 失败:', result.error);
+        return { success: false, error: result.error };
+      } else if (this.currentProtocol === 'mitsubishi') {
+        const result = await this.readVars(Object.keys(MITSUBISHI_VARIABLES));
+        if (result.success && result.values) {
+          const values = new Array(107).fill(false);
+          const v = result.values;
+          values[MODBUS_ADDRESSES.START] = !!v['START'];
+          values[MODBUS_ADDRESSES.RESET] = !!v['RESET'];
+          values[MODBUS_ADDRESSES.MAGNETIC_FEED_RETRACT] = !!v['MAGNETIC_FEED_RETRACT'];
+          values[MODBUS_ADDRESSES.MAGNETIC_FEED_EXTEND] = !!v['MAGNETIC_FEED_EXTEND'];
+          values[MODBUS_ADDRESSES.MAGNETIC_SORTING1_RETRACT] = !!v['MAGNETIC_SORTING1_RETRACT'];
+          values[MODBUS_ADDRESSES.MAGNETIC_SORTING1_EXTEND] = !!v['MAGNETIC_SORTING1_EXTEND'];
+          values[MODBUS_ADDRESSES.MAGNETIC_SORTING2_RETRACT] = !!v['MAGNETIC_SORTING2_RETRACT'];
+          values[MODBUS_ADDRESSES.MAGNETIC_SORTING2_EXTEND] = !!v['MAGNETIC_SORTING2_EXTEND'];
+          values[MODBUS_ADDRESSES.SENSOR_FEED] = !!v['SENSOR_FEED'];
+          values[MODBUS_ADDRESSES.SENSOR_COLOR] = !!v['SENSOR_COLOR'];
+          values[MODBUS_ADDRESSES.SENSOR_MATERIAL] = !!v['SENSOR_MATERIAL'];
+          values[MODBUS_ADDRESSES.STOP] = !!v['STOP'];
+          values[MODBUS_ADDRESSES.FEED_CYLINDER_VALVE] = !!v['FEED_CYLINDER_VALVE'];
+          values[MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE] = !!v['SORTING1_CYLINDER_VALVE'];
+          values[MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE] = !!v['SORTING2_CYLINDER_VALVE'];
+          values[MODBUS_ADDRESSES.CONVEYOR] = !!v['CONVEYOR'];
+          values[MODBUS_ADDRESSES.SIGNAL_TOWER_RED] = !!v['SIGNAL_TOWER_RED'];
+          values[MODBUS_ADDRESSES.SIGNAL_TOWER_GREEN] = !!v['SIGNAL_TOWER_GREEN'];
+          values[MODBUS_ADDRESSES.SIGNAL_TOWER_YELLOW] = !!v['SIGNAL_TOWER_YELLOW'];
+          return { success: true, values };
+        }
+        console.warn('[三菱] readAllControlSignals 失败:', result.error);
         return { success: false, error: result.error };
       } else {
         const result = await this.readCoils(0, 107);
@@ -720,7 +783,25 @@ export class ModbusService {
       if (!varName) {
         return { success: false, error: `S7: 地址 ${address} 无映射` };
       }
-      return this.writeVarS7(varName, value);
+      return this.writeVar(varName, value);
+    } else if (this.currentProtocol === 'mitsubishi') {
+      const addressToVarName: Record<number, string> = {
+        [MODBUS_ADDRESSES.START]: 'START',
+        [MODBUS_ADDRESSES.RESET]: 'RESET',
+        [MODBUS_ADDRESSES.STOP]: 'STOP',
+        [MODBUS_ADDRESSES.FEED_CYLINDER_VALVE]: 'FEED_CYLINDER_VALVE',
+        [MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE]: 'SORTING1_CYLINDER_VALVE',
+        [MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE]: 'SORTING2_CYLINDER_VALVE',
+        [MODBUS_ADDRESSES.CONVEYOR]: 'CONVEYOR',
+        [MODBUS_ADDRESSES.SIGNAL_TOWER_RED]: 'SIGNAL_TOWER_RED',
+        [MODBUS_ADDRESSES.SIGNAL_TOWER_GREEN]: 'SIGNAL_TOWER_GREEN',
+        [MODBUS_ADDRESSES.SIGNAL_TOWER_YELLOW]: 'SIGNAL_TOWER_YELLOW',
+      };
+      const varName = addressToVarName[address];
+      if (!varName) {
+        return { success: false, error: `三菱: 地址 ${address} 无映射` };
+      }
+      return this.writeVar(varName, value);
     } else {
       return this.writeCoil(address, value);
     }

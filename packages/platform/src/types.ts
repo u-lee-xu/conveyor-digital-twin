@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { Mode, ProtocolType } from '@digital-twin/shared';
+import type { Mode, ProtocolType, HelpContent } from '@digital-twin/shared';
 
 /**
  * 统一模式框架中的单个模式定义。
@@ -35,6 +35,8 @@ export interface DeviceDefinition {
   description: string;
   /** 该设备支持的 PLC 协议 */
   protocols: ProtocolType[];
+  /** 帮助面板内容（设备注入，平台壳提供统一 ❓ 入口） */
+  helpContent?: HelpContent;
   /** 统一模式框架：设备声明自己实现的模式 */
   modes: PlatformModeDef[];
   /** 3D 场景内容（设备包内的 SceneContent） */

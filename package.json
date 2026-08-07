@@ -24,6 +24,8 @@
     "start:coal": "concurrently \"npm run websocket:dev\" \"npm run dev:coal\"",
     "dev:pneumatic": "npm run dev -w @digital-twin/pneumatic-robot",
     "start:pneumatic": "concurrently \"npm run websocket:dev\" \"npm run dev:pneumatic\"",
+    "dev:traffic-light": "npm run dev -w @digital-twin/traffic-light",
+    "start:traffic-light": "concurrently \"npm run websocket:dev\" \"npm run dev:traffic-light\"",
     "test:conveyor": "npm run test -w @digital-twin/conveyor-sorting",
     "test:coal": "npm run test -w @digital-twin/coal-sorting",
     "lint": "eslint packages/"

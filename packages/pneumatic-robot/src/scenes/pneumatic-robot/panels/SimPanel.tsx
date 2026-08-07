@@ -4,13 +4,13 @@ import { useRobotStore } from '../useRobotStore';
 import {
   ADDRESS, MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS,
 } from '../constants';
-import { plcService } from '../../../services/plc-websocket';
 import type { ProtocolType } from '../../../services/plc-websocket';
+import { plcService } from '../../../services/plc-websocket';
 
 /** 单个IO信号LED指示灯 */
 function IOLed({ label, active, addr }: { label: string; active: boolean; addr: string }) {
   return (
-    <div className="flex items-center gap-1 py-0.5 flex-1 min-w-0" title={addr} style={{ fontSize: '0.55rem' }}>
+    <div className="flex items-center gap-1 py-0.5 flex-1 min-w-0" title={addr} style={{ fontSize: '0.62rem' }}>
       <span className={`io-led ${active ? 'io-led-on' : 'io-led-off'}`} />
       <span className={`truncate ${active ? 'text-green-300' : 'text-slate-500'}`}>{label}</span>
     </div>
@@ -46,48 +46,31 @@ function IndicatorLight({ label, active, color, addr }: { label: string; active:
   );
 }
 
-const PROTOCOL_OPTIONS: { value: ProtocolType; label: string }[] = [
-  { value: 'modbus', label: 'ModbusTCP' },
-  { value: 's7', label: 'Siemens S7' },
-  { value: 'mitsubishi', label: '三菱 MX' },
-];
-
-const DEFAULT_PARAMS: Record<ProtocolType, { host: string; port: number; rack?: number; slot?: number }> = {
-  modbus: { host: 'localhost', port: 502 },
-  s7: { host: 'localhost', port: 102, rack: 0, slot: 1 },
-  mitsubishi: { host: 'localhost', port: 0 },
-};
-
 function getReadVars(protocol: ProtocolType) {
   if (protocol === 'modbus') return MODBUS_READ_VARS;
   if (protocol === 's7') return S7_VARS;
   return MITSUBISHI_READ_VARS;
 }
 
-export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
+export function SimPanel({ onShowHelp, protocol, connected, setConnected }: {
+  onShowHelp: () => void;
+  protocol: ProtocolType;
+  connected: boolean;
+  setConnected: (c: boolean) => void;
+}) {
   const simRunning = useAppStore((s) => s.simRunning);
   const simEStop = useAppStore((s) => s.simEStop);
   const setSimEStop = useAppStore((s) => s.setSimEStop);
-
-  // 协议 & 连接参数
-  const [protocol, setProtocol] = useState<ProtocolType>('mitsubishi');
-  const [host, setHost] = useState('localhost');
-  const [port, setPort] = useState('0');
-  const [rack, setRack] = useState('0');
-  const [slot, setSlot] = useState('1');
 
   // 电磁阀类型：单电控(弹簧复位) / 双电控(自保持)
   const [solenoidType, setSolenoidType] = useState<'single' | 'double'>('double');
   const solenoidTypeRef = useRef(solenoidType);
   solenoidTypeRef.current = solenoidType;
 
-  // PLC 连接状态
-  const [plcConnected, setPlcConnected] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [connMsg, setConnMsg] = useState('');
 
   // IO 信号实时状态（从 PLC 读取）
   const [ioSignals, setIoSignals] = useState<Record<string, boolean>>({});
+  const prevSignalsRef = useRef<Record<string, boolean> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollingRef = useRef(false);
   const protocolRef = useRef(protocol);
@@ -101,25 +84,14 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
     clampOpen: false, clampClose: false,
   });
 
-  /* ---- 协议切换时更新默认参数 ---- */
-  const handleProtocolChange = (p: ProtocolType) => {
-    setProtocol(p);
-    const d = DEFAULT_PARAMS[p];
-    setHost(d.host);
-    setPort(String(d.port));
-    setRack(String(d.rack ?? 0));
-    setSlot(String(d.slot ?? 1));
-  };
-
   /* ---- PLC 断连回调 ---- */
   useEffect(() => {
     plcService.setOnDisconnected(() => {
-      setPlcConnected(false);
-      setConnMsg('PLC 连接已断开');
+      setConnected(false);
       stopPollingRef.current?.();
     });
     return () => { plcService.setOnDisconnected(null); stopPollingRef.current?.(); };
-  }, []);
+  }, [setConnected]);
 
   /* ---- IO 轮询（双向同步） ---- */
   const startPolling = useCallback(() => {
@@ -146,7 +118,11 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
           indOrigin: !!v['INDICATOR_ORIGIN'], indWorking: !!v['INDICATOR_WORKING'],
           indProcessing: !!v['INDICATOR_PROCESSING'], indAlarm: !!v['INDICATOR_ALARM'],
         };
-        setIoSignals(signals);
+        // 值未变化时跳过 setState，避免每轮轮询触发面板重渲染
+        const prev = prevSignalsRef.current;
+        const unchanged = prev !== null && Object.keys(signals).every((k) => prev[k] === signals[k]);
+        if (!unchanged) setIoSignals(signals);
+        prevSignalsRef.current = signals;
 
         // ===== PLC → 模型 =====
         const store = useRobotStore.getState();
@@ -222,53 +198,23 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
   // 保持 ref 同步
   stopPollingRef.current = stopPolling;
 
-  /* ---- 连接/断开 ---- */
-  const handleConnect = async () => {
-    setBusy(true);
-    setConnMsg('');
-    try {
-      const config: Parameters<typeof plcService.connect>[0] = {
-        host,
-        port: parseInt(port, 10) || 0,
-        protocol,
-      };
-      if (protocol === 's7') {
-        config.rack = parseInt(rack, 10) || 0;
-        config.slot = parseInt(slot, 10) || 1;
-      }
-      const result = await plcService.connect(config);
-      if (!result.success) throw new Error(result.error || '连接失败');
-      setPlcConnected(true);
-      const protoLabel = PROTOCOL_OPTIONS.find((o) => o.value === protocol)?.label || protocol;
-      setConnMsg(`已连接 ${protoLabel}`);
+  // 连接成功 → 启动轮询；断开 → 停止
+  useEffect(() => {
+    if (connected) {
       startPolling();
-    } catch (e) {
-      setPlcConnected(false);
-      setConnMsg((e as Error).message);
-    } finally {
-      setBusy(false);
+    } else {
+      stopPolling();
     }
-  };
-
-  const handleDisconnect = async () => {
-    setBusy(true);
-    stopPolling();
-    prevSolRef.current = { fwdRetract: false, fwdExtend: false, liftRetract: false, liftExtend: false, clampOpen: false, clampClose: false };
-    try { await plcService.disconnect(); } catch { /* 断开失败无需处理 */ }
-    setPlcConnected(false);
-    setConnMsg('已断开');
-    setIoSignals({});
-    setBusy(false);
-  };
+  }, [connected, startPolling, stopPolling]);
 
   /* ---- 自复位按钮：写入 PLC ---- */
   const writeBtn = useCallback(async (key: 'start' | 'estop' | 'stop', value: boolean) => {
-    if (!plcConnected) return;
+    if (!connected) return;
     const varMap = {
       start: 'BUTTON_START', estop: 'BUTTON_ESTOP', stop: 'BUTTON_STOP',
     };
     try { await plcService.writeVar(varMap[key], value); } catch { /* 写入失败由轮询状态反馈 */ }
-  }, [plcConnected]);
+  }, [connected]);
 
   const ba = ADDRESS.BUTTON;
   const ia = ADDRESS.INDICATOR;
@@ -304,111 +250,6 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
 
   return (
     <div className="space-y-2">
-      {/* ===== PLC 连接 ===== */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-2">
-          <div className="section-title !mb-0">PLC 连接</div>
-          <div className={`px-2 py-0.5 rounded-full text-[0.55rem] font-semibold ${
-            plcConnected ? 'bg-green-500/15 text-green-300' : 'bg-slate-700/60 text-slate-400'
-          }`}>
-            {plcConnected ? '已连接' : '未连接'}
-          </div>
-        </div>
-
-        {/* 协议选择 */}
-        <div className="flex gap-1 mb-2">
-          {PROTOCOL_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              className={`btn btn-xs flex-1 touch-manipulation ${
-                protocol === opt.value ? 'btn-primary' : 'btn-outline'
-              }`}
-              style={{ fontSize: '0.55rem' }}
-              onClick={() => handleProtocolChange(opt.value)}
-              disabled={plcConnected}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 连接参数 */}
-        <div className="space-y-1.5 mb-2">
-          <div className="flex gap-1">
-            <input
-              type="text"
-              className="input input-xs flex-1"
-              placeholder="主机地址"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              disabled={plcConnected}
-              style={{ fontSize: '0.55rem', minWidth: 0 }}
-            />
-            <input
-              type="number"
-              className="input input-xs"
-              placeholder="端口"
-              value={port}
-              onChange={(e) => setPort(e.target.value)}
-              disabled={plcConnected}
-              style={{ fontSize: '0.55rem', width: '4rem', minWidth: 0 }}
-            />
-          </div>
-
-          {protocol === 's7' && (
-            <div className="flex gap-1">
-              <label className="flex items-center gap-1 text-[0.5rem] text-slate-400">
-                Rack
-                <input
-                  type="number"
-                  className="input input-xs"
-                  value={rack}
-                  onChange={(e) => setRack(e.target.value)}
-                  disabled={plcConnected}
-                  style={{ fontSize: '0.55rem', width: '3rem' }}
-                />
-              </label>
-              <label className="flex items-center gap-1 text-[0.5rem] text-slate-400">
-                Slot
-                <input
-                  type="number"
-                  className="input input-xs"
-                  value={slot}
-                  onChange={(e) => setSlot(e.target.value)}
-                  disabled={plcConnected}
-                  style={{ fontSize: '0.55rem', width: '3rem' }}
-                />
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-nowrap gap-1.5">
-          <button
-            className="btn btn-xs btn-success flex-1 touch-manipulation"
-            onClick={handleConnect}
-            disabled={busy || plcConnected}
-          >
-            {busy && !plcConnected ? '...' : '连接'}
-          </button>
-          <button
-            className="btn btn-xs btn-outline flex-1 touch-manipulation"
-            onClick={handleDisconnect}
-            disabled={busy || !plcConnected}
-          >
-            断开
-          </button>
-        </div>
-
-        {connMsg ? (
-          <div className={`mt-2 text-[0.55rem] px-2 py-1 rounded ${
-            connMsg.includes('已连接') ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'
-          }`}>
-            {connMsg}
-          </div>
-        ) : null}
-      </div>
-
       {/* ===== 自复位控制按钮 ===== */}
       <div className="card">
         <div className="section-title !mb-2">控制按钮（自复位）</div>
@@ -421,7 +262,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
               className={`btn btn-xs flex-1 touch-manipulation ${
                 solenoidType === 'double' ? 'btn-primary' : 'btn-outline'
               }`}
-              style={{ fontSize: '0.55rem' }}
+              style={{ fontSize: '0.62rem' }}
               onClick={() => setSolenoidType('double')}
             >
               双电控
@@ -430,7 +271,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
               className={`btn btn-xs flex-1 touch-manipulation ${
                 solenoidType === 'single' ? 'btn-primary' : 'btn-outline'
               }`}
-              style={{ fontSize: '0.55rem' }}
+              style={{ fontSize: '0.62rem' }}
               onClick={() => setSolenoidType('single')}
             >
               单电控
@@ -447,7 +288,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
             onTouchStart={() => writeBtn('start', true)}
             onTouchEnd={() => writeBtn('start', false)}
             aria-label="启动按钮"
-            style={{ fontSize: '0.55rem' }}
+            style={{ fontSize: '0.62rem' }}
           >
             &#9654;启动
           </button>
@@ -459,7 +300,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
             onTouchStart={() => writeBtn('stop', true)}
             onTouchEnd={() => writeBtn('stop', false)}
             aria-label="停止按钮"
-            style={{ fontSize: '0.55rem' }}
+            style={{ fontSize: '0.62rem' }}
           >
             &#9632;停止
           </button>
@@ -471,7 +312,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
             onTouchStart={() => writeBtn('estop', true)}
             onTouchEnd={() => writeBtn('estop', false)}
             aria-label="急停按钮"
-            style={{ fontSize: '0.55rem' }}
+            style={{ fontSize: '0.62rem' }}
           >
             &#9888;急停
           </button>
@@ -486,10 +327,10 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
             <span className="badge badge-slate"><span className="badge-dot badge-dot-slate" />待机</span>
           )}
           {simEStop && (
-            <button className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem' }}
+            <button className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.62rem' }}
               onClick={() => setSimEStop(false)}>复位</button>
           )}
-          <button className="btn btn-xs btn-ghost ml-auto touch-manipulation" style={{ fontSize: '0.55rem' }}
+          <button className="btn btn-xs btn-ghost ml-auto touch-manipulation" style={{ fontSize: '0.62rem' }}
             onClick={() => useRobotStore.getState().resetAll()}>复位全部</button>
         </div>
       </div>
@@ -568,7 +409,7 @@ export function SimPanel({ onShowHelp }: { onShowHelp: () => void }) {
       {/* ===== 帮助链接 ===== */}
       <button
         className="btn btn-xs btn-ghost w-full touch-manipulation"
-        style={{ fontSize: '0.55rem' }}
+        style={{ fontSize: '0.62rem' }}
         onClick={onShowHelp}
       >
         使用说明 & IO地址分配

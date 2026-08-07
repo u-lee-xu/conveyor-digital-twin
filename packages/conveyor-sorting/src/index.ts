@@ -3,6 +3,7 @@ import { modbusService } from '@digital-twin/shared';
 import { ConveyorSortingSceneContent } from './scenes/conveyor-sorting/SceneContent';
 import { ViewControlPanel } from './components/panels';
 import { useDeviceStore } from './stores';
+import { buildHelpContent } from './constants/plc-addresses';
 import { ManualModePanel } from './platform/ManualModePanel';
 import { AutoModePanel } from './platform/AutoModePanel';
 import { ScoringModePanel } from './platform/ScoringModePanel';
@@ -26,11 +27,12 @@ function disconnectIfNeeded() {
 export const conveyorDevice: DeviceDefinition = {
   id: 'conveyor-sorting',
   name: '传送带分拣控制',
-  icon: '⚙',
+  icon: '📦',
   gradient: 'from-blue-500 to-blue-600',
   version: '1.1',
   description: '传送带物料分拣教学设备：上料、色标识别、气缸分拣。支持 PLC 联调与自动评分。',
-  protocols: ['modbus', 's7'],
+  protocols: ['modbus', 's7', 'mitsubishi'],
+  helpContent: buildHelpContent(),
   modes: [
     { id: 'manual', label: '手动', icon: '🎮', color: 'from-blue-500 to-cyan-500', panel: ManualModePanel },
     { id: 'auto', label: '演示', icon: '🤖', color: 'from-purple-500 to-pink-500', panel: AutoModePanel },
