@@ -31,12 +31,15 @@ function getBeltSurfaceY(belt: BeltName, scale: number): number {
   return BELT_SURFACE_Y[belt] + (MATERIAL_SIZE * scale) / 2;
 }
 
-/** 皮带转接抛掷速度（世界坐标，m/s）— 按出发皮带定制落点 */
+/**
+ * 皮带转接滑出速度（世界坐标，m/s）
+ * 带面与端滚筒上边缘持平，物料沿水平方向自然滑出（无上抛，不跳起）
+ */
 const THROW_SPEEDS: Partial<Record<BeltName, [number, number, number]>> = {
-  belt1: [0.6, 1.2, -0.55], // belt1 → belt2 筛分皮带入口
-  belt2: [0, 1.0, 0.4],     // belt2 → belt4 大料收集皮带（末端）
-  belt3: [0, 0.6, 0.6],     // belt3 → 小料收集箱
-  belt4: [0.6, 0.6, 0],     // belt4 → 大料收集框
+  belt1: [0.6, 0, -0.55], // belt1 → belt2 筛分皮带入口
+  belt2: [0.15, 0, 0.4],  // belt2 → belt4 大料收集皮带（末端）
+  belt3: [0, 0, 0.6],     // belt3 → 小料收集箱
+  belt4: [0.6, 0, 0],     // belt4 → 大料收集框
 };
 
 /** 小料在 belt2 上开始过筛的位置（局部 X，位于筛分孔带） */
