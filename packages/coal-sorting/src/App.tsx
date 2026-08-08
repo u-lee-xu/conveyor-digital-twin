@@ -48,10 +48,10 @@ export default function App() {
       <Canvas
         style={{ position: 'absolute', inset: 0 }}
         shadows
-        camera={{ position: [-1.5, 5.2, 6.2], fov: 45, near: 0.1, far: 1000 }}
+        camera={{ position: [-1.1, 5.0, 6.0], fov: 45, near: 0.1, far: 1000 }}
       >
         <OrbitControls
-          target={[-1.5, 0.8, 0.9]}
+          target={[-1.1, 0.8, 1.0]}
           enableDamping dampingFactor={0.1}
           minDistance={2} maxDistance={20}
           maxPolarAngle={Math.PI / 2}

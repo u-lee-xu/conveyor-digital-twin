@@ -37,7 +37,8 @@ export const BELT_LAYOUT = {
   belt1: { position: [-1.6, 1.15, 0.1] as [number, number, number], rotation: 0 },
   belt2: { position: [-0.6, 0.75, 0.8] as [number, number, number], rotation: 1.5708 },
   belt3: { position: [-0.6, 0.35, 0.5] as [number, number, number], rotation: 1.5708 },
-  belt4: { position: [-1.6, 0.35, 1.9] as [number, number, number], rotation: Math.PI },
+  /** 4# 起点右移至 x=0.4，完整覆盖 2# 末端全带宽落点（lx∈[-1,1] 带内），不掉地 */
+  belt4: { position: [-0.6, 0.35, 1.9] as [number, number, number], rotation: Math.PI },
 } as const;
 
 /** 皮带表面 Y 坐标 = 布局 Y + 滚筒半径 + 皮带厚度 + 碰撞体半高 */
@@ -87,7 +88,7 @@ export const SENSOR_POSITIONS = {
 export const HOPPER_POSITION: [number, number, number] = [-2.6, 1.57, 0.1];
 export const FEED_CYLINDER_POSITION: [number, number, number] = [-2.9, 1.22, -0.25];
 /** 大料收集框 — belt4 尽头（左端） */
-export const COLLECTION_BOX_POSITION: [number, number, number] = [-2.75, 0.1, 1.9];
+export const COLLECTION_BOX_POSITION: [number, number, number] = [-1.9, 0.1, 1.9];
 /** 小料收集箱 — belt3 出口外侧（与 belt4 带错开） */
 export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-0.6, 0.1, 1.3];
 
@@ -98,7 +99,7 @@ export const INDICATOR_POSITIONS = {
   belt1_run: [-1.6, 1.56, 0.1] as [number, number, number],
   belt2_run: [-0.6, 1.16, 0.8] as [number, number, number],
   belt3_run: [-0.6, 0.76, 0.5] as [number, number, number],
-  belt4_run: [-1.6, 0.76, 1.9] as [number, number, number],
+  belt4_run: [-0.6, 0.76, 1.9] as [number, number, number],
   fault: [-0.3, 1.45, 0.9] as [number, number, number],
 };
 
