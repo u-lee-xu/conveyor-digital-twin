@@ -6,7 +6,7 @@ const STEP_ORDER: BeltDemoStep[] = ['IDLE', 'START_UP', 'FEEDING', 'STOPPING'];
 
 const BELT_NAMES: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
 const BELT_LABELS: Record<BeltName, string> = {
-  belt1: '1# 给料', belt2: '2# 筛分', belt3: '3# 精煤', belt4: '4# 筛下',
+  belt1: '1# 给料', belt2: '2# 筛分', belt3: '3# 小料', belt4: '4# 大料',
 };
 
 export const BeltDemoPanel: React.FC = () => {
@@ -104,16 +104,15 @@ export const BeltDemoPanel: React.FC = () => {
             <span className="text-[0.62rem] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{materials.length} pcs</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[0.62rem] text-slate-500">精煤收集</span>
-            <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.coal} pcs</span>
+            <span className="text-[0.62rem] text-slate-500">大料收集</span>
+            <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.large} pcs</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[0.62rem] text-slate-500">矸石吹除</span>
-            <span className="text-[0.62rem] font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">{materialCount.stone} pcs</span>
+            <span className="text-[0.62rem] text-slate-500">小料收集</span>
+            <span className="text-[0.62rem] font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">{materialCount.small} pcs</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[0.62rem] text-slate-500">筛下物</span>
-            <span className="text-[0.62rem] font-mono text-slate-300 bg-slate-700/40 px-1.5 py-0.5 rounded">{materialCount.small} pcs</span>
+            
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[0.62rem] text-slate-500">堆料传感器</span>

@@ -170,7 +170,7 @@ export function BeltSimPanel({ onShowHelp, protocol, connected, setConnected }: 
 
   const beltNames: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
   const beltLabels: Record<BeltName, string> = {
-    belt1: '1#给料', belt2: '2#筛分', belt3: '3#精煤', belt4: '4#筛下',
+    belt1: '1#给料', belt2: '2#筛分', belt3: '3#小料', belt4: '4#大料',
   };
   const sensorConfig: { name: BeltSensorName; label: string }[] = [
     { name: 's1_belt1_entry', label: 'S1入口' },
@@ -277,7 +277,7 @@ export function BeltSimPanel({ onShowHelp, protocol, connected, setConnected }: 
             <div className="flex flex-nowrap gap-1">
               <IOLed label="上料伸" active={!!ioSignals.feedExtend} addr={getAddr('FEED_CYL_EXTEND')} />
               <IOLed label="上料缩" active={!!ioSignals.feedRetract} addr={getAddr('FEED_CYL_RETRACT')} />
-              <IOLed label="气吹" active={!!ioSignals.separator} addr={getAddr('SEPARATOR_ON')} />
+              <IOLed label="分拣机" active={!!ioSignals.separator} addr={getAddr('SEPARATOR_ON')} />
             </div>
             <div className="flex flex-nowrap gap-1">
               <IOLed label="1#指示" active={!!ioSignals.indBelt1} addr={getAddr('IND_BELT1_RUN')} />

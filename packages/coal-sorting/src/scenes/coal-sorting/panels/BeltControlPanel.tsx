@@ -7,7 +7,7 @@ import { MAX_MATERIALS } from '../constants';
 
 const BELT_NAMES: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
 const BELT_LABELS: Record<BeltName, string> = {
-  belt1: '1# 给料皮带', belt2: '2# 筛分整列', belt3: '3# 净煤收集', belt4: '4# 筛下运送',
+  belt1: '1# 给料皮带', belt2: '2# 筛分整列', belt3: '3# 筛下小料', belt4: '4# 大料收集',
 };
 
 export const BeltControlPanel: React.FC = () => {

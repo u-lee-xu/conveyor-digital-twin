@@ -64,12 +64,12 @@ export const BeltStatusPanel: React.FC = () => {
           <span className="text-[0.62rem] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{materials.length} pcs</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-[0.62rem] text-slate-400">已处理精煤</span>
-          <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.coal} pcs</span>
+          <span className="text-[0.62rem] text-slate-400">大料收集</span>
+          <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.large} pcs</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-[0.62rem] text-slate-400">矸石吹除</span>
-          <span className="text-[0.62rem] font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">{materialCount.stone} pcs</span>
+          <span className="text-[0.62rem] text-slate-400">小料收集</span>
+          <span className="text-[0.62rem] font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">{materialCount.small} pcs</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-[0.62rem] text-slate-400">给料推板状态</span>

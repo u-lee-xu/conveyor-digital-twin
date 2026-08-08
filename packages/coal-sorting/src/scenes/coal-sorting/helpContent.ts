@@ -23,8 +23,8 @@ const INPUT_SIGNALS: SignalRow[] = [
   { name: '2#入口传感器', modbus: MODBUS_DISPLAY_VARS.S4_BELT2_ENTRY, s7: S7_DISPLAY_VARS.S4_BELT2_ENTRY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S4_BELT2_ENTRY, desc: '2# 筛分皮带入口有料检测' },
   { name: '2#运行传感器', modbus: MODBUS_DISPLAY_VARS.S5_BELT2_RUN, s7: S7_DISPLAY_VARS.S5_BELT2_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.S5_BELT2_RUN, desc: '2# 皮带运行且有料' },
   { name: '2#出口传感器', modbus: MODBUS_DISPLAY_VARS.S6_BELT2_EXIT, s7: S7_DISPLAY_VARS.S6_BELT2_EXIT, mitsubishi: MITSUBISHI_DISPLAY_VARS.S6_BELT2_EXIT, desc: '2# 皮带末端有料检测' },
-  { name: '3#入口传感器', modbus: MODBUS_DISPLAY_VARS.S7_BELT3_ENTRY, s7: S7_DISPLAY_VARS.S7_BELT3_ENTRY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S7_BELT3_ENTRY, desc: '3# 精煤皮带入口有料检测' },
-  { name: '3#运行传感器', modbus: MODBUS_DISPLAY_VARS.S8_BELT3_RUN, s7: S7_DISPLAY_VARS.S8_BELT3_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.S8_BELT3_RUN, desc: '3# 皮带运行且有料' },
+  { name: '3#入口传感器', modbus: MODBUS_DISPLAY_VARS.S7_BELT3_ENTRY, s7: S7_DISPLAY_VARS.S7_BELT3_ENTRY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S7_BELT3_ENTRY, desc: '3# 筛下小料皮带入口有料检测' },
+  { name: '3#运行传感器', modbus: MODBUS_DISPLAY_VARS.S8_BELT3_RUN, s7: S7_DISPLAY_VARS.S8_BELT3_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.S8_BELT3_RUN, desc: '3# 筛下皮带运行且有料' },
   { name: '3#出口传感器', modbus: MODBUS_DISPLAY_VARS.S9_BELT3_EXIT, s7: S7_DISPLAY_VARS.S9_BELT3_EXIT, mitsubishi: MITSUBISHI_DISPLAY_VARS.S9_BELT3_EXIT, desc: '3# 皮带末端有料检测' },
   { name: '堆料传感器', modbus: MODBUS_DISPLAY_VARS.S10_PILEUP, s7: S7_DISPLAY_VARS.S10_PILEUP, mitsubishi: MITSUBISHI_DISPLAY_VARS.S10_PILEUP, desc: '1# 入口堆积且皮带停运' },
   { name: '上料缸伸出到位', modbus: MODBUS_DISPLAY_VARS.CYL_FEED_OUT, s7: S7_DISPLAY_VARS.CYL_FEED_OUT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_FEED_OUT, desc: '上料气缸伸出磁性开关' },
@@ -34,11 +34,11 @@ const INPUT_SIGNALS: SignalRow[] = [
 const OUTPUT_SIGNALS: SignalRow[] = [
   { name: '1#皮带运行', modbus: MODBUS_DISPLAY_VARS.BELT1_RUN, s7: S7_DISPLAY_VARS.BELT1_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.BELT1_RUN, desc: '1# 给料皮带电机运行（需持续输出）' },
   { name: '2#皮带运行', modbus: MODBUS_DISPLAY_VARS.BELT2_RUN, s7: S7_DISPLAY_VARS.BELT2_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.BELT2_RUN, desc: '2# 筛分皮带电机运行（需持续输出）' },
-  { name: '3#皮带运行', modbus: MODBUS_DISPLAY_VARS.BELT3_RUN, s7: S7_DISPLAY_VARS.BELT3_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.BELT3_RUN, desc: '3# 精煤皮带电机运行（需持续输出）' },
-  { name: '4#皮带运行', modbus: MODBUS_DISPLAY_VARS.BELT4_RUN, s7: S7_DISPLAY_VARS.BELT4_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.BELT4_RUN, desc: '4# 筛下物皮带电机运行（需持续输出）' },
+  { name: '3#皮带运行', modbus: MODBUS_DISPLAY_VARS.BELT3_RUN, s7: S7_DISPLAY_VARS.BELT3_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.BELT3_RUN, desc: '3# 筛下小料皮带电机运行（需持续输出）' },
+  { name: '4#皮带运行', modbus: MODBUS_DISPLAY_VARS.BELT4_RUN, s7: S7_DISPLAY_VARS.BELT4_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.BELT4_RUN, desc: '4# 大料收集皮带电机运行（需持续输出）' },
   { name: '上料缸伸出', modbus: MODBUS_DISPLAY_VARS.FEED_CYL_EXTEND, s7: S7_DISPLAY_VARS.FEED_CYL_EXTEND, mitsubishi: MITSUBISHI_DISPLAY_VARS.FEED_CYL_EXTEND, desc: '上料气缸伸出电磁阀（双电控脉冲触发）' },
   { name: '上料缸缩回', modbus: MODBUS_DISPLAY_VARS.FEED_CYL_RETRACT, s7: S7_DISPLAY_VARS.FEED_CYL_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.FEED_CYL_RETRACT, desc: '上料气缸缩回电磁阀（双电控脉冲触发）' },
-  { name: '气吹分拣机', modbus: MODBUS_DISPLAY_VARS.SEPARATOR_ON, s7: S7_DISPLAY_VARS.SEPARATOR_ON, mitsubishi: MITSUBISHI_DISPLAY_VARS.SEPARATOR_ON, desc: '2# 皮带气吹分拣机启动（需持续输出）' },
+  { name: '气吹分拣机', modbus: MODBUS_DISPLAY_VARS.SEPARATOR_ON, s7: S7_DISPLAY_VARS.SEPARATOR_ON, mitsubishi: MITSUBISHI_DISPLAY_VARS.SEPARATOR_ON, desc: '2# 皮带分拣机启动信号（需持续输出）' },
   { name: '1#运行指示', modbus: MODBUS_DISPLAY_VARS.IND_BELT1_RUN, s7: S7_DISPLAY_VARS.IND_BELT1_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.IND_BELT1_RUN, desc: '1# 皮带运行指示灯' },
   { name: '2#运行指示', modbus: MODBUS_DISPLAY_VARS.IND_BELT2_RUN, s7: S7_DISPLAY_VARS.IND_BELT2_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.IND_BELT2_RUN, desc: '2# 皮带运行指示灯' },
   { name: '3#运行指示', modbus: MODBUS_DISPLAY_VARS.IND_BELT3_RUN, s7: S7_DISPLAY_VARS.IND_BELT3_RUN, mitsubishi: MITSUBISHI_DISPLAY_VARS.IND_BELT3_RUN, desc: '3# 皮带运行指示灯' },
@@ -67,7 +67,7 @@ export const buildBeltHelpContent = (): HelpContent => ({
   requirements: [
     '皮带电机需持续输出运行信号，双电控气缸（上料）由脉冲触发并自保持。',
     '上料流程：伸出上料气缸推入物料（入口传感器 S1 触发）→ 缩回气缸。',
-    '分拣流程：2# 皮带筛分小颗粒（落入 4# 皮带）→ 气吹分拣机吹除矸石 → 精煤进入 3# 皮带收集。',
+    '分拣流程：2# 筛分皮带过滤小颗粒（经筛孔漏入正下方 3# 皮带，送至小料收集箱）→ 大料随 2# 皮带运至末端，落入 4# 收集皮带 → 4# 尽头大料收集框。',
     '1# 入口堆积且皮带停运时 S10 堆料传感器置位，需复位后重新启动。',
     '故障指示亮起时皮带应停止运行；故障消除并复位后恢复正常。',
   ],
@@ -91,7 +91,7 @@ export const buildBeltHelpContent = (): HelpContent => ({
       details: [
         '物料分煤/矸石两种，颗粒分小/中/大三档；煤石比例与尺寸权重可在手动面板调整。',
         '自动投料需 1# 皮带运行且物料未满（上限 20 件），间隔可在手动面板调节。',
-        '小颗粒经 2# 筛分落入 4# 皮带，矸石在 2# 末端被气吹分拣机吹入矸石收集箱。',
+        '小颗粒在 2# 筛孔带漏入正下方 3# 筛下皮带，送至小料收集箱；中/大颗粒随 2# 皮带运至末端，抛落入 4# 皮带，运至尽头大料收集框。',
       ],
     },
     {
