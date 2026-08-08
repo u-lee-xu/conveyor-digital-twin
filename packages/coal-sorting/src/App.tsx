@@ -1,105 +1,223 @@
-import { useEffect } from 'react';
-import { PhysicsScene, ModeSelector, modbusService, useMobile } from '@digital-twin/shared';
-import { useAppStore } from './stores/useAppStore';
+import { useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
+import { PlcConnectionPanel, HelpPanel, useMobile, type PlcConnConfig } from '@digital-twin/shared';
+import { useAppStore, type AppMode } from './stores/useAppStore';
 import { BeltControlPanel } from './scenes/coal-sorting/panels/BeltControlPanel';
 import { BeltStatusPanel } from './scenes/coal-sorting/panels/BeltStatusPanel';
 import { BeltDemoPanel } from './scenes/coal-sorting/panels/BeltDemoPanel';
 import { BeltSimPanel } from './scenes/coal-sorting/panels/BeltSimPanel';
 import { BeltScoringPanel } from './scenes/coal-sorting/panels/BeltScoringPanel';
 import { ThreeStageBeltSceneContent } from './scenes/coal-sorting/SceneContent';
+import { plcService } from './services/plc-websocket';
+import { buildBeltHelpContent } from './scenes/coal-sorting/helpContent';
+import type { ProtocolType } from './services/plc-websocket';
 
-function App() {
+const MODES: { key: AppMode; label: string; icon: string }[] = [
+  { key: 'manual', label: '\u270B\u2009手动', icon: '' },
+  { key: 'auto', label: '\uD83E\uDD16\u2009演示', icon: '' },
+  { key: 'scoring', label: '\uD83C\uDFC6\u2009评分', icon: '' },
+  { key: 'sim', label: '\u2699\u2009仿真', icon: '' },
+];
+
+export default function App() {
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
-  const isConnected = useAppStore((s) => s.isConnected);
   const isMobile = useMobile();
+  const [showHelp, setShowHelp] = useState(false);
+  const [protocol, setProtocol] = useState<ProtocolType>('modbus');
+  const [connected, setConnected] = useState(false);
 
-  // Mode change: disconnect PLC
-  useEffect(() => {
-    if (isConnected) {
-      void modbusService.disconnect().catch(() => undefined);
-      useAppStore.getState().setConnected(false);
-    }
-  }, [mode]);
-
-  // 根据当前模式选择对应面板（IIFE 避免向子组件透传大量 props）
-  const desktopModePanel = (() => {
-    if (mode === 'manual') {
-      return (
-        <div className="space-y-6">
-          <BeltControlPanel />
-          <BeltStatusPanel />
-        </div>
-      );
-    }
-    if (mode === 'auto') {
-      return (
-        <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-          <BeltDemoPanel />
-        </div>
-      );
-    }
-    if (mode === 'scoring') {
-      return (
-        <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-          <BeltScoringPanel />
-        </div>
-      );
-    }
-    // sim mode
-    return (
-      <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 shadow-xl">
-        <BeltSimPanel />
-      </div>
-    );
-  })();
+  const handleConnect = async (config: PlcConnConfig): Promise<string | null> => {
+    const result = await plcService.connect({
+      host: config.host,
+      port: config.port,
+      protocol: config.protocol,
+      rack: config.rack,
+      slot: config.slot,
+    });
+    return result.success ? null : result.error || '连接失败';
+  };
 
   return (
-    <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
-      <div className="absolute inset-0">
-        <PhysicsScene SceneContent={ThreeStageBeltSceneContent} cameraPosition={[0, 6, 10]} />
-      </div>
+    <div style={{ width: '100vw', height: '100vh', background: '#1e293b', position: 'relative', overflow: 'hidden' }}>
+      <Canvas
+        style={{ position: 'absolute', inset: 0 }}
+        shadows
+        camera={{ position: [0, 6, 10], fov: 45, near: 0.1, far: 1000 }}
+      >
+        <OrbitControls
+          target={[0, 0.8, 0]}
+          enableDamping dampingFactor={0.1}
+          minDistance={2} maxDistance={20}
+          maxPolarAngle={Math.PI / 2}
+        />
+        <ThreeStageBeltSceneContent />
+      </Canvas>
 
+      {/* 左侧极窄控制栏（手机端隐藏，使用底部抽屉） */}
       {!isMobile && (
-        <div className="absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
-          <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
-                <span className="text-white text-xl">⛏</span>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white">煤料智能分拣系统</h1>
-                <p className="text-xs text-gray-500">V2.0 · 老徐</p>
-              </div>
+        <div
+          className="absolute top-3 left-3 z-10 overflow-y-auto space-y-2 scrollbar-thin"
+          style={{ width: '17rem', maxHeight: 'calc(100vh - 1.5rem)' }}
+        >
+
+        {/* 标题 + 模式选择器 */}
+        <div className="card !p-2.5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow shadow-orange-500/20 shrink-0">
+              <span className="text-white text-[0.65rem]" aria-hidden="true">&#9969;</span>
             </div>
+            <h1 className="text-xs font-bold text-white truncate">煤料智能分拣</h1>
+            <button
+              onClick={() => setShowHelp(true)}
+              title="使用说明与地址映射"
+              className="ml-auto w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors text-sm"
+            >
+              ❓
+            </button>
           </div>
-
-          <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">运行模式</div>
-            <ModeSelector currentMode={mode} onModeChange={setMode} />
+          <div className="mode-tabs" role="tablist" aria-label="运行模式选择">
+            {MODES.map((m) => (
+              <button
+                key={m.key} role="tab"
+                aria-selected={mode === m.key}
+                className={`mode-tab !text-[0.65rem] !py-1 touch-manipulation${mode === m.key ? ' mode-tab-active' : ''}`}
+                onClick={() => setMode(m.key)}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {desktopModePanel}
+        {mode === 'manual' && (
+          <>
+            <BeltControlPanel />
+            <BeltStatusPanel />
+          </>
+        )}
+        {mode === 'auto' && <BeltDemoPanel />}
+        {mode === 'scoring' && (
+          <>
+            <PlcConnectionPanel
+              modeLabel="评分模式"
+              protocols={['modbus', 's7', 'mitsubishi']}
+              protocol={protocol}
+              onProtocolChange={setProtocol}
+              onConnect={handleConnect}
+              onDisconnect={async () => { await plcService.disconnect(); }}
+              onConnectedChange={setConnected}
+              onHelp={() => setShowHelp(true)}
+            />
+            <BeltScoringPanel connected={connected} />
+          </>
+        )}
+        {mode === 'sim' && (
+          <>
+            <PlcConnectionPanel
+              modeLabel="仿真模式"
+              protocols={['modbus', 's7', 'mitsubishi']}
+              protocol={protocol}
+              onProtocolChange={setProtocol}
+              onConnect={handleConnect}
+              onDisconnect={async () => { await plcService.disconnect(); }}
+              onConnectedChange={setConnected}
+              onHelp={() => setShowHelp(true)}
+            />
+            <BeltSimPanel
+              onShowHelp={() => setShowHelp(true)}
+              protocol={protocol}
+              connected={connected}
+              setConnected={setConnected}
+            />
+          </>
+        )}
         </div>
       )}
 
       {isMobile && (
-        <div className="absolute bottom-4 left-4 right-4 z-10">
-          <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl">
-            <ModeSelector currentMode={mode} onModeChange={setMode} />
-            <div className="mt-4">
-              {mode === 'manual' && <BeltControlPanel />}
-              {mode === 'auto' && <BeltDemoPanel />}
-              {mode === 'scoring' && <BeltScoringPanel />}
-              {mode === 'sim' && <BeltSimPanel />}
+        <>
+          {/* 顶部迷你条：模式切换 + 帮助 */}
+          <div className="absolute top-2 left-2 right-2 z-10">
+            <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-xl px-2 py-1.5 shadow-2xl flex items-center gap-2">
+              <div className="mode-tabs flex-1" role="tablist" aria-label="运行模式选择">
+                {MODES.map((m) => (
+                  <button
+                    key={m.key} role="tab"
+                    aria-selected={mode === m.key}
+                    className={`mode-tab !text-[0.65rem] !py-1 touch-manipulation${mode === m.key ? ' mode-tab-active' : ''}`}
+                    onClick={() => setMode(m.key)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowHelp(true)}
+                title="使用说明与地址映射"
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-base"
+              >
+                ❓
+              </button>
             </div>
           </div>
-        </div>
+
+          {/* 底部抽屉面板 */}
+          <div className="absolute bottom-2 left-2 right-2 z-10">
+            <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-2xl p-3 shadow-2xl max-h-[52vh] overflow-y-auto scrollbar-thin">
+              {mode === 'manual' && (
+                <>
+                  <BeltControlPanel />
+                  <BeltStatusPanel />
+                </>
+              )}
+              {mode === 'auto' && <BeltDemoPanel />}
+              {mode === 'scoring' && (
+                <>
+                  <PlcConnectionPanel
+                    modeLabel="评分模式"
+                    protocols={['modbus', 's7', 'mitsubishi']}
+                    protocol={protocol}
+                    onProtocolChange={setProtocol}
+                    onConnect={handleConnect}
+                    onDisconnect={async () => { await plcService.disconnect(); }}
+                    onConnectedChange={setConnected}
+                    onHelp={() => setShowHelp(true)}
+                  />
+                  <BeltScoringPanel connected={connected} />
+                </>
+              )}
+              {mode === 'sim' && (
+                <>
+                  <PlcConnectionPanel
+                    modeLabel="仿真模式"
+                    protocols={['modbus', 's7', 'mitsubishi']}
+                    protocol={protocol}
+                    onProtocolChange={setProtocol}
+                    onConnect={handleConnect}
+                    onDisconnect={async () => { await plcService.disconnect(); }}
+                    onConnectedChange={setConnected}
+                    onHelp={() => setShowHelp(true)}
+                  />
+                  <BeltSimPanel
+                    onShowHelp={() => setShowHelp(true)}
+                    protocol={protocol}
+                    connected={connected}
+                    setConnected={setConnected}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
-      <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 煤料智能分拣系统</div>
+      {showHelp && <HelpPanel content={buildBeltHelpContent()} onClose={() => setShowHelp(false)} />}
+
+      <div className="absolute bottom-2 right-3 text-[0.5rem] text-slate-600 select-none">
+        &copy; 2026
+      </div>
     </div>
   );
 }
-
-export default App;
