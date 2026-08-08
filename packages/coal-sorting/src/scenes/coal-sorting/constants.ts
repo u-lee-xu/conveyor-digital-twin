@@ -241,7 +241,8 @@ export const COMPONENT = {
 export const PHYSICS = {
   // 碰撞组
   BELT_COLLISION_GROUP: (0x0001 << 16) | 0x0003,
-  MAT_COLLISION_GROUP: (0x0002 << 16) | 0x0001,
+  /** 物料：membership=组2，filter=组1|组2（与皮带碰撞，也与其它物料碰撞） */
+  MAT_COLLISION_GROUP: (0x0002 << 16) | 0x0003,
 
   // 碰撞体摩擦
   BELT_FRICTION: 2.0,
@@ -254,6 +255,9 @@ export const PHYSICS = {
 
   // 过筛下落速度（m/s，小料从 belt2 漏到 belt3）
   SIEVE_FALL_VELOCITY_Y: 0.8,
+
+  // 转接切 dynamic 时抬离带面的高度（m），消除带面摩擦刹停，保持水平滑出
+  THROW_CLEARANCE: 0.03,
 
   // 2# 筛分皮带入口承接段（实板）几何（局部 X 坐标）
   SIEVE_ENTRY_ZONE_CENTER: -0.7,
