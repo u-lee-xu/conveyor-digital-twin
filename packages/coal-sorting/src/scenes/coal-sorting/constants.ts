@@ -248,3 +248,149 @@ export const PHYSICS = {
   BOX_DETECT_Y_MIN_OFFSET: -0.05,
   FALL_RECOVERY_Y: -0.5,
 } as const;
+
+// ============================================================
+// PLC IO 变量名 → 协议地址映射
+//   输入信号（DT → PLC，孪生写）：按钮 + 传感器 + 磁性开关
+//   输出信号（PLC → DT，孪生读）：皮带运行 + 气缸电磁阀 + 分拣机 + 指示灯
+// ============================================================
+
+export const MODBUS_READ_VARS = {
+  BUTTON_START: 0,
+  BUTTON_STOP: 1,
+  BUTTON_ESTOP: 2,
+  S1_BELT1_ENTRY: 10,
+  S2_BELT1_RUN: 11,
+  S3_BELT1_EXIT: 12,
+  S4_BELT2_ENTRY: 13,
+  S5_BELT2_RUN: 14,
+  S6_BELT2_EXIT: 15,
+  S7_BELT3_ENTRY: 16,
+  S8_BELT3_RUN: 17,
+  S9_BELT3_EXIT: 18,
+  S10_PILEUP: 19,
+  CYL_FEED_OUT: 20,
+  CYL_FEED_IN: 21,
+  BELT1_RUN: 3,
+  BELT2_RUN: 4,
+  BELT3_RUN: 5,
+  BELT4_RUN: 6,
+  FEED_CYL_EXTEND: 7,
+  FEED_CYL_RETRACT: 8,
+  SEPARATOR_ON: 9,
+  IND_BELT1_RUN: 22,
+  IND_BELT2_RUN: 23,
+  IND_BELT3_RUN: 24,
+  IND_BELT4_RUN: 25,
+  IND_FAULT: 26,
+} as const;
+
+/** DT → PLC 写入变量（按钮 + 传感器 + 磁性开关） */
+export const MODBUS_WRITE_VARS = {
+  BUTTON_START: 0,
+  BUTTON_STOP: 1,
+  BUTTON_ESTOP: 2,
+  S1_BELT1_ENTRY: 10,
+  S2_BELT1_RUN: 11,
+  S3_BELT1_EXIT: 12,
+  S4_BELT2_ENTRY: 13,
+  S5_BELT2_RUN: 14,
+  S6_BELT2_EXIT: 15,
+  S7_BELT3_ENTRY: 16,
+  S8_BELT3_RUN: 17,
+  S9_BELT3_EXIT: 18,
+  S10_PILEUP: 19,
+  CYL_FEED_OUT: 20,
+  CYL_FEED_IN: 21,
+} as const;
+
+/** Modbus 线圈地址（UI 显示用） */
+export const MODBUS_DISPLAY_VARS = Object.fromEntries(
+  Object.entries(MODBUS_READ_VARS).map(([k, v]) => [k, `Coil ${v}`]),
+) as Record<keyof typeof MODBUS_READ_VARS, string>;
+
+export const S7_VARS = {
+  BUTTON_START: 'M0.0',
+  BUTTON_STOP: 'M0.1',
+  BUTTON_ESTOP: 'M0.2',
+  S1_BELT1_ENTRY: 'M20.0',
+  S2_BELT1_RUN: 'M20.1',
+  S3_BELT1_EXIT: 'M20.2',
+  S4_BELT2_ENTRY: 'M20.3',
+  S5_BELT2_RUN: 'M20.4',
+  S6_BELT2_EXIT: 'M20.5',
+  S7_BELT3_ENTRY: 'M20.6',
+  S8_BELT3_RUN: 'M20.7',
+  S9_BELT3_EXIT: 'M21.0',
+  S10_PILEUP: 'M21.1',
+  CYL_FEED_OUT: 'M21.2',
+  CYL_FEED_IN: 'M21.3',
+  BELT1_RUN: 'M10.0',
+  BELT2_RUN: 'M10.1',
+  BELT3_RUN: 'M10.2',
+  BELT4_RUN: 'M10.3',
+  FEED_CYL_EXTEND: 'M10.4',
+  FEED_CYL_RETRACT: 'M10.5',
+  SEPARATOR_ON: 'M10.6',
+  IND_BELT1_RUN: 'M11.0',
+  IND_BELT2_RUN: 'M11.1',
+  IND_BELT3_RUN: 'M11.2',
+  IND_BELT4_RUN: 'M11.3',
+  IND_FAULT: 'M11.4',
+} as const;
+
+/** S7 地址（UI 显示用） */
+export const S7_DISPLAY_VARS = S7_VARS;
+
+/** 三菱 MC 变量名 → 地址（X 输入 / Y 输出） */
+export const MITSUBISHI_READ_VARS = {
+  BUTTON_START: 'X0',
+  BUTTON_STOP: 'X1',
+  BUTTON_ESTOP: 'X2',
+  S1_BELT1_ENTRY: 'X3',
+  S2_BELT1_RUN: 'X4',
+  S3_BELT1_EXIT: 'X5',
+  S4_BELT2_ENTRY: 'X6',
+  S5_BELT2_RUN: 'X7',
+  S6_BELT2_EXIT: 'X10',
+  S7_BELT3_ENTRY: 'X11',
+  S8_BELT3_RUN: 'X12',
+  S9_BELT3_EXIT: 'X13',
+  S10_PILEUP: 'X14',
+  CYL_FEED_OUT: 'X15',
+  CYL_FEED_IN: 'X16',
+  BELT1_RUN: 'Y0',
+  BELT2_RUN: 'Y1',
+  BELT3_RUN: 'Y2',
+  BELT4_RUN: 'Y3',
+  FEED_CYL_EXTEND: 'Y4',
+  FEED_CYL_RETRACT: 'Y5',
+  SEPARATOR_ON: 'Y6',
+  IND_BELT1_RUN: 'Y7',
+  IND_BELT2_RUN: 'Y10',
+  IND_BELT3_RUN: 'Y11',
+  IND_BELT4_RUN: 'Y12',
+  IND_FAULT: 'Y13',
+} as const;
+
+/** DT → PLC 写入（按钮 + 传感器 + 磁性开关，直接写 X 地址 — GX Sim2 中 MX Component 可写 X） */
+export const MITSUBISHI_WRITE_VARS = {
+  BUTTON_START: 'X0',
+  BUTTON_STOP: 'X1',
+  BUTTON_ESTOP: 'X2',
+  S1_BELT1_ENTRY: 'X3',
+  S2_BELT1_RUN: 'X4',
+  S3_BELT1_EXIT: 'X5',
+  S4_BELT2_ENTRY: 'X6',
+  S5_BELT2_RUN: 'X7',
+  S6_BELT2_EXIT: 'X10',
+  S7_BELT3_ENTRY: 'X11',
+  S8_BELT3_RUN: 'X12',
+  S9_BELT3_EXIT: 'X13',
+  S10_PILEUP: 'X14',
+  CYL_FEED_OUT: 'X15',
+  CYL_FEED_IN: 'X16',
+} as const;
+
+/** 三菱地址（UI 显示用） */
+export const MITSUBISHI_DISPLAY_VARS = MITSUBISHI_READ_VARS;

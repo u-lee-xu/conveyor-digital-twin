@@ -7,6 +7,11 @@ interface AppStoreState {
   setMode: (mode: AppMode) => void;
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
+  /** 仿真模式 - 运行状态 */
+  simRunning: boolean;
+  simEStop: boolean;
+  setSimRunning: (running: boolean) => void;
+  setSimEStop: (estop: boolean) => void;
   plcConfig: {
     host: string;
     port: number;
@@ -59,6 +64,10 @@ export const useAppStore = create<AppStoreState>((set) => ({
   setMode: (mode) => set({ mode }),
   isConnected: false,
   setConnected: (connected) => set({ isConnected: connected }),
+  simRunning: false,
+  simEStop: false,
+  setSimRunning: (running) => set({ simRunning: running }),
+  setSimEStop: (estop) => set({ simEStop: estop }),
   plcConfig: getInitialPlcConfig(),
   setPlcConfig: (config) => set((state) => {
     const nextConfig = { ...state.plcConfig, ...config };

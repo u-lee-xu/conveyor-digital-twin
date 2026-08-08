@@ -10,6 +10,7 @@ import {
 import { BeltConveyor, IndicatorLight } from './components/BeltConveyor';
 import { Hopper, FeedCylinder, SortingStations, CollectionBox } from './components/SortingStation';
 import { BeltMaterialItem } from './components/BeltMaterialItem';
+import { SensorDetector } from './components/SensorDetector';
 import { SceneLabel } from './components/SceneLabel';
 
 // ===== 传感器名称映射 =====
@@ -71,6 +72,9 @@ export function ThreeStageBeltSceneContent() {
       ))}
 
       {materialIds.map((id) => <BeltMaterialItem key={id} id={id} />)}
+
+      {/* 传感器集中检测（修复不复位问题） */}
+      <SensorDetector />
     </group>
   );
 }
