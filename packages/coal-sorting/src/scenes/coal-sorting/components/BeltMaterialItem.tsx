@@ -31,11 +31,12 @@ function getBeltSurfaceY(belt: BeltName, scale: number): number {
   return BELT_SURFACE_Y[belt] + (MATERIAL_SIZE * scale) / 2;
 }
 
-/** 皮带转接映射：当前皮带 → 下一条皮带 */
-const NEXT_BELT: Partial<Record<BeltName, BeltName>> = {
-  belt1: 'belt2',
-  belt2: 'belt3',
-  belt3: 'belt4',
+/** 皮带转接抛掷速度（世界坐标，m/s）— 按出发皮带定制落点 */
+const THROW_SPEEDS: Partial<Record<BeltName, [number, number, number]>> = {
+  belt1: [0.6, 1.2, -0.55], // belt1 → belt2 入口
+  belt2: [0, 1.0, 0.6],     // belt2 → belt3
+  belt3: [0.3, 0.3, 0],     // belt3 → 精煤收集箱
+  belt4: [0, 0.3, 1.5],     // belt4 → 筛下物收集箱
 };
 
 export function BeltMaterialItem({ id }: { id: string }) {
@@ -64,13 +65,11 @@ export function BeltMaterialItem({ id }: { id: string }) {
     const elapsed = now - matState.phaseStart;
     const scale = PARTICLE_SIZE_MAP[matState.size]?.scale || 1.0;
 
-    // ===== 入箱检测 =====
+    // ===== 入箱检测（按物料类型匹配收集箱）=====
     const boxType = detectBox(pos);
-    if (boxType) {
-      incrementCount(boxType);
-      removeMaterial(id);
-      return;
-    }
+    if (boxType === 'coal' && matState.type === 'coal') { incrementCount('coal'); removeMaterial(id); return; }
+    if (boxType === 'stone' && matState.type === 'stone') { incrementCount('stone'); removeMaterial(id); return; }
+    if (boxType === 'small' && matState.size === 'small') { incrementCount('small'); removeMaterial(id); return; }
 
     // ===== 掉落回收 =====
     if (pos.y < PHYSICS.FALL_RECOVERY_Y) { removeMaterial(id); return; }
@@ -133,28 +132,14 @@ export function BeltMaterialItem({ id }: { id: string }) {
         break;
       }
       case 'transitioning': {
-        // 刚从 kinematic 切换到 dynamic 时，赋予抛出速度
+        // 刚从 kinematic 切换到 dynamic 时，按出发皮带赋予抛掷速度
         if (bodyTypeRef.current !== 0) {
           rbRef.current.setBodyType(0 as const, true);
           bodyTypeRef.current = 0;
           const prevBelt = matState.onBelt;
-          const nextBelt = prevBelt ? NEXT_BELT[prevBelt] : undefined;
-          if (prevBelt && nextBelt) {
-            const layout = BELT_LAYOUT[prevBelt];
-            const nextLayout = BELT_LAYOUT[nextBelt];
-            // 皮带运行方向速度（加强，确保能离开皮带表面）
-            const beltSpeed = (state.belts?.[prevBelt]?.speed || 0.008) * 60;
-            const dirX = Math.cos(layout.rotation);
-            const dirZ = Math.sin(layout.rotation);
-            // 朝向下一条皮带入口的速度分量
-            const toNextX = nextLayout.position[0] - pos.x;
-            const toNextZ = nextLayout.position[2] - pos.z;
-            const toNextDist = Math.sqrt(toNextX * toNextX + toNextZ * toNextZ) || 1;
-            rbRef.current.setLinvel({
-              x: dirX * beltSpeed * 3 + (toNextX / toNextDist) * 1.5,
-              y: 1.5, // 向上抛出，离开皮带表面
-              z: dirZ * beltSpeed * 3 + (toNextZ / toNextDist) * 1.5,
-            }, true);
+          const speed = prevBelt ? THROW_SPEEDS[prevBelt] : undefined;
+          if (speed) {
+            rbRef.current.setLinvel({ x: speed[0], y: speed[1], z: speed[2] }, true);
           }
         }
         const detected = detectBelt(pos);
@@ -172,12 +157,16 @@ export function BeltMaterialItem({ id }: { id: string }) {
         break;
       }
       case 'sieving': {
-        if (bodyTypeRef.current !== 0) { rbRef.current.setBodyType(0 as const, true); bodyTypeRef.current = 0; }
-        rbRef.current.applyImpulse({
-          x: (Math.random() - 0.5) * PHYSICS.SIEVE_IMPULSE_XY,
-          y: PHYSICS.SIEVE_IMPULSE_Y_BASE + Math.random() * PHYSICS.SIEVE_IMPULSE_XY,
-          z: (Math.random() - 0.5) * PHYSICS.SIEVE_IMPULSE_XY,
-        }, true);
+        if (bodyTypeRef.current !== 0) {
+          rbRef.current.setBodyType(0 as const, true);
+          bodyTypeRef.current = 0;
+          // 筛分弹起：垂直抛出 + 随机水平漂移，落入 belt4
+          rbRef.current.setLinvel({
+            x: (Math.random() - 0.5) * 2 * PHYSICS.SIEVE_VELOCITY_XZ,
+            y: PHYSICS.SIEVE_VELOCITY_Y,
+            z: (Math.random() - 0.5) * 2 * PHYSICS.SIEVE_VELOCITY_XZ,
+          }, true);
+        }
         const detected = detectBelt(pos);
         if (detected && detected.belt === 'belt4') {
           updateOnBelt(id, 'belt4');
@@ -195,10 +184,11 @@ export function BeltMaterialItem({ id }: { id: string }) {
         break;
       }
       case 'blown': {
-        if (bodyTypeRef.current !== 0) { rbRef.current.setBodyType(0 as const, true); bodyTypeRef.current = 0; }
-        if (elapsed < PHYSICS.BLOWN_IMPULSE_DURATION) {
+        if (bodyTypeRef.current !== 0) {
+          rbRef.current.setBodyType(0 as const, true);
+          bodyTypeRef.current = 0;
           // 喷吹方向：垂直于 belt2 运行方向（belt2 沿 Z 轴，喷吹沿 -X 方向）
-          rbRef.current.applyImpulse({ x: PHYSICS.BLOWN_IMPULSE_X, y: PHYSICS.BLOWN_IMPULSE_Y, z: 0 }, true);
+          rbRef.current.setLinvel({ x: PHYSICS.BLOWN_VELOCITY_X, y: PHYSICS.BLOWN_VELOCITY_Y, z: 0 }, true);
         }
         if (elapsed > PHYSICS.BLOWN_TIMEOUT) { removeMaterial(id); }
         break;

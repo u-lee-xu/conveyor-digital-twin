@@ -47,14 +47,15 @@ export const BELT_HEIGHTS = {
 
 export const SORTING_STATIONS = {
   screening: { startZ: -0.2, endZ: 0.3 },
-  aligner: { position: [-1.2, 0.83, 0.6] as [number, number, number] },
+  /** V形整列器位于 belt2 前半段（lx∈[0,0.5]），与整列侧向力作用区对齐 */
+  aligner: { position: [-1.2, 0.83, 1.05] as [number, number, number] },
   xrayGate: { position: [-1.2, 0.82, 1.0] as [number, number, number], rotation: 1.5708 },
   airValveArray: { position: [-1.55, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
 };
 
+/** 溜槽导板 — belt2→belt3 转接（物料从 belt2 头端抛落，经板面滑入 belt3） */
 export const DEFLECTOR_PLATES = {
-  plate1to2: { position: [-0.8, 1.0, 0.1] as [number, number, number], rotation: [0, 0, 1.047] as [number, number, number], size: [0.5, 0.015, 0.55] as [number, number, number] },
-  plate2to3: { position: [-1.2, 0.6, 2.15] as [number, number, number], rotation: [-1.047, 0, 0] as [number, number, number], size: [0.55, 0.015, 0.5] as [number, number, number] },
+  plate2to3: { position: [-1.2, 0.64, 2.05] as [number, number, number], rotation: [-0.5, 0, 0] as [number, number, number], size: [0.55, 0.015, 0.5] as [number, number, number] },
 };
 
 export const SENSOR_POSITIONS = {
@@ -62,7 +63,7 @@ export const SENSOR_POSITIONS = {
   s3_belt1_exit: [-1.6, 1.3, 0.1] as [number, number, number],
   s4_belt2_entry: [-1.2, 0.9, 0.0] as [number, number, number],
   s6_belt2_exit: [-1.2, 0.9, 1.6] as [number, number, number],
-  s7_belt3_entry: [-0.8, 0.5, 1.8] as [number, number, number],
+  s7_belt3_entry: [-1.0, 0.5, 1.8] as [number, number, number],
   s9_belt3_exit: [0.6, 0.5, 1.8] as [number, number, number],
   s2_belt1_run: [-2.4, 1.4, -0.2] as [number, number, number],
   s5_belt2_run: [-1.5, 1.0, 0.8] as [number, number, number],
@@ -74,7 +75,8 @@ export const HOPPER_POSITION: [number, number, number] = [-3.2, 1.57, 0.1];
 export const FEED_CYLINDER_POSITION: [number, number, number] = [-3.5, 1.22, -0.25];
 export const COLLECTION_BOX_POSITION: [number, number, number] = [0.7, 0.1, 1.8];
 export const IMPURITY_BOX_POSITION: [number, number, number] = [-1.8, 0.1, 1.4];
-export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-1.2, 0.1, 0.2];
+/** 筛下物收集箱 — 位于 belt4 出口端外侧 */
+export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-1.2, 0.1, 1.5];
 
 export const INDICATOR_POSITIONS = {
   belt1_run: [-2.4, 1.65, -0.3] as [number, number, number],
@@ -180,6 +182,17 @@ export const COMPONENT = {
   HOPPER_RIM_THICKNESS: 0.02,
   HOPPER_RIM_Y: 0.2,
   HOPPER_LABEL_Y: 0.3,
+  // 下料溜槽（绕 Z 倾斜，低端朝向皮带）
+  HOPPER_CHUTE_LENGTH: 0.35,
+  HOPPER_CHUTE_THICKNESS: 0.02,
+  HOPPER_CHUTE_WIDTH: 0.3,
+  HOPPER_CHUTE_Y: -0.19,
+  HOPPER_CHUTE_ANGLE: 0.4,
+
+  // 气阀喷嘴
+  AIR_VALVE_RADIUS_TOP: 0.015,
+  AIR_VALVE_RADIUS_BOTTOM: 0.02,
+  AIR_VALVE_LENGTH: 0.12,
 
   // 气缸推板
   CYLINDER_PLATE_THICKNESS: 0.02,
@@ -228,14 +241,13 @@ export const PHYSICS = {
   SIEVING_TIMEOUT: 5000,
   BLOWN_TIMEOUT: 3000,
 
-  // 筛分冲量
-  SIEVE_IMPULSE_XY: 0.005,
-  SIEVE_IMPULSE_Y_BASE: 0.008,
+  // 筛分抛出速度（m/s，切换 dynamic 时一次性设定）
+  SIEVE_VELOCITY_XZ: 0.15,
+  SIEVE_VELOCITY_Y: 1.0,
 
-  // 气吹冲量
-  BLOWN_IMPULSE_X: -0.15,
-  BLOWN_IMPULSE_Y: 0.02,
-  BLOWN_IMPULSE_DURATION: 100,
+  // 气吹抛出速度（m/s，垂直于 belt2 运行方向）
+  BLOWN_VELOCITY_X: -1.5,
+  BLOWN_VELOCITY_Y: 0.3,
 
   // 整列侧向力
   ALIGN_LATERAL_FACTOR: 0.2,
@@ -244,7 +256,8 @@ export const PHYSICS = {
   BELT_DETECT_X_TOLERANCE: 0.05,
   BELT_DETECT_Y_TOLERANCE: 0.12,
   BOX_DETECT_XZ_RANGE: 0.3,
-  BOX_DETECT_Y_MAX_OFFSET: 0.3,
+  /** 入箱判定高度上限 — 箱顶（0.3）以内才算入箱 */
+  BOX_DETECT_Y_MAX_OFFSET: 0.2,
   BOX_DETECT_Y_MIN_OFFSET: -0.05,
   FALL_RECOVERY_Y: -0.5,
 } as const;
