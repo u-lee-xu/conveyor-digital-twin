@@ -41,13 +41,9 @@ export function ThreeStageBeltSceneContent() {
       <BeltConveyor beltName="belt1" /><BeltConveyor beltName="belt2" />
       <BeltConveyor beltName="belt3" /><BeltConveyor beltName="belt4" />
 
-      {/* 溜槽导板 — belt1→belt2、belt2→belt3 */}
-      <RigidBody type="fixed" position={DEFLECTOR_PLATES.plate1to2.position} rotation={DEFLECTOR_PLATES.plate1to2.rotation} colliders={false}>
-        <CuboidCollider args={[DEFLECTOR_PLATES.plate1to2.size[0] / 2, DEFLECTOR_PLATES.plate1to2.size[1] / 2, DEFLECTOR_PLATES.plate1to2.size[2] / 2]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} friction={PHYSICS.BELT_FRICTION} />
-        <mesh><boxGeometry args={DEFLECTOR_PLATES.plate1to2.size} /><meshStandardMaterial color={VISUAL.FRAME_COLOR} transparent opacity={0.6} /></mesh>
-      </RigidBody>
+      {/* 溜槽导板 — belt2→belt3 转接 */}
       <RigidBody type="fixed" position={DEFLECTOR_PLATES.plate2to3.position} rotation={DEFLECTOR_PLATES.plate2to3.rotation} colliders={false}>
-        <CuboidCollider args={[DEFLECTOR_PLATES.plate2to3.size[0] / 2, DEFLECTOR_PLATES.plate2to3.size[1] / 2, DEFLECTOR_PLATES.plate2to3.size[2] / 2]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} friction={PHYSICS.BELT_FRICTION} />
+        <CuboidCollider args={[DEFLECTOR_PLATES.plate2to3.size[0] / 2, DEFLECTOR_PLATES.plate2to3.size[1] / 2, DEFLECTOR_PLATES.plate2to3.size[2] / 2]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} friction={0.1} />
         <mesh><boxGeometry args={DEFLECTOR_PLATES.plate2to3.size} /><meshStandardMaterial color={VISUAL.FRAME_COLOR} transparent opacity={0.6} /></mesh>
       </RigidBody>
 
