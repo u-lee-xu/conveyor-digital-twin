@@ -30,7 +30,9 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 5174,
+    // platform 包占用 5174，避免端口冲突
+    port: 5176,
+    strictPort: true,
   },
   build: {
     rollupOptions: {
