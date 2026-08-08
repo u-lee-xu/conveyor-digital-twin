@@ -35,9 +35,6 @@ export function ThreeStageBeltSceneContent() {
 
   return (
     <group>
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[10, 10, 5]} intensity={1} />
-
       <BeltConveyor beltName="belt1" /><BeltConveyor beltName="belt2" />
       <BeltConveyor beltName="belt3" /><BeltConveyor beltName="belt4" />
 
