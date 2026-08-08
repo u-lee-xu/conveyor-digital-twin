@@ -43,7 +43,8 @@ const THROW_SPEEDS: Partial<Record<BeltName, [number, number, number]>> = {
 };
 
 /** 小料在 belt2 上开始过筛的位置（局部 X，位于筛分孔带） */
-const SIEVE_START_LX = -0.5;
+/** 小料在 belt2 上开始过筛的位置（局部 X，位于筛孔带，避开入口实板 lx∈[-1,-0.4]） */
+const SIEVE_START_LX = -0.35;
 
 export function BeltMaterialItem({ id }: { id: string }) {
   const matState = useBeltStore((s) => s.materials.find(m => m.id === id));
@@ -125,14 +126,17 @@ export function BeltMaterialItem({ id }: { id: string }) {
         break;
       }
       case 'transitioning': {
-        // 刚从 kinematic 切换到 dynamic 时，按出发皮带赋予抛掷速度
+        // 刚从 kinematic 切换到 dynamic 时，按出发皮带赋予滑出速度
         if (bodyTypeRef.current !== 0) {
           rbRef.current.setBodyType(0 as const, true);
           bodyTypeRef.current = 0;
+          // 抬离带面（THROW_CLEARANCE），避免末端碰撞体摩擦刹停，保持水平滑出
+          const t = rbRef.current.translation();
+          rbRef.current.setTranslation({ x: t.x, y: t.y + PHYSICS.THROW_CLEARANCE, z: t.z }, true);
           const prevBelt = matState.onBelt;
           const speed = prevBelt ? THROW_SPEEDS[prevBelt] : undefined;
           if (speed) {
-            rbRef.current.setLinvel({ x: speed[0], y: speed[1], z: speed[2] }, true);
+            rbRef.current.setLinvel({ x: speed[0], y: speed[1] ?? 0, z: speed[2] }, true);
           }
         }
         const detected = detectBelt(pos);
