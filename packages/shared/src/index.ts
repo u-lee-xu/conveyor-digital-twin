@@ -10,7 +10,7 @@ export type { HelpContent, HelpStep, GuideCard, AddressTable, ProtocolGuide } fr
 
 // Physics Scene
 export { PhysicsScene } from './components/PhysicsScene';
-
+export { Ground, PhysicsGround, GROUND_SIZE, GROUND_COLOR, GROUND_GRID_COLOR } from './components/Ground';
 // Services
 export { modbusService } from './services/modbus-websocket';
 export type { ProtocolType } from './services/modbus-websocket';
