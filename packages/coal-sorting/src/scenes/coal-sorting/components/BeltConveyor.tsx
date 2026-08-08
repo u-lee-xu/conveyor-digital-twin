@@ -65,7 +65,8 @@ export function BeltConveyor({ beltName }: { beltName: BeltName }) {
       <mesh position={[0, 0, -BELT_WIDTH / 2 - 0.03]}><boxGeometry args={[length + 0.1, BEAM_SECTION, BEAM_SECTION]} /><meshStandardMaterial color={VISUAL.FRAME_COLOR} /></mesh>
       <mesh position={[0, 0, BELT_WIDTH / 2 + 0.03]}><boxGeometry args={[length + 0.1, BEAM_SECTION, BEAM_SECTION]} /><meshStandardMaterial color={VISUAL.FRAME_COLOR} /></mesh>
       <BeltEnds beltName={beltName} beltRunning={beltRunning} />
-      <mesh position={[0, TAIL_DRUM_R + BELT_THICKNESS, 0]}>
+      {/* 带面视觉：上平面与端滚筒上边缘持平（2R - t/2 使 box 顶面 = 2R） */}
+      <mesh position={[0, 2 * TAIL_DRUM_R - BELT_THICKNESS / 2, 0]}>
         <boxGeometry args={[length, BELT_THICKNESS, BELT_WIDTH]} />
         <meshStandardMaterial color={beltRunning ? (isSieving ? VISUAL.BELT_SIEVE : VISUAL.BELT_RUN) : VISUAL.BELT_STOP} transparent={isSieving} opacity={isSieving ? VISUAL.BELT_SIEVE_OPACITY : 1} />
       </mesh>
