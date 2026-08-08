@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { Physics } from '@react-three/rapier';
+import { PhysicsGround } from '@digital-twin/shared';
 import { PlcConnectionPanel, HelpPanel, useMobile, type PlcConnConfig } from '@digital-twin/shared';
 import { useAppStore, type AppMode } from './stores/useAppStore';
 import { BeltControlPanel } from './scenes/coal-sorting/panels/BeltControlPanel';
@@ -52,9 +54,15 @@ export default function App() {
           minDistance={2} maxDistance={20}
           maxPolarAngle={Math.PI / 2}
         />
-        <ThreeStageBeltSceneContent />
+        <Suspense fallback={null}>
+          <Physics gravity={[0, -9.8, 0]} debug={false} timeStep={1 / 30}>
+            <ambientLight intensity={1.5} />
+            <directionalLight position={[10, 10, 5]} intensity={1} />
+            <PhysicsGround />
+            <ThreeStageBeltSceneContent />
+          </Physics>
+        </Suspense>
       </Canvas>
-
       {/* 左侧极窄控制栏（手机端隐藏，使用底部抽屉） */}
       {!isMobile && (
         <div
