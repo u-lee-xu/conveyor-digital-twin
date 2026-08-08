@@ -1,4 +1,4 @@
-import { BELT_LENGTH, BELT_WIDTH, BELT_SURFACE_Y, BELT_LAYOUT, PHYSICS } from '../constants';
+import { BELT_WIDTH, BELT_SURFACE_Y, BELT_LAYOUT, PHYSICS, getBeltLength } from '../constants';
 import type { BeltName } from '../useBeltStore';
 
 /** 将世界坐标转换为某条皮带的局部坐标 */
@@ -19,7 +19,7 @@ export function detectBelt(pos: { x: number; y: number; z: number }): { belt: Be
     const { lx, lz } = worldToLocal(pos, name);
     const surfaceY = BELT_SURFACE_Y[name];
     if (
-      Math.abs(lx) < BELT_LENGTH / 2 + PHYSICS.BELT_DETECT_X_TOLERANCE &&
+      Math.abs(lx) < getBeltLength(name) / 2 + PHYSICS.BELT_DETECT_X_TOLERANCE &&
       Math.abs(lz) < BELT_WIDTH / 2 + 0.05 &&
       pos.y > surfaceY - 0.05 &&
       pos.y < surfaceY + PHYSICS.BELT_DETECT_Y_TOLERANCE * 2

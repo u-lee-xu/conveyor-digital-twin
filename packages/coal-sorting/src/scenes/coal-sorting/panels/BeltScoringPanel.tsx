@@ -3,7 +3,7 @@ import { useBeltStore, type BeltName } from '../useBeltStore';
 
 const BELT_NAMES: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
 const BELT_LABELS: Record<BeltName, string> = {
-  belt1: '1# 给料皮带', belt2: '2# 筛分皮带', belt3: '3# 精煤皮带', belt4: '4# 筛下皮带',
+  belt1: '1# 给料皮带', belt2: '2# 筛分皮带', belt3: '3# 筛下小料皮带', belt4: '4# 大料收集皮带',
 };
 
 export const BeltScoringPanel: React.FC<{ connected: boolean }> = ({ connected }) => {
