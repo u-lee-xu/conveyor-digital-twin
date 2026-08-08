@@ -13,9 +13,16 @@
 // ============================================================
 
 export const BELT_LENGTH = 2.0;
+/** belt3（筛下小料皮带）长度 — 仅覆盖 belt2 筛分区 */
+export const BELT3_LENGTH = 1.4;
 export const BELT_WIDTH = 0.45;
 export const BELT_THICKNESS = 0.015;
 export const BELT_SPEED = 0.008;
+
+/** 皮带长度（belt3 特殊） */
+export function getBeltLength(name: string): number {
+  return name === 'belt3' ? BELT3_LENGTH : BELT_LENGTH;
+}
 
 export const TAIL_DRUM_R = 0.045;
 export const HEAD_DRUM_R = 0.045;
@@ -24,8 +31,10 @@ export const BEAM_SECTION = 0.04;
 export const BELT_LAYOUT = {
   belt1: { position: [-2.4, 1.15, 0.1] as [number, number, number], rotation: 0 },
   belt2: { position: [-1.2, 0.75, 0.8] as [number, number, number], rotation: 1.5708 },
-  belt3: { position: [-0.2, 0.35, 1.8] as [number, number, number], rotation: 0 },
-  belt4: { position: [-1.2, 0.35, 0.1] as [number, number, number], rotation: 1.5708 },
+  /** 3# 筛下小料皮带：位于 2# 筛分皮带正下方，承接漏下的小料 */
+  belt3: { position: [-1.2, 0.35, 0.5] as [number, number, number], rotation: 1.5708 },
+  /** 4# 大料收集皮带：承接 2# 末端落下的大料，运往大料收集箱 */
+  belt4: { position: [-0.2, 0.35, 1.8] as [number, number, number], rotation: 0 },
 } as const;
 
 /** 皮带表面 Y 坐标 = 布局 Y + 滚筒半径 + 皮带厚度 + 碰撞体半高 */
@@ -53,36 +62,31 @@ export const SORTING_STATIONS = {
   airValveArray: { position: [-1.55, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
 };
 
-/** 溜槽导板 — belt2→belt3 转接（物料从 belt2 头端抛落，经板面滑入 belt3） */
-export const DEFLECTOR_PLATES = {
-  plate2to3: { position: [-1.2, 0.64, 2.05] as [number, number, number], rotation: [-0.5, 0, 0] as [number, number, number], size: [0.55, 0.015, 0.5] as [number, number, number] },
-};
-
 export const SENSOR_POSITIONS = {
   s1_belt1_entry: [-3.2, 1.3, 0.1] as [number, number, number],
   s3_belt1_exit: [-1.6, 1.3, 0.1] as [number, number, number],
   s4_belt2_entry: [-1.2, 0.9, 0.0] as [number, number, number],
   s6_belt2_exit: [-1.2, 0.9, 1.6] as [number, number, number],
-  s7_belt3_entry: [-1.0, 0.5, 1.8] as [number, number, number],
-  s9_belt3_exit: [0.6, 0.5, 1.8] as [number, number, number],
+  s7_belt3_entry: [-1.2, 0.5, -0.1] as [number, number, number],
+  s9_belt3_exit: [-1.2, 0.5, 1.0] as [number, number, number],
   s2_belt1_run: [-2.4, 1.4, -0.2] as [number, number, number],
   s5_belt2_run: [-1.5, 1.0, 0.8] as [number, number, number],
-  s8_belt3_run: [-0.2, 0.6, 1.5] as [number, number, number],
+  s8_belt3_run: [-1.5, 0.6, 0.5] as [number, number, number],
   s10_pileup: [-3.2, 1.4, 0.1] as [number, number, number],
 };
 
 export const HOPPER_POSITION: [number, number, number] = [-3.2, 1.57, 0.1];
 export const FEED_CYLINDER_POSITION: [number, number, number] = [-3.5, 1.22, -0.25];
+/** 大料收集框 — belt4 尽头 */
 export const COLLECTION_BOX_POSITION: [number, number, number] = [0.7, 0.1, 1.8];
-export const IMPURITY_BOX_POSITION: [number, number, number] = [-1.8, 0.1, 1.4];
-/** 筛下物收集箱 — 位于 belt4 出口端外侧 */
-export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-1.2, 0.1, 1.5];
+/** 小料收集箱 — belt3 出口外侧 */
+export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-1.2, 0.1, 1.6];
 
 export const INDICATOR_POSITIONS = {
   belt1_run: [-2.4, 1.65, -0.3] as [number, number, number],
   belt2_run: [-1.5, 1.25, 0.8] as [number, number, number],
-  belt3_run: [-0.2, 0.85, 1.5] as [number, number, number],
-  belt4_run: [-1.5, 0.65, 0.1] as [number, number, number],
+  belt3_run: [-1.5, 0.72, 0.5] as [number, number, number],
+  belt4_run: [-0.2, 0.65, 2.2] as [number, number, number],
   fault: [-1.5, 1.35, 0.8] as [number, number, number],
 };
 
@@ -122,8 +126,7 @@ export const VISUAL = {
   STONE_COLOR: 0x94a3b8,
 
   // 收集箱
-  COAL_BOX_COLOR: 0x1e3a5f,
-  STONE_BOX_COLOR: 0x451a03,
+  LARGE_BOX_COLOR: 0x1e3a5f,
   SMALL_BOX_COLOR: 0x1e293b,
   BOX_OPACITY: 0.8,
 
@@ -239,18 +242,13 @@ export const PHYSICS = {
   // 状态机超时（毫秒）
   TRANSITION_TIMEOUT: 3000,
   SIEVING_TIMEOUT: 5000,
-  BLOWN_TIMEOUT: 3000,
 
-  // 筛分抛出速度（m/s，切换 dynamic 时一次性设定）
-  SIEVE_VELOCITY_XZ: 0.15,
-  SIEVE_VELOCITY_Y: 1.0,
+  // 过筛下落速度（m/s，小料从 belt2 漏到 belt3）
+  SIEVE_FALL_VELOCITY_Y: 0.8,
 
-  // 气吹抛出速度（m/s，垂直于 belt2 运行方向）
-  BLOWN_VELOCITY_X: -1.5,
-  BLOWN_VELOCITY_Y: 0.3,
-
-  // 整列侧向力
-  ALIGN_LATERAL_FACTOR: 0.2,
+  // 2# 筛分皮带入口承接段（实板）几何（局部 X 坐标）
+  SIEVE_ENTRY_ZONE_CENTER: -0.7,
+  SIEVE_ENTRY_ZONE_HALF: 0.3,
 
   // 检测容差
   BELT_DETECT_X_TOLERANCE: 0.05,
