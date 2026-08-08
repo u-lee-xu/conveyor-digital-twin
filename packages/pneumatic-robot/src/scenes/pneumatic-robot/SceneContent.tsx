@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Ground } from '@digital-twin/shared';
 import { SceneContainer } from './components/SceneContainer';
 import { RobotArm } from './components/RobotArm';
 import { PhysicsLabel } from './components/PhysicsLabel';
@@ -63,11 +64,7 @@ export function PneumaticRobotSceneContent() {
       <PhysicsLabel key="spawn-station" text="取料工位" position={WORKPIECE_SPAWN} offset={[0, 0.1, 0]} color="orange" />
       <PhysicsLabel key="place-station" text="放料工位" position={WORKPIECE_PLACE} offset={[0, 0.1, 0]} color="blue" />
       {/* 地面 — 与父容器背景色一致，融合无边界 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-        <planeGeometry args={[20, 20]} />
-        <meshStandardMaterial color="#334155" roughness={0.8} />
-      </mesh>
-      <gridHelper args={[20, 40, '#475569', '#334155']} position={[0, 0.001, 0]} />
+      <Ground />
 
       {/* ===== 物料位置标记 A 圈 ===== */}
       <mesh

@@ -1,20 +1,9 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier';
+import { Physics } from '@react-three/rapier';
 import type { ComponentType } from 'react';
-
-function PhysicsGround() {
-  return (
-    <RigidBody type="fixed" position={[0, -0.01, 0]} colliders={false}>
-      <CuboidCollider args={[10, 0.01, 10]} collisionGroups={(0x0001 << 16) | 0x0003} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[20, 20]} />
-        <meshStandardMaterial color={0x334155} roughness={0.8} />
-      </mesh>
-    </RigidBody>
-  );
-}
+import { PhysicsGround } from './Ground';
 
 interface PhysicsSceneProps {
   SceneContent: ComponentType;
