@@ -1,50 +1,24 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/rapier';
 import { useBeltStore, type BeltName, PARTICLE_SIZE_MAP } from '../useBeltStore';
 import {
-  BELT_LENGTH, BELT_WIDTH, BELT_SURFACE_Y, BELT_LAYOUT,
+  BELT_LENGTH, BELT_SURFACE_Y, BELT_LAYOUT,
   COLLECTION_BOX_POSITION, IMPURITY_BOX_POSITION, SMALL_PARTICLE_BOX_POSITION,
   MATERIAL_SIZE, VISUAL, PHYSICS,
 } from '../constants';
-
-/** 将世界坐标转换为某条皮带的局部坐标 */
-function worldToLocal(pos: { x: number; y: number; z: number }, belt: BeltName): { lx: number; ly: number; lz: number } {
-  const L = BELT_LAYOUT[belt];
-  const dx = pos.x - L.position[0], dz = pos.z - L.position[2];
-  const cos = Math.cos(-L.rotation), sin = Math.sin(-L.rotation);
-  return {
-    lx: dx * cos - dz * sin,
-    ly: pos.y - L.position[1],
-    lz: dx * sin + dz * cos,
-  };
-}
-
-/** 检测世界坐标位置在哪条皮带附近，返回皮带名和局部坐标 */
-function detectBelt(pos: { x: number; y: number; z: number }): { belt: BeltName; lx: number; lz: number } | null {
-  for (const name of ['belt1', 'belt2', 'belt3', 'belt4'] as BeltName[]) {
-    const { lx, lz } = worldToLocal(pos, name);
-    const surfaceY = BELT_SURFACE_Y[name];
-    if (
-      Math.abs(lx) < BELT_LENGTH / 2 + PHYSICS.BELT_DETECT_X_TOLERANCE &&
-      Math.abs(lz) < BELT_WIDTH / 2 + 0.05 &&
-      pos.y > surfaceY - 0.05 &&
-      pos.y < surfaceY + PHYSICS.BELT_DETECT_Y_TOLERANCE * 2
-    ) {
-      return { belt: name, lx, lz };
-    }
-  }
-  return null;
-}
+import { worldToLocal, detectBelt } from './helpers';
+import { registerMaterialPos, unregisterMaterialPos } from '../materialRegistry';
 
 /** 检测位置是否在某个箱子范围内 */
+const BOX_DETECTORS: { pos: [number, number, number]; type: 'coal' | 'stone' | 'small' }[] = [
+  { pos: COLLECTION_BOX_POSITION, type: 'coal' },
+  { pos: IMPURITY_BOX_POSITION, type: 'stone' },
+  { pos: SMALL_PARTICLE_BOX_POSITION, type: 'small' },
+];
+
 function detectBox(pos: { x: number; y: number; z: number }): 'coal' | 'stone' | 'small' | null {
-  const boxes: { pos: [number, number, number]; type: 'coal' | 'stone' | 'small' }[] = [
-    { pos: COLLECTION_BOX_POSITION, type: 'coal' },
-    { pos: IMPURITY_BOX_POSITION, type: 'stone' },
-    { pos: SMALL_PARTICLE_BOX_POSITION, type: 'small' },
-  ];
-  for (const box of boxes) {
+  for (const box of BOX_DETECTORS) {
     if (Math.abs(pos.x - box.pos[0]) < PHYSICS.BOX_DETECT_XZ_RANGE && Math.abs(pos.z - box.pos[2]) < PHYSICS.BOX_DETECT_XZ_RANGE && pos.y < box.pos[1] + PHYSICS.BOX_DETECT_Y_MAX_OFFSET && pos.y > box.pos[1] + PHYSICS.BOX_DETECT_Y_MIN_OFFSET) {
       return box.type;
     }
@@ -70,15 +44,19 @@ export function BeltMaterialItem({ id }: { id: string }) {
   const incrementCount = useBeltStore((s) => s.incrementCount);
   const updateOnBelt = useBeltStore((s) => s.updateMaterialOnBelt);
   const setPhase = useBeltStore((s) => s.setMaterialPhase);
-  const setSensor = useBeltStore((s) => s.setSensor);
   const rbRef = useRef<RapierRigidBody>(null);
   // 初始为 0（dynamic），匹配 RigidBody 默认类型；首帧会正确触发 setBodyType(2)
   const bodyTypeRef = useRef<2 | 0>(0);
+
+  useEffect(() => {
+    return () => unregisterMaterialPos(id);
+  }, [id]);
 
   useFrame((_, delta) => {
     if (!rbRef.current || !matState) return;
     const pos = rbRef.current.translation();
     if (isNaN(pos.x)) return;
+    registerMaterialPos(id, pos);
 
     const state = useBeltStore.getState();
     const phase = matState.phase;
@@ -96,38 +74,6 @@ export function BeltMaterialItem({ id }: { id: string }) {
 
     // ===== 掉落回收 =====
     if (pos.y < PHYSICS.FALL_RECOVERY_Y) { removeMaterial(id); return; }
-
-    // ===== 传感器触发检测 =====
-    if (phase === 'on_belt' || phase === 'transitioning') {
-      // 入口传感器
-      if (matState.onBelt === 'belt1') {
-        const { lx } = worldToLocal(pos, 'belt1');
-        if (lx > -BELT_LENGTH / 2 && lx < -BELT_LENGTH / 2 + 0.3) {
-          setSensor('s1_belt1_entry', true);
-        }
-        if (lx > BELT_LENGTH / 2 - 0.3) {
-          setSensor('s3_belt1_exit', true);
-        }
-      }
-      if (matState.onBelt === 'belt2') {
-        const { lx } = worldToLocal(pos, 'belt2');
-        if (lx < -BELT_LENGTH / 2 + 0.3) {
-          setSensor('s4_belt2_entry', true);
-        }
-        if (lx > BELT_LENGTH / 2 - 0.3) {
-          setSensor('s6_belt2_exit', true);
-        }
-      }
-      if (matState.onBelt === 'belt3') {
-        const { lx } = worldToLocal(pos, 'belt3');
-        if (lx < -BELT_LENGTH / 2 + 0.3) {
-          setSensor('s7_belt3_entry', true);
-        }
-        if (lx > BELT_LENGTH / 2 - 0.3) {
-          setSensor('s9_belt3_exit', true);
-        }
-      }
-    }
 
     // ===== 状态机 =====
     switch (phase) {

@@ -1,31 +1,128 @@
-import React from 'react';
-import { useBeltStore } from '../useBeltStore';
+import { useEffect } from 'react';
+import { useBeltStore, type BeltName } from '../useBeltStore';
+import { useBeltDemoSim, STEP_LABELS, type BeltDemoStep } from '../hooks/useBeltDemoSim';
+
+const STEP_ORDER: BeltDemoStep[] = ['IDLE', 'START_UP', 'FEEDING', 'STOPPING'];
+
+const BELT_NAMES: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
+const BELT_LABELS: Record<BeltName, string> = {
+  belt1: '1# 给料', belt2: '2# 筛分', belt3: '3# 精煤', belt4: '4# 筛下',
+};
 
 export const BeltDemoPanel: React.FC = () => {
-  const belts = useBeltStore((s) => s.belts || {});
-  const indicators = useBeltStore((s) => s.indicators || { belt1_run: false, belt2_run: false, belt3_run: false, fault: false });
+  const demo = useBeltDemoSim();
+  const belts = useBeltStore((s) => s.belts);
+  const materials = useBeltStore((s) => s.materials);
+  const materialCount = useBeltStore((s) => s.materialCount);
+  const sensors = useBeltStore((s) => s.sensors);
 
-  const anyRunning = indicators.belt1_run || indicators.belt2_run || indicators.belt3_run;
+  // 退出演示模式时自动停止
+  useEffect(() => {
+    return () => { if (demo.running) demo.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const anyRunning = BELT_NAMES.some((n) => belts[n].running);
+  const activeStepIndex = STEP_ORDER.indexOf(demo.step);
 
   return (
-    <div className="space-y-4">
-      <div className="text-center">
-        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${anyRunning ? 'bg-green-500/20 border-green-500/50 text-green-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
-          <div className={`w-2 h-2 rounded-full ${anyRunning ? 'bg-green-400 animate-ping' : 'bg-slate-600'}`}></div>
-          <span className="text-xs font-bold tracking-widest">{anyRunning ? '演示运行中' : '演示就绪'}</span>
+    <div className="space-y-2">
+      {/* ===== 状态徽章 ===== */}
+      <div className="card">
+        <div className="flex items-center justify-between">
+          <span className={`badge ${anyRunning ? 'badge-green' : 'badge-slate'}`}>
+            <span className={`badge-dot ${anyRunning ? 'badge-dot-green' : 'badge-dot-slate'}`} />
+            {demo.running ? '演示运行中' : '演示就绪'}
+          </span>
+          <span className="text-[0.6rem] text-slate-500 font-mono">
+            {demo.paused ? '已暂停' : STEP_LABELS[demo.step]}
+          </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {Object.entries(belts).map(([name, b]) => (
-          <div key={name} className="bg-slate-900/40 p-2 rounded border border-slate-800">
-            <div className="text-[10px] text-gray-500 mb-1">{name}</div>
-            <div className="flex items-center justify-between">
-              <div className={`w-1.5 h-1.5 rounded-full ${b.running ? 'bg-green-400' : 'bg-slate-700'}`}></div>
-              <div className="text-xs font-mono text-gray-300">{(b.speed * 1000).toFixed(1)} m/s</div>
-            </div>
+      {/* ===== 步骤指示器 ===== */}
+      <div className="card">
+        <div className="section-title !mb-1.5">演示流程</div>
+        <div className="step-list flex-wrap">
+          {STEP_ORDER.map((step, i) => (
+            <span key={step} className={`step-item ${i <= activeStepIndex ? 'step-item-active' : ''}`}>
+              <span className="step-index">{i + 1}</span>
+              <span className="step-dot" />
+              {STEP_LABELS[step]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ===== 控制按钮 ===== */}
+      <div className="card">
+        <div className="flex gap-1.5">
+          {!demo.running ? (
+            <button className="btn btn-xs btn-success flex-1 touch-manipulation" style={{ fontSize: '0.62rem' }} onClick={demo.start}>
+              ▶ 开始演示
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-xs btn-warning flex-1 touch-manipulation" style={{ fontSize: '0.62rem' }} onClick={demo.paused ? demo.resume : demo.pause}>
+                {demo.paused ? '▶ 继续' : '⏸ 暂停'}
+              </button>
+              <button className="btn btn-xs btn-danger flex-1 touch-manipulation" style={{ fontSize: '0.62rem' }} onClick={demo.stop}>
+                ■ 停止
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ===== 皮带状态 ===== */}
+      <div className="card">
+        <div className="section-title !mb-1.5">皮带状态</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {BELT_NAMES.map((name) => {
+            const b = belts[name];
+            return (
+              <div key={name} className="bg-slate-900/40 p-2 rounded border border-slate-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[0.6rem] text-slate-400">{BELT_LABELS[name]}</span>
+                  <span className={`io-led ${b.running ? 'io-led-on' : 'io-led-off'}`} />
+                </div>
+                <div className="text-[0.62rem] font-mono text-slate-500">
+                  {(b.speed * 1000).toFixed(1)} mm/s
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ===== 运行统计 ===== */}
+      <div className="card">
+        <div className="section-title !mb-1.5">运行统计</div>
+        <div className="space-y-1">
+          <div className="flex justify-between items-center">
+            <span className="text-[0.62rem] text-slate-500">在线物料</span>
+            <span className="text-[0.62rem] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{materials.length} pcs</span>
           </div>
-        ))}
+          <div className="flex justify-between items-center">
+            <span className="text-[0.62rem] text-slate-500">精煤收集</span>
+            <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.coal} pcs</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[0.62rem] text-slate-500">矸石吹除</span>
+            <span className="text-[0.62rem] font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">{materialCount.stone} pcs</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[0.62rem] text-slate-500">筛下物</span>
+            <span className="text-[0.62rem] font-mono text-slate-300 bg-slate-700/40 px-1.5 py-0.5 rounded">{materialCount.small} pcs</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[0.62rem] text-slate-500">堆料传感器</span>
+            <span className={`badge ${sensors.s10_pileup ? 'badge-red' : 'badge-slate'}`}>
+              <span className={`badge-dot ${sensors.s10_pileup ? 'badge-dot-red' : 'badge-dot-slate'}`} />
+              {sensors.s10_pileup ? '堆积' : '正常'}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,17 +1,21 @@
 import React, { useEffect, useRef } from 'react';
-import { Button } from '@digital-twin/shared';
 import {
   useBeltStore,
   type BeltName
 } from '../useBeltStore';
 import { MAX_MATERIALS } from '../constants';
 
+const BELT_NAMES: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
+const BELT_LABELS: Record<BeltName, string> = {
+  belt1: '1# 给料皮带', belt2: '2# 筛分整列', belt3: '3# 净煤收集', belt4: '4# 筛下运送',
+};
+
 export const BeltControlPanel: React.FC = () => {
-  const belts = useBeltStore((s) => s.belts || {});
+  const belts = useBeltStore((s) => s.belts);
   const feedCylinder = useBeltStore((s) => s.feedCylinder);
-  const materials = useBeltStore((s) => s.materials || []);
+  const materials = useBeltStore((s) => s.materials);
   const autoFeed = useBeltStore((s) => s.autoFeed);
-  const autoFeedInterval = useBeltStore((s) => s.autoFeedInterval || 2);
+  const autoFeedInterval = useBeltStore((s) => s.autoFeedInterval);
   const coalRatio = useBeltStore((s) => s.coalRatio);
   const autoFeedSize = useBeltStore((s) => s.autoFeedSize);
   const sizeWeights = useBeltStore((s) => s.sizeWeights);
@@ -26,7 +30,7 @@ export const BeltControlPanel: React.FC = () => {
   const setAutoFeedSize = useBeltStore((s) => s.setAutoFeedSize);
   const setSizeWeight = useBeltStore((s) => s.setSizeWeight);
 
-  const autoFeedTimerRef = useRef<any>(null);
+  const autoFeedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (autoFeed) {
@@ -43,48 +47,39 @@ export const BeltControlPanel: React.FC = () => {
     return () => { if (autoFeedTimerRef.current) clearInterval(autoFeedTimerRef.current); };
   }, [autoFeed, autoFeedInterval]);
 
-  const beltNames: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
-  const beltLabels: Record<BeltName, string> = {
-    belt1: '1# 给料皮带',
-    belt2: '2# 筛分整列',
-    belt3: '3# 净煤收集',
-    belt4: '4# 筛下运送'
-  };
-
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* 动力系统控制 */}
-      <div className="device-card">
-        <div className="text-sm font-semibold text-white mb-4 uppercase tracking-wider">动力系统控制</div>
-        <div className="space-y-4">
-          {beltNames.map((name) => {
-            const belt = belts[name] || { running: false, speed: 0, fault: false };
+      <div className="card">
+        <div className="section-title">动力系统控制</div>
+        <div className="space-y-2">
+          {BELT_NAMES.map((name) => {
+            const belt = belts[name];
             return (
-              <div key={name} className="border-l-2 border-slate-700 pl-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-300">{beltLabels[name]}</span>
-                  <span className={`status-badge ${belt.running ? 'status-badge-active' : 'status-badge-inactive'}`}>
+              <div key={name} className="border-l-2 border-slate-700 pl-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[0.65rem] font-medium text-slate-300">{BELT_LABELS[name]}</span>
+                  <span className={`badge ${belt.running ? 'badge-green' : 'badge-slate'}`}>
+                    <span className={`badge-dot ${belt.running ? 'badge-dot-green' : 'badge-dot-slate'}`} />
                     {belt.running ? '运行中' : '已停止'}
                   </span>
                 </div>
-                <div className="flex gap-2">
-                  <Button
+                <div className="flex gap-1.5">
+                  <button
                     onClick={() => setBeltRunning(name, true)}
                     disabled={belt.fault}
-                    variant={belt.running ? 'success' : 'default'}
-                    size="sm"
-                    className="flex-1"
+                    className={`btn btn-xs flex-1 touch-manipulation ${belt.running ? 'btn-success' : 'btn-outline'}`}
+                    style={{ fontSize: '0.62rem' }}
                   >
                     启动
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     onClick={() => setBeltRunning(name, false)}
-                    variant="danger"
-                    size="sm"
-                    className="flex-1"
+                    className="btn btn-xs btn-outline flex-1 touch-manipulation"
+                    style={{ fontSize: '0.62rem' }}
                   >
                     停止
-                  </Button>
+                  </button>
                 </div>
               </div>
             );
@@ -93,116 +88,117 @@ export const BeltControlPanel: React.FC = () => {
       </div>
 
       {/* 物料生成控制 */}
-      <div className="device-card">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-semibold text-white uppercase tracking-wider">物料生成</span>
-          <span className={`status-badge ${materials.length > 0 ? 'status-badge-active' : 'status-badge-inactive'}`}>
-            CNT: {materials.length}
+      <div className="card">
+        <div className="flex items-center justify-between mb-2">
+          <span className="section-title !mb-0">物料生成</span>
+          <span className="badge badge-blue">
+            <span className="badge-dot badge-dot-blue" />CNT: {materials.length}
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <Button onClick={() => spawnMaterial('coal', 'small')} variant="default" size="sm" className="text-[10px] px-1 bg-slate-800/50">煤/小</Button>
-          <Button onClick={() => spawnMaterial('coal', 'medium')} variant="default" size="sm" className="text-[10px] px-1 bg-slate-800/50">煤/中</Button>
-          <Button onClick={() => spawnMaterial('coal', 'large')} variant="default" size="sm" className="text-[10px] px-1 bg-slate-800/50">煤/大</Button>
-          <Button onClick={() => spawnMaterial('stone', 'small')} variant="default" size="sm" className="text-[10px] px-1 bg-slate-700/30 text-gray-400">石/小</Button>
-          <Button onClick={() => spawnMaterial('stone', 'medium')} variant="default" size="sm" className="text-[10px] px-1 bg-slate-700/30 text-gray-400">石/中</Button>
-          <Button onClick={() => spawnMaterial('stone', 'large')} variant="default" size="sm" className="text-[10px] px-1 bg-slate-700/30 text-gray-400">石/大</Button>
+        <div className="grid grid-cols-3 gap-1.5 mb-2">
+          <button onClick={() => spawnMaterial('coal', 'small')} className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem' }}>煤/小</button>
+          <button onClick={() => spawnMaterial('coal', 'medium')} className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem' }}>煤/中</button>
+          <button onClick={() => spawnMaterial('coal', 'large')} className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem' }}>煤/大</button>
+          <button onClick={() => spawnMaterial('stone', 'small')} className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem', color: '#94a3b8' }}>石/小</button>
+          <button onClick={() => spawnMaterial('stone', 'medium')} className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem', color: '#94a3b8' }}>石/中</button>
+          <button onClick={() => spawnMaterial('stone', 'large')} className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.55rem', color: '#94a3b8' }}>石/大</button>
         </div>
 
-        <div className="flex gap-2 mb-4">
-          <Button
+        <div className="flex gap-1.5 mb-2">
+          <button
             onClick={() => setFeedCylinder(true)}
-            variant={feedCylinder.extended ? 'primary' : 'default'}
-            size="md"
-            className="flex-1"
-            glow
+            className={`btn btn-xs flex-1 touch-manipulation ${feedCylinder.extended ? 'btn-primary' : 'btn-outline'}`}
+            style={{ fontSize: '0.62rem' }}
           >
-            ↗ 伸出
-          </Button>
-          <Button
+            ↗ 上料伸出
+          </button>
+          <button
             onClick={() => setFeedCylinder(false)}
-            variant={!feedCylinder.extended ? 'warning' : 'default'}
-            size="md"
-            className="flex-1"
-            glow
+            className={`btn btn-xs flex-1 touch-manipulation ${!feedCylinder.extended ? 'btn-warning' : 'btn-outline'}`}
+            style={{ fontSize: '0.62rem' }}
           >
-            ↙ 缩回
-          </Button>
-          <Button onClick={clearMaterials} variant="danger" size="md" className="flex-1" glow>🗑 清料</Button>
+            ↙ 上料缩回
+          </button>
+          <button onClick={clearMaterials} className="btn btn-xs btn-danger touch-manipulation" style={{ fontSize: '0.62rem' }}>🗑 清料</button>
         </div>
 
-        <div className="pt-3 border-t border-slate-700/50">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400">自动投料控制</span>
-            <div className="flex gap-2">
+        <div className="divider !my-1.5" />
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[0.62rem] text-slate-400">自动投料控制</span>
+            <div className="flex gap-1.5">
               <button
                 onClick={() => setAutoFeedSize(autoFeedSize === 'mixed' ? 'medium' : 'mixed')}
-                className={`text-[9px] px-1.5 py-0.5 rounded border ${autoFeedSize === 'mixed' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800 border-transparent text-gray-500'}`}
+                className={`btn btn-xs touch-manipulation ${autoFeedSize === 'mixed' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ fontSize: '0.55rem' }}
               >
                 {autoFeedSize === 'mixed' ? '随机尺寸' : '固定尺寸'}
               </button>
               <button
                 onClick={() => setAutoFeed(!autoFeed)}
                 className={`w-10 h-5 rounded-full relative transition-all duration-300 ${autoFeed ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-slate-700'}`}
+                aria-label="自动投料开关"
               >
                 <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-300 ${autoFeed ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
           </div>
 
-          <div className="space-y-3 mt-3">
+          <div className="space-y-2 mt-2">
             <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-[10px] text-gray-500">煤/石比例 (煤: {coalRatio}%)</span>
-                <span className="text-[10px] text-gray-500">{100 - coalRatio}% 石</span>
+              <div className="flex justify-between mb-0.5">
+                <span className="text-[0.55rem] text-slate-500">煤/石比例 (煤: {coalRatio}%)</span>
+                <span className="text-[0.55rem] text-slate-500">{100 - coalRatio}% 石</span>
               </div>
               <input
                 type="range"
                 min="0" max="100" step="5"
                 value={coalRatio}
                 onChange={(e) => setCoalRatio(Number(e.target.value))}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.3)]"
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
             </div>
 
             <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-[10px] text-gray-500">投料时间间隔</span>
-                <span className="text-[10px] text-gray-400 font-mono">{autoFeedInterval}s</span>
+              <div className="flex justify-between mb-0.5">
+                <span className="text-[0.55rem] text-slate-500">投料时间间隔</span>
+                <span className="text-[0.55rem] text-slate-400 font-mono">{autoFeedInterval}s</span>
               </div>
               <input
                 type="range"
                 min="0.2" max="5" step="0.1"
                 value={autoFeedInterval}
                 onChange={(e) => setAutoFeedInterval(Number(e.target.value))}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500 shadow-[0_0_5px_rgba(34,197,94,0.3)]"
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
             </div>
 
             {autoFeedSize === 'mixed' && (
-              <div className="pt-2 border-t border-slate-700/30">
-                <span className="text-[10px] text-gray-400 block mb-2">颗粒尺寸权重分布</span>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[9px] text-gray-500"><span>小</span><span>{sizeWeights.small}</span></div>
-                    <input type="range" min="0" max="100" step="1" value={sizeWeights.small} onChange={(e) => setSizeWeight('small', Number(e.target.value))} className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[9px] text-gray-500"><span>中</span><span>{sizeWeights.medium}</span></div>
-                    <input type="range" min="0" max="100" step="1" value={sizeWeights.medium} onChange={(e) => setSizeWeight('medium', Number(e.target.value))} className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[9px] text-gray-500"><span>大</span><span>{sizeWeights.large}</span></div>
-                    <input type="range" min="0" max="100" step="1" value={sizeWeights.large} onChange={(e) => setSizeWeight('large', Number(e.target.value))} className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                  </div>
+              <div className="pt-1.5 border-t border-slate-700/30">
+                <span className="text-[0.55rem] text-slate-400 block mb-1">颗粒尺寸权重分布</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['small', 'medium', 'large'] as const).map((size) => (
+                    <div key={size} className="space-y-0.5">
+                      <div className="flex justify-between text-[0.5rem] text-slate-500">
+                        <span>{size === 'small' ? '小' : size === 'medium' ? '中' : '大'}</span>
+                        <span>{sizeWeights[size]}</span>
+                      </div>
+                      <input
+                        type="range" min="0" max="100" step="1"
+                        value={sizeWeights[size]}
+                        onChange={(e) => setSizeWeight(size, Number(e.target.value))}
+                        className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
           </div>
 
           {!belts.belt1?.running && autoFeed && (
-            <div className="mt-2 text-[9px] text-orange-400/80 text-center animate-pulse">
+            <div className="mt-1.5 text-[0.55rem] text-orange-400/80 text-center animate-pulse">
               注意：请启动1#皮带以开始自动投料
             </div>
           )}

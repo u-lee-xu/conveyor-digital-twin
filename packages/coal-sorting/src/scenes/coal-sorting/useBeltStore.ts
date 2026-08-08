@@ -65,6 +65,8 @@ interface BeltState {
   setBeltSpeed: (name: BeltName, speed: number) => void;
   setBeltFault: (name: BeltName, fault: boolean) => void;
   setSensor: (name: BeltSensorName, active: boolean) => void;
+  /** 批量差量更新传感器状态（集中检测用） */
+  setSensors: (updates: Partial<Record<BeltSensorName, boolean>>) => void;
   setFeedCylinder: (extended: boolean) => void;
   setSeparator: (active: boolean) => void;
   updateFeedCylinderExtension: (extension: number) => void;
@@ -147,6 +149,16 @@ export const useBeltStore = create<BeltState>((set, get) => ({
     set((s) => {
       if (s.sensors[name] === active) return s;
       return { sensors: { ...s.sensors, [name]: active } };
+    }),
+
+  setSensors: (updates) =>
+    set((s) => {
+      const next = { ...s.sensors };
+      let changed = false;
+      for (const [name, value] of Object.entries(updates) as [BeltSensorName, boolean][]) {
+        if (next[name] !== value) { next[name] = value; changed = true; }
+      }
+      return changed ? { sensors: next } : s;
     }),
 
   setFeedCylinder: (extended) => set((s) => ({ feedCylinder: { ...s.feedCylinder, extended } })),
