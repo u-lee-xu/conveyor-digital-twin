@@ -62,17 +62,23 @@ export const SORTING_STATIONS = {
   airValveArray: { position: [-1.55, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
 };
 
+/**
+ * 传感器位置 — 统一规律：
+ * 入口/出口传感器位于皮带中心线正上方、端部（离带面 0.09）；
+ * 运行传感器位于皮带中心线正上方、皮带中部（离带面 0.09）。
+ * 带面高度：belt1≈1.21 / belt2≈0.81 / belt3≈0.41
+ */
 export const SENSOR_POSITIONS = {
-  s1_belt1_entry: [-3.2, 1.3, 0.1] as [number, number, number],
-  s3_belt1_exit: [-1.6, 1.3, 0.1] as [number, number, number],
-  s4_belt2_entry: [-1.2, 0.9, 0.0] as [number, number, number],
-  s6_belt2_exit: [-1.2, 0.9, 1.6] as [number, number, number],
-  s7_belt3_entry: [-1.2, 0.5, -0.1] as [number, number, number],
-  s9_belt3_exit: [-1.2, 0.5, 1.0] as [number, number, number],
-  s2_belt1_run: [-2.4, 1.4, -0.2] as [number, number, number],
-  s5_belt2_run: [-1.5, 1.0, 0.8] as [number, number, number],
-  s8_belt3_run: [-1.5, 0.6, 0.5] as [number, number, number],
-  s10_pileup: [-3.2, 1.4, 0.1] as [number, number, number],
+  s1_belt1_entry: [-3.4, 1.30, 0.1] as [number, number, number],
+  s3_belt1_exit: [-1.4, 1.30, 0.1] as [number, number, number],
+  s2_belt1_run: [-2.4, 1.30, 0.1] as [number, number, number],
+  s4_belt2_entry: [-1.2, 0.90, -0.2] as [number, number, number],
+  s6_belt2_exit: [-1.2, 0.90, 1.8] as [number, number, number],
+  s5_belt2_run: [-1.2, 0.90, 0.8] as [number, number, number],
+  s7_belt3_entry: [-1.2, 0.50, -0.2] as [number, number, number],
+  s9_belt3_exit: [-1.2, 0.50, 1.2] as [number, number, number],
+  s8_belt3_run: [-1.2, 0.50, 0.5] as [number, number, number],
+  s10_pileup: [-3.6, 1.35, 0.1] as [number, number, number],
 };
 
 export const HOPPER_POSITION: [number, number, number] = [-3.2, 1.57, 0.1];
@@ -82,12 +88,15 @@ export const COLLECTION_BOX_POSITION: [number, number, number] = [0.7, 0.1, 1.8]
 /** 小料收集箱 — belt3 出口外侧 */
 export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-1.2, 0.1, 1.6];
 
+/**
+ * 运行指示灯 — 位于各皮带中心线正上方（离带面 0.35），与传感器垂直错开
+ */
 export const INDICATOR_POSITIONS = {
-  belt1_run: [-2.4, 1.65, -0.3] as [number, number, number],
-  belt2_run: [-1.5, 1.25, 0.8] as [number, number, number],
-  belt3_run: [-1.5, 0.72, 0.5] as [number, number, number],
-  belt4_run: [-0.2, 0.65, 2.2] as [number, number, number],
-  fault: [-1.5, 1.35, 0.8] as [number, number, number],
+  belt1_run: [-2.4, 1.56, 0.1] as [number, number, number],
+  belt2_run: [-1.2, 1.16, 0.8] as [number, number, number],
+  belt3_run: [-1.2, 0.76, 0.5] as [number, number, number],
+  belt4_run: [-0.2, 0.76, 1.8] as [number, number, number],
+  fault: [-0.5, 1.45, 0.9] as [number, number, number],
 };
 
 export type IndicatorName = keyof typeof INDICATOR_POSITIONS;

@@ -13,6 +13,7 @@ import { BeltScoringPanel } from './scenes/coal-sorting/panels/BeltScoringPanel'
 import { ThreeStageBeltSceneContent } from './scenes/coal-sorting/SceneContent';
 import { plcService } from './services/plc-websocket';
 import { buildBeltHelpContent } from './scenes/coal-sorting/helpContent';
+import { useAutoFeedLoop } from './scenes/coal-sorting/hooks/useAutoFeedLoop';
 import type { ProtocolType } from './services/plc-websocket';
 
 const MODES: { key: AppMode; label: string; icon: string }[] = [
@@ -23,6 +24,7 @@ const MODES: { key: AppMode; label: string; icon: string }[] = [
 ];
 
 export default function App() {
+  useAutoFeedLoop();
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
   const isMobile = useMobile();

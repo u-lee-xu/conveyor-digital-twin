@@ -69,7 +69,8 @@ export function BeltConveyor({ beltName }: { beltName: BeltName }) {
         <boxGeometry args={[length, BELT_THICKNESS, BELT_WIDTH]} />
         <meshStandardMaterial color={beltRunning ? (isSieving ? VISUAL.BELT_SIEVE : VISUAL.BELT_RUN) : VISUAL.BELT_STOP} transparent={isSieving} opacity={isSieving ? VISUAL.BELT_SIEVE_OPACITY : 1} />
       </mesh>
-      <SceneLabel text={BELT_LABELS[beltName]} position={[0, HEAD_DRUM_R + 0.15, 0]} offset={[0, 0.1, 0]} />
+      {/* 皮带名牌 — 置于皮带侧方（局部 +Z），避免遮挡中心线上方的传感器/指示灯 */}
+      <SceneLabel text={BELT_LABELS[beltName]} position={[0, HEAD_DRUM_R + 0.15, BELT_WIDTH / 2 + 0.4]} offset={[0, 0.1, 0]} />
     </group>
   );
 }

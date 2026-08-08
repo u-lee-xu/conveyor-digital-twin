@@ -1,9 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   useBeltStore,
   type BeltName
 } from '../useBeltStore';
-import { MAX_MATERIALS } from '../constants';
 
 const BELT_NAMES: BeltName[] = ['belt1', 'belt2', 'belt3', 'belt4'];
 const BELT_LABELS: Record<BeltName, string> = {
@@ -29,23 +28,6 @@ export const BeltControlPanel: React.FC = () => {
   const setCoalRatio = useBeltStore((s) => s.setCoalRatio);
   const setAutoFeedSize = useBeltStore((s) => s.setAutoFeedSize);
   const setSizeWeight = useBeltStore((s) => s.setSizeWeight);
-
-  const autoFeedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (autoFeed) {
-      autoFeedTimerRef.current = setInterval(() => {
-        const state = useBeltStore.getState();
-        // 自动投料条件：开启自动、未满、1号皮带正在运行
-        if (state && state.materials.length < MAX_MATERIALS && state.belts.belt1?.running) {
-          state.spawnMaterial();
-        }
-      }, Math.max(0.2, autoFeedInterval) * 1000);
-    } else {
-      if (autoFeedTimerRef.current) clearInterval(autoFeedTimerRef.current);
-    }
-    return () => { if (autoFeedTimerRef.current) clearInterval(autoFeedTimerRef.current); };
-  }, [autoFeed, autoFeedInterval]);
 
   return (
     <div className="space-y-2">
