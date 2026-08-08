@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { RoundedBox } from '@react-three/drei';
+import { Ground } from '@digital-twin/shared';
 import { SceneContainer } from './components/SceneContainer';
 import { PhysicsLabel } from './components/PhysicsLabel';
 import { TrafficCars } from './components/TrafficCars';
 import {
-  ROAD_HALF_WIDTH, INTERSECTION_HALF, ROAD_LENGTH, GROUND_SIZE,
+  ROAD_HALF_WIDTH, INTERSECTION_HALF, ROAD_LENGTH,
   POLE_CORNERS, POLE_HEIGHT, ARM_LENGTH, ARM_OFFSET,
   HEAD_WIDTH, HEAD_HEIGHT, HEAD_DEPTH, HEAD_ROUND_RADIUS,
   LENS_RADIUS, LENS_THICKNESS, LENS_SPACING, BEZEL_RADIUS, BEZEL_TUBE,
@@ -196,21 +197,18 @@ export function TrafficSceneContent() {
   const halfRoad = ROAD_LENGTH / 2;
   return (
     <SceneContainer>
-      {/* 地面 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-        <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
-        <meshStandardMaterial color="#18222e" roughness={0.9} />
-      </mesh>
+      {/* 地面（统一样式） */}
+      <Ground />
 
       {/* 东西道路 */}
       <mesh position={[0, 0.012, 0]} receiveShadow>
         <boxGeometry args={[ROAD_LENGTH, 0.03, ROAD_HALF_WIDTH * 2]} />
-        <meshStandardMaterial color="#2b3542" roughness={0.85} />
+        <meshStandardMaterial color="#465468" roughness={0.85} />
       </mesh>
       {/* 南北道路 */}
       <mesh position={[0, 0.016, 0]} receiveShadow>
         <boxGeometry args={[ROAD_HALF_WIDTH * 2, 0.03, ROAD_LENGTH]} />
-        <meshStandardMaterial color="#2b3542" roughness={0.85} />
+        <meshStandardMaterial color="#465468" roughness={0.85} />
       </mesh>
 
       {/* 车道中心虚线 */}
