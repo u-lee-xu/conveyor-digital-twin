@@ -13,6 +13,11 @@ export function Hopper() {
     <group position={HOPPER_POSITION}>
       <mesh position={[0, COMPONENT.HOPPER_BODY_Y, 0]}><boxGeometry args={[COMPONENT.HOPPER_BODY_SIZE, COMPONENT.HOPPER_BODY_SIZE, COMPONENT.HOPPER_BODY_SIZE]} /><meshStandardMaterial color={VISUAL.HOPPER_BODY_COLOR} /></mesh>
       <mesh position={[0, COMPONENT.HOPPER_RIM_Y, 0]}><boxGeometry args={[COMPONENT.HOPPER_RIM_SIZE, COMPONENT.HOPPER_RIM_THICKNESS, COMPONENT.HOPPER_RIM_SIZE]} /><meshStandardMaterial color={VISUAL.HOPPER_RIM_COLOR} /></mesh>
+      {/* 下料溜槽 — 料斗底部斜向皮带表面 */}
+      <mesh position={[0, COMPONENT.HOPPER_CHUTE_Y, 0]} rotation={[0, 0, -COMPONENT.HOPPER_CHUTE_ANGLE]}>
+        <boxGeometry args={[COMPONENT.HOPPER_CHUTE_LENGTH, COMPONENT.HOPPER_CHUTE_THICKNESS, COMPONENT.HOPPER_CHUTE_WIDTH]} />
+        <meshStandardMaterial color={VISUAL.FRAME_COLOR} />
+      </mesh>
       <SceneLabel text="料斗" position={[0, COMPONENT.HOPPER_LABEL_Y, 0]} />
     </group>
   );
@@ -66,7 +71,18 @@ export function SortingStations() {
         <mesh position={[0, COMPONENT.XRAY_BEAM_Y, 0]}><boxGeometry args={[COMPONENT.XRAY_BEAM_WIDTH, COMPONENT.XRAY_BEAM_HEIGHT, COMPONENT.XRAY_BEAM_LENGTH]} /><meshStandardMaterial color={active ? VISUAL.XRAY_ACTIVE_COLOR : VISUAL.XRAY_INACTIVE_COLOR} /></mesh>
         <SceneLabel text="X射线检测" position={[0, COMPONENT.XRAY_LABEL_Y, 0]} />
       </group>
-      {/* 气阀阵列 */}
+      {/* 气阀阵列 — 皮带侧面朝向吹出区的一排喷吹喷嘴 */}
+      <group position={SORTING_STATIONS.airValveArray.position}>
+        {Array.from({ length: SORTING_STATIONS.airValveArray.count }).map((_, i) => {
+          const z = (i - (SORTING_STATIONS.airValveArray.count - 1) / 2) * SORTING_STATIONS.airValveArray.spacing;
+          return (
+            <mesh key={i} position={[0, 0, z]} rotation={[0, 0, -Math.PI / 2]}>
+              <cylinderGeometry args={[COMPONENT.AIR_VALVE_RADIUS_TOP, COMPONENT.AIR_VALVE_RADIUS_BOTTOM, COMPONENT.AIR_VALVE_LENGTH, 8]} />
+              <meshStandardMaterial color={active ? VISUAL.XRAY_ACTIVE_COLOR : VISUAL.XRAY_FRAME_COLOR} />
+            </mesh>
+          );
+        })}
+      </group>
       <SceneLabel text="气阀喷吹阵列" position={SORTING_STATIONS.airValveArray.position} offset={[0, 0.15, 0]} />
     </group>
   );
