@@ -28,13 +28,16 @@ export const TAIL_DRUM_R = 0.045;
 export const HEAD_DRUM_R = 0.045;
 export const BEAM_SECTION = 0.04;
 
+/**
+ * 皮带布局 — 回字形：
+ * 1# 给料（+X）→ 2# 筛分（+Z）→ 4# 大料收集（-X，掉头回程）→ 大料框（左下）
+ * 3# 筛下小料皮带位于 2# 正下方（+Z），末端小料收集箱
+ */
 export const BELT_LAYOUT = {
-  belt1: { position: [-2.4, 1.15, 0.1] as [number, number, number], rotation: 0 },
-  belt2: { position: [-1.2, 0.75, 0.8] as [number, number, number], rotation: 1.5708 },
-  /** 3# 筛下小料皮带：位于 2# 筛分皮带正下方，承接漏下的小料 */
-  belt3: { position: [-1.2, 0.35, 0.5] as [number, number, number], rotation: 1.5708 },
-  /** 4# 大料收集皮带：承接 2# 末端落下的大料，运往大料收集箱 */
-  belt4: { position: [-0.2, 0.35, 1.8] as [number, number, number], rotation: 0 },
+  belt1: { position: [-1.6, 1.15, 0.1] as [number, number, number], rotation: 0 },
+  belt2: { position: [-0.6, 0.75, 0.8] as [number, number, number], rotation: 1.5708 },
+  belt3: { position: [-0.6, 0.35, 0.5] as [number, number, number], rotation: 1.5708 },
+  belt4: { position: [-1.6, 0.35, 1.9] as [number, number, number], rotation: Math.PI },
 } as const;
 
 /** 皮带表面 Y 坐标 = 布局 Y + 滚筒半径 + 皮带厚度 + 碰撞体半高 */
@@ -57,52 +60,52 @@ export const BELT_HEIGHTS = {
 export const SORTING_STATIONS = {
   screening: { startZ: -0.2, endZ: 0.3 },
   /** V形整列器位于 belt2 前半段（lx∈[0,0.5]），与整列侧向力作用区对齐 */
-  aligner: { position: [-1.2, 0.83, 1.05] as [number, number, number] },
-  xrayGate: { position: [-1.2, 0.82, 1.0] as [number, number, number], rotation: 1.5708 },
-  airValveArray: { position: [-1.55, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
+  aligner: { position: [-0.6, 0.83, 1.05] as [number, number, number] },
+  xrayGate: { position: [-0.6, 0.82, 1.0] as [number, number, number], rotation: 1.5708 },
+  airValveArray: { position: [-0.95, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
 };
 
 /**
  * 传感器位置 — 统一规律：
  * 入口/出口传感器位于皮带中心线正上方、端部（离带面 0.09）；
  * 运行传感器位于皮带中心线正上方、皮带中部（离带面 0.09）。
- * 带面高度：belt1≈1.21 / belt2≈0.81 / belt3≈0.41
+ * 带面高度：belt1≈1.24 / belt2≈0.90 / belt3≈0.50
  */
 export const SENSOR_POSITIONS = {
-  s1_belt1_entry: [-3.4, 1.30, 0.1] as [number, number, number],
-  s3_belt1_exit: [-1.4, 1.30, 0.1] as [number, number, number],
-  s2_belt1_run: [-2.4, 1.30, 0.1] as [number, number, number],
-  s4_belt2_entry: [-1.2, 0.90, -0.2] as [number, number, number],
-  s6_belt2_exit: [-1.2, 0.90, 1.8] as [number, number, number],
-  s5_belt2_run: [-1.2, 0.90, 0.8] as [number, number, number],
-  s7_belt3_entry: [-1.2, 0.50, -0.2] as [number, number, number],
-  s9_belt3_exit: [-1.2, 0.50, 1.2] as [number, number, number],
-  s8_belt3_run: [-1.2, 0.50, 0.5] as [number, number, number],
-  s10_pileup: [-3.6, 1.35, 0.1] as [number, number, number],
+  s1_belt1_entry: [-2.6, 1.30, 0.1] as [number, number, number],
+  s3_belt1_exit: [-0.6, 1.30, 0.1] as [number, number, number],
+  s2_belt1_run: [-1.6, 1.30, 0.1] as [number, number, number],
+  s4_belt2_entry: [-0.6, 0.90, -0.2] as [number, number, number],
+  s6_belt2_exit: [-0.6, 0.90, 1.8] as [number, number, number],
+  s5_belt2_run: [-0.6, 0.90, 0.8] as [number, number, number],
+  s7_belt3_entry: [-0.6, 0.50, -0.2] as [number, number, number],
+  s9_belt3_exit: [-0.6, 0.50, 1.2] as [number, number, number],
+  s8_belt3_run: [-0.6, 0.50, 0.5] as [number, number, number],
+  s10_pileup: [-2.9, 1.35, 0.1] as [number, number, number],
 };
 
-export const HOPPER_POSITION: [number, number, number] = [-3.2, 1.57, 0.1];
-export const FEED_CYLINDER_POSITION: [number, number, number] = [-3.5, 1.22, -0.25];
-/** 大料收集框 — belt4 尽头 */
-export const COLLECTION_BOX_POSITION: [number, number, number] = [0.7, 0.1, 1.8];
-/** 小料收集箱 — belt3 出口外侧 */
-export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-1.2, 0.1, 1.6];
+export const HOPPER_POSITION: [number, number, number] = [-2.6, 1.57, 0.1];
+export const FEED_CYLINDER_POSITION: [number, number, number] = [-2.9, 1.22, -0.25];
+/** 大料收集框 — belt4 尽头（左端） */
+export const COLLECTION_BOX_POSITION: [number, number, number] = [-2.75, 0.1, 1.9];
+/** 小料收集箱 — belt3 出口外侧（与 belt4 带错开） */
+export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-0.6, 0.1, 1.3];
 
 /**
  * 运行指示灯 — 位于各皮带中心线正上方（离带面 0.35），与传感器垂直错开
  */
 export const INDICATOR_POSITIONS = {
-  belt1_run: [-2.4, 1.56, 0.1] as [number, number, number],
-  belt2_run: [-1.2, 1.16, 0.8] as [number, number, number],
-  belt3_run: [-1.2, 0.76, 0.5] as [number, number, number],
-  belt4_run: [-0.2, 0.76, 1.8] as [number, number, number],
-  fault: [-0.5, 1.45, 0.9] as [number, number, number],
+  belt1_run: [-1.6, 1.56, 0.1] as [number, number, number],
+  belt2_run: [-0.6, 1.16, 0.8] as [number, number, number],
+  belt3_run: [-0.6, 0.76, 0.5] as [number, number, number],
+  belt4_run: [-1.6, 0.76, 1.9] as [number, number, number],
+  fault: [-0.3, 1.45, 0.9] as [number, number, number],
 };
 
 export type IndicatorName = keyof typeof INDICATOR_POSITIONS;
 
 export const MATERIAL_SIZE = 0.08;
-export const MATERIAL_SPAWN_POSITION: [number, number, number] = [-3.2, BELT_SURFACE_Y.belt1 + MATERIAL_SIZE / 2, 0.1];
+export const MATERIAL_SPAWN_POSITION: [number, number, number] = [-2.6, BELT_SURFACE_Y.belt1 + MATERIAL_SIZE / 2, 0.1];
 export const MAX_MATERIALS = 20;
 export const S_RANGE = 0.15;
 export const FEED_CYLINDER_RETRACT = -0.15;
