@@ -361,7 +361,13 @@ export function BeltMaterialItem({ id }: { id: string }) {
       />
       <mesh scale={scale}>
         <boxGeometry args={[MATERIAL_SIZE, MATERIAL_SIZE, MATERIAL_SIZE]} />
-        <meshStandardMaterial color={matState.type === 'coal' ? VISUAL.COAL_COLOR : VISUAL.STONE_COLOR} />
+        <meshStandardMaterial
+          color={matState.type === 'coal' ? VISUAL.COAL_COLOR : VISUAL.STONE_COLOR}
+          roughness={matState.type === 'coal' ? VISUAL.COAL_ROUGHNESS : VISUAL.STONE_ROUGHNESS}
+          metalness={matState.type === 'coal' ? VISUAL.COAL_METALNESS : 0.05}
+          emissive={matState.type === 'coal' ? VISUAL.COAL_EMISSIVE : 0x000000}
+          emissiveIntensity={matState.type === 'coal' ? 0.35 : 0}
+        />
       </mesh>
     </RigidBody>
   );
