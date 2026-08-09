@@ -121,13 +121,14 @@ export const FEED_CYLINDER_EXTEND = 0.15;
 // ============================================================
 
 export const VISUAL = {
-  // 皮带
-  FRAME_COLOR: 0x334155,
-  ROLLER_COLOR: 0x94A3B8,
-  MOTOR_COLOR: 0x1D4ED8,
-  BELT_STOP: 0x1E293B,
-  BELT_RUN: 0x0F172A,
-  BELT_SIEVE: 0x1e293b,
+  // 皮带（暗红棕橡胶带面 — 与黑色煤料、灰色矸石在色相上区分）
+  FRAME_COLOR: 0x2b3648,
+  ROLLER_COLOR: 0x8b98a9,
+  MOTOR_COLOR: 0x2563eb,
+  MOTOR_HOUSING_COLOR: 0x3e4a5c,
+  BELT_STOP: 0x30201c,
+  BELT_RUN: 0x4a2f28,
+  BELT_SIEVE: 0x3a2622,
   BELT_SIEVE_OPACITY: 0.5,
 
   // 指示灯
@@ -138,13 +139,18 @@ export const VISUAL = {
   INDICATOR_EMISSIVE_INTENSITY: 2,
   MOTOR_EMISSIVE_INTENSITY: 0.5,
 
-  // 物料
-  COAL_COLOR: 0x111827,
-  STONE_COLOR: 0x94a3b8,
+  // 物料（煤冷黑带光泽轮廓，矸石哑光暖灰）
+  COAL_COLOR: 0x0b0b10,
+  COAL_EMISSIVE: 0x1a2233,
+  COAL_ROUGHNESS: 0.45,
+  COAL_METALNESS: 0.35,
+  STONE_COLOR: 0xb8b0a6,
+  STONE_ROUGHNESS: 0.95,
 
-  // 收集箱
-  LARGE_BOX_COLOR: 0x1e3a5f,
-  SMALL_BOX_COLOR: 0x1e293b,
+  // 收集箱（三通道功能色：大料=蓝 / 小料=绿 / 矸石=红棕）
+  LARGE_BOX_COLOR: 0x1e40af,
+  SMALL_BOX_COLOR: 0x166534,
+  STONE_BOX_COLOR: 0x9a3412,
   BOX_OPACITY: 0.8,
 
   // 传感器
@@ -152,23 +158,17 @@ export const VISUAL = {
   SENSOR_OFF_COLOR: 'red' as const,
 
   // 料斗
-  HOPPER_BODY_COLOR: 0x1e293b,
+  HOPPER_BODY_COLOR: 0x1f2937,
   HOPPER_RIM_COLOR: 0x475569,
 
   // 气缸
   CYLINDER_PLATE_COLOR: 0x64748b,
 
   // 整列器/X射线
-  ALIGNER_COLOR: 0x64748b,
+  ALIGNER_COLOR: 0x7c8aa0,
   XRAY_FRAME_COLOR: 0x334155,
   XRAY_ACTIVE_COLOR: 0x22c55e,
   XRAY_INACTIVE_COLOR: 0x1e293b,
-
-  // 收集容器
-  STONE_BOX_COLOR: 0x57534e,
-
-  // 电机外壳
-  MOTOR_HOUSING_COLOR: 0x334155,
 } as const;
 
 // ============================================================
