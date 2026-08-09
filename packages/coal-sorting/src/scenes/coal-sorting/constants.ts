@@ -285,6 +285,9 @@ export const PHYSICS = {
   BLOW_ZONE_START_LX: 0.55,
   BLOW_ZONE_END_LX: 0.75,
 
+  /** X光检测区（belt2 局部 X）：矸石进入该区即触发"检测到"指示，早于吹矸区 */
+  DETECT_ZONE_START_LX: 0.45,
+
   /** V形整列器中心（belt2 局部 X），用于推导挡板内沿随 lx 的收窄 */
   ALIGNER_CENTER_LX: 0.25,
 

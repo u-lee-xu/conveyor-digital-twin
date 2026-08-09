@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useBeltStore, type BeltName, type BeltSensorName } from '../useBeltStore';
 import { getAllMaterialPositions } from '../materialRegistry';
 import { worldToLocal } from './helpers';
-import { BELT_LENGTH, BELT3_LENGTH } from '../constants';
+import { BELT_LENGTH, BELT3_LENGTH, PHYSICS } from '../constants';
 
 /** 入口/出口检测区宽度（皮带端部 0.3 范围内） */
 const ENTRY_ZONE = 0.3;
@@ -34,6 +34,7 @@ export function SensorDetector() {
     ) as Record<BeltSensorName, boolean>;
     const beltHasMaterial: Record<BeltName, boolean> = { belt1: false, belt2: false, belt3: false, belt4: false };
     let belt1EntryBlocked = false;
+    let xrayHit = false;
 
     for (const [id, pos] of getAllMaterialPositions()) {
       const m = store.materials.find((mm) => mm.id === id);
@@ -51,6 +52,10 @@ export function SensorDetector() {
       } else if (belt === 'belt2') {
         if (lx < -ZONE_EDGE.belt2) desired.s4_belt2_entry = true;
         if (lx > ZONE_EDGE.belt2) desired.s6_belt2_exit = true;
+        // X光检测：分拣机开启且矸石进入检测区（早于吹矸区）
+        if (m.type === 'stone' && store.separator?.active && lx >= PHYSICS.DETECT_ZONE_START_LX && lx <= PHYSICS.BLOW_ZONE_END_LX) {
+          xrayHit = true;
+        }
       } else if (belt === 'belt3') {
         if (lx < -ZONE_EDGE.belt3) desired.s7_belt3_entry = true;
         if (lx > ZONE_EDGE.belt3) desired.s9_belt3_exit = true;
@@ -75,6 +80,10 @@ export function SensorDetector() {
     }
     if (Object.keys(diff).length > 0) {
       store.setSensors(diff);
+    }
+    // X光检测到指示（差量更新，避免每帧重渲染）
+    if (store.xrayHit !== xrayHit) {
+      store.setXrayHit(xrayHit);
     }
   });
 
