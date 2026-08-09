@@ -58,9 +58,20 @@ export function BeltConveyor({ beltName }: { beltName: BeltName }) {
         ) : (
           <CuboidCollider args={[length / 2, 0.03, BELT_WIDTH / 2]} friction={PHYSICS.BELT_FRICTION} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
         )}
-        {/* 侧挡板碰撞体 — 仅入口段设置，防止来料从侧面滑落 */}
-        <CuboidCollider args={[length / 2, 0.05, 0.01]} position={[0, 0.08, -BELT_WIDTH / 2 - 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
-        <CuboidCollider args={[length / 2, 0.05, 0.01]} position={[0, 0.08, BELT_WIDTH / 2 + 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+        {/* 侧挡板碰撞体 — 防止来料从侧面滑落；2# 吹矸区（lx∈[0.55,0.75]）留空，供矸石横向吹离 */}
+        {isSieving ? (
+          <>
+            <CuboidCollider args={[PHYSICS.SIEVE_ENTRY_ZONE_HALF, 0.05, 0.01]} position={[-PHYSICS.SIEVE_ENTRY_ZONE_CENTER, 0.08, -BELT_WIDTH / 2 - 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+            <CuboidCollider args={[PHYSICS.SIEVE_ENTRY_ZONE_HALF, 0.05, 0.01]} position={[-PHYSICS.SIEVE_ENTRY_ZONE_CENTER, 0.08, BELT_WIDTH / 2 + 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+            <CuboidCollider args={[0.075, 0.05, 0.01]} position={[0.925, 0.08, -BELT_WIDTH / 2 - 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+            <CuboidCollider args={[0.075, 0.05, 0.01]} position={[0.925, 0.08, BELT_WIDTH / 2 + 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+          </>
+        ) : (
+          <>
+            <CuboidCollider args={[length / 2, 0.05, 0.01]} position={[0, 0.08, -BELT_WIDTH / 2 - 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+            <CuboidCollider args={[length / 2, 0.05, 0.01]} position={[0, 0.08, BELT_WIDTH / 2 + 0.005]} collisionGroups={PHYSICS.BELT_COLLISION_GROUP} />
+          </>
+        )}
       </RigidBody>
       <mesh position={[0, 0, -BELT_WIDTH / 2 - 0.03]}><boxGeometry args={[length + 0.1, BEAM_SECTION, BEAM_SECTION]} /><meshStandardMaterial color={VISUAL.FRAME_COLOR} /></mesh>
       <mesh position={[0, 0, BELT_WIDTH / 2 + 0.03]}><boxGeometry args={[length + 0.1, BEAM_SECTION, BEAM_SECTION]} /><meshStandardMaterial color={VISUAL.FRAME_COLOR} /></mesh>

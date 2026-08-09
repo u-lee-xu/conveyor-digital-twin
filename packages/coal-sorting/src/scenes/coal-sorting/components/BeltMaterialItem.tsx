@@ -4,20 +4,21 @@ import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/ra
 import { useBeltStore, type BeltName, PARTICLE_SIZE_MAP } from '../useBeltStore';
 import {
   BELT_SURFACE_Y, BELT_LAYOUT, getBeltLength,
-  COLLECTION_BOX_POSITION, SMALL_PARTICLE_BOX_POSITION,
+  COLLECTION_BOX_POSITION, SMALL_PARTICLE_BOX_POSITION, IMPURITY_BOX_POSITION,
   MATERIAL_SIZE, VISUAL, PHYSICS,
 } from '../constants';
 import { worldToLocal, detectBelt } from './helpers';
 import { registerMaterialPos, unregisterMaterialPos } from '../materialRegistry';
 
 /** 检测位置是否在某个收集容器范围内 */
-const BOX_DETECTORS: { pos: [number, number, number]; kind: 'small' | 'large' }[] = [
-  { pos: COLLECTION_BOX_POSITION, kind: 'large' },
+const BOX_DETECTORS: { pos: [number, number, number]; kind: 'coal' | 'small' | 'stone' }[] = [
+  { pos: COLLECTION_BOX_POSITION, kind: 'coal' },
   { pos: SMALL_PARTICLE_BOX_POSITION, kind: 'small' },
+  { pos: IMPURITY_BOX_POSITION, kind: 'stone' },
 ];
 
-/** 大料框接收 medium/large，小料箱只接收 small */
-function detectBox(pos: { x: number; y: number; z: number }): 'small' | 'large' | null {
+/** 收集容器检测：大料框收中/大料，小料箱只收小料，矸石箱只收矸石 */
+function detectBox(pos: { x: number; y: number; z: number }): 'coal' | 'small' | 'stone' | null {
   for (const box of BOX_DETECTORS) {
     if (Math.abs(pos.x - box.pos[0]) < PHYSICS.BOX_DETECT_XZ_RANGE && Math.abs(pos.z - box.pos[2]) < PHYSICS.BOX_DETECT_XZ_RANGE && pos.y < box.pos[1] + PHYSICS.BOX_DETECT_Y_MAX_OFFSET && pos.y > box.pos[1] + PHYSICS.BOX_DETECT_Y_MIN_OFFSET) {
       return box.kind;
@@ -42,7 +43,6 @@ const THROW_SPEEDS: Partial<Record<BeltName, [number, number, number]>> = {
   belt4: [-0.6, 0, 0],     // belt4（掉头）→ 大料收集框
 };
 
-/** 小料在 belt2 上开始过筛的位置（局部 X，位于筛分孔带） */
 /** 小料在 belt2 上开始过筛的位置（局部 X，位于筛孔带，避开入口实板 lx∈[-1,-0.4]） */
 const SIEVE_START_LX = -0.35;
 
@@ -72,10 +72,11 @@ export function BeltMaterialItem({ id }: { id: string }) {
     const elapsed = now - matState.phaseStart;
     const scale = PARTICLE_SIZE_MAP[matState.size]?.scale || 1.0;
 
-    // ===== 入箱检测（按尺寸匹配收集容器）=====
+    // ===== 入箱检测（按类型匹配收集容器）=====
     const boxKind = detectBox(pos);
     if (boxKind === 'small' && matState.size === 'small') { incrementCount('small'); removeMaterial(id); return; }
-    if (boxKind === 'large' && matState.size !== 'small') { incrementCount('large'); removeMaterial(id); return; }
+    if (boxKind === 'stone' && matState.type === 'stone') { incrementCount('stone'); removeMaterial(id); return; }
+    if (boxKind === 'coal' && matState.size !== 'small') { incrementCount(matState.type === 'coal' ? 'coal' : 'stone'); removeMaterial(id); return; }
 
     // ===== 掉落回收 =====
     if (pos.y < PHYSICS.FALL_RECOVERY_Y) { removeMaterial(id); return; }
@@ -102,11 +103,24 @@ export function BeltMaterialItem({ id }: { id: string }) {
         const dirZ = Math.sin(layout.rotation);
 
         // 计算局部坐标
-        const { lx } = worldToLocal(pos, onBelt);
+        const { lx, lz } = worldToLocal(pos, onBelt);
 
         // 筛分检测：belt2 筛孔带 + 小颗粒 → 漏到 belt3 筛下皮带
         if (onBelt === 'belt2' && lx > SIEVE_START_LX && matState.size === 'small') {
           setPhase(id, 'sieving');
+          break;
+        }
+
+        // 整列：belt2 整列区内把物料向带中心聚拢（局部 Z → 0），保证吹矸精度
+        let lateralOffset = 0;
+        if (onBelt === 'belt2' && lx >= PHYSICS.ALIGN_ZONE_START_LX && lx <= PHYSICS.ALIGN_ZONE_END_LX) {
+          lateralOffset = -lz * PHYSICS.ALIGN_LATERAL_FACTOR;
+        }
+
+        // 吹矸检测：belt2 吹矸区 + 矸石 + 分拣机开启 → 气吹离带
+        if (onBelt === 'belt2' && lx >= PHYSICS.BLOW_ZONE_START_LX && lx <= PHYSICS.BLOW_ZONE_END_LX
+          && matState.type === 'stone' && state.separator?.active) {
+          setPhase(id, 'blown');
           break;
         }
 
@@ -116,12 +130,14 @@ export function BeltMaterialItem({ id }: { id: string }) {
           break;
         }
 
-        // 正常移动：沿皮带方向，Y 锁定在皮带表面
+        // 正常移动：沿皮带方向，Y 锁定在皮带表面，整列区叠加横向修正
         const targetY = getBeltSurfaceY(onBelt, scale);
+        const latDirX = -Math.sin(layout.rotation);
+        const latDirZ = Math.cos(layout.rotation);
         rbRef.current.setNextKinematicTranslation({
-          x: pos.x + dirX * speed,
+          x: pos.x + dirX * speed + latDirX * lateralOffset,
           y: targetY,
-          z: pos.z + dirZ * speed,
+          z: pos.z + dirZ * speed + latDirZ * lateralOffset,
         });
         break;
       }
@@ -174,6 +190,19 @@ export function BeltMaterialItem({ id }: { id: string }) {
           updateOnBelt(id, 'belt3');
           setPhase(id, 'on_belt');
         }
+        break;
+      }
+      case 'blown': {
+        // 刚从 kinematic 切换到 dynamic 时：抬离带面 + 横向气吹速度（-x 侧）
+        if (bodyTypeRef.current !== 0) {
+          rbRef.current.setBodyType(0 as const, true);
+          bodyTypeRef.current = 0;
+          const t = rbRef.current.translation();
+          rbRef.current.setTranslation({ x: t.x, y: t.y + PHYSICS.THROW_CLEARANCE, z: t.z }, true);
+          rbRef.current.setLinvel({ x: PHYSICS.BLOW_VELOCITY_X, y: PHYSICS.BLOW_VELOCITY_Y, z: 0 }, true);
+          rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        }
+        if (elapsed > PHYSICS.BLOW_TIMEOUT) { removeMaterial(id); }
         break;
       }
       case 'in_box': {
