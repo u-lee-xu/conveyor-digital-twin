@@ -49,6 +49,7 @@ export function useBeltDemoSim() {
         useBeltStore.getState().setBeltRunning(name, true);
         if (i === BELT_SEQUENCE.length - 1) {
           useBeltStore.getState().setAutoFeed(true);
+          useBeltStore.getState().setSeparator(true);
           setState((p) => ({ ...p, step: 'FEEDING' }));
         }
       }, i * START_UP_INTERVAL);
@@ -67,6 +68,7 @@ export function useBeltDemoSim() {
     s.clearMaterials();
     BELT_SEQUENCE.forEach((name) => s.setBeltRunning(name, false));
     s.setAutoFeed(false);
+    s.setSeparator(false);
     s.setBuzzer(false);
     setState({ running: true, paused: false, step: 'START_UP' });
   };
@@ -74,6 +76,7 @@ export function useBeltDemoSim() {
   const stop = () => {
     const s = useBeltStore.getState();
     s.setAutoFeed(false);
+    s.setSeparator(false);
     BELT_SEQUENCE.forEach((name) => s.setBeltRunning(name, false));
     setState({ running: false, paused: false, step: 'IDLE' });
   };
