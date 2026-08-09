@@ -130,6 +130,11 @@ const initialState = {
 
 let materialIdCounter = 0;
 
+// 临时调试：暴露 store 便于 CDP 检查内部状态
+declare global {
+  interface Window { __beltStore?: typeof useBeltStore }
+}
+
 export const useBeltStore = create<BeltState>((set, get) => ({
   ...initialState,
 
@@ -256,3 +261,6 @@ export const useBeltStore = create<BeltState>((set, get) => ({
     set({ ...initialState, materials: [] });
   },
 }));
+
+// 临时调试：暴露 store 便于 CDP 检查内部状态
+if (typeof window !== 'undefined') window.__beltStore = useBeltStore;
