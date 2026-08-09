@@ -84,10 +84,11 @@ export function SortingStations() {
 
   return (
     <group>
-      {/* V形整列 - 旋转π/2匹配belt2方向，翻转板角度使宽口朝上游、窄口朝下游 */}
+      {/* V形整列 - 旋转π/2匹配belt2方向；两板 rotation 与所在侧符号相反，
+          使宽口朝上游（lx=0，±0.197）、窄口朝下游（lx=0.5，±0.063） */}
       <group position={SORTING_STATIONS.aligner.position} rotation={[0, Math.PI / 2, 0]}>
-        <mesh position={[0, COMPONENT.ALIGNER_Y, -COMPONENT.ALIGNER_OFFSET]} rotation={[0, COMPONENT.ALIGNER_ANGLE, 0]}><boxGeometry args={[COMPONENT.ALIGNER_BOARD_LENGTH, COMPONENT.ALIGNER_BOARD_HEIGHT, COMPONENT.ALIGNER_BOARD_THICKNESS]} /><meshStandardMaterial color={VISUAL.ALIGNER_COLOR} /></mesh>
-        <mesh position={[0, COMPONENT.ALIGNER_Y, COMPONENT.ALIGNER_OFFSET]} rotation={[0, -COMPONENT.ALIGNER_ANGLE, 0]}><boxGeometry args={[COMPONENT.ALIGNER_BOARD_LENGTH, COMPONENT.ALIGNER_BOARD_HEIGHT, COMPONENT.ALIGNER_BOARD_THICKNESS]} /><meshStandardMaterial color={VISUAL.ALIGNER_COLOR} /></mesh>
+        <mesh position={[0, COMPONENT.ALIGNER_Y, -COMPONENT.ALIGNER_OFFSET]} rotation={[0, -COMPONENT.ALIGNER_ANGLE, 0]}><boxGeometry args={[COMPONENT.ALIGNER_BOARD_LENGTH, COMPONENT.ALIGNER_BOARD_HEIGHT, COMPONENT.ALIGNER_BOARD_THICKNESS]} /><meshStandardMaterial color={VISUAL.ALIGNER_COLOR} /></mesh>
+        <mesh position={[0, COMPONENT.ALIGNER_Y, COMPONENT.ALIGNER_OFFSET]} rotation={[0, COMPONENT.ALIGNER_ANGLE, 0]}><boxGeometry args={[COMPONENT.ALIGNER_BOARD_LENGTH, COMPONENT.ALIGNER_BOARD_HEIGHT, COMPONENT.ALIGNER_BOARD_THICKNESS]} /><meshStandardMaterial color={VISUAL.ALIGNER_COLOR} /></mesh>
         <SceneLabel text="V形整列器" position={[0, 0.15, 0]} />
       </group>
       {/* X射线龙门：光束 = 开启指示（绿）/ 检测到指示（脉冲闪烁） */}
@@ -110,11 +111,21 @@ export function SortingStations() {
             </mesh>
           );
         })}
-        {/* 喷吹气流可视化：矸石被吹瞬间从喷嘴喷出的半透明气流 */}
+        {/* 喷吹气流可视化：扩散锥形气流（近细远粗）+ 末端冲击雾团 */}
         {blowFlash && (
           <>
-            <mesh position={[0.28, 0.03, 0]}><boxGeometry args={[0.56, 0.018, 0.018]} /><meshStandardMaterial color={0x38bdf8} emissive={0x38bdf8} emissiveIntensity={2.5} transparent opacity={0.55} /></mesh>
-            <mesh position={[0.14, 0.03, 0]}><boxGeometry args={[0.28, 0.045, 0.045]} /><meshStandardMaterial color={0x7dd3fc} emissive={0x7dd3fc} emissiveIntensity={1.5} transparent opacity={0.35} /></mesh>
+            <mesh position={[0.27, 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.006, 0.055, 0.54, 10, 1, true]} />
+              <meshStandardMaterial color={0x7dd3fc} emissive={0x38bdf8} emissiveIntensity={2.2} transparent opacity={0.4} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0.5, 0.02, 0]} scale={[0.11, 0.035, 0.11]}>
+              <sphereGeometry args={[1, 12, 8]} />
+              <meshStandardMaterial color={0xbfdbfe} emissive={0x60a5fa} emissiveIntensity={1.4} transparent opacity={0.28} />
+            </mesh>
+            <mesh position={[0.42, 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.004, 0.03, 0.2, 8, 1, true]} />
+              <meshStandardMaterial color={0x93c5fd} emissive={0x60a5fa} emissiveIntensity={2} transparent opacity={0.35} side={THREE.DoubleSide} />
+            </mesh>
           </>
         )}
       </group>
