@@ -285,6 +285,9 @@ export const PHYSICS = {
   BLOW_ZONE_START_LX: 0.55,
   BLOW_ZONE_END_LX: 0.75,
 
+  /** V形整列器中心（belt2 局部 X），用于推导挡板内沿随 lx 的收窄 */
+  ALIGNER_CENTER_LX: 0.25,
+
   // 2# 筛分皮带入口承接段（实板）几何（局部 X 坐标）
   SIEVE_ENTRY_ZONE_CENTER: -0.7,
   SIEVE_ENTRY_ZONE_HALF: 0.3,
