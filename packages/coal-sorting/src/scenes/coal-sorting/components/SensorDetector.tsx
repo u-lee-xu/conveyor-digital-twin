@@ -28,7 +28,10 @@ const RUN_SENSORS: [BeltSensorName, BeltName][] = [
 export function SensorDetector() {
   useFrame(() => {
     const store = useBeltStore.getState();
-    const desired: Partial<Record<BeltSensorName, boolean>> = {};
+    // 预填全部传感器为 false，物料离开检测区时才能复位
+    const desired = Object.fromEntries(
+      Object.keys(store.sensors).map((k) => [k, false]),
+    ) as Record<BeltSensorName, boolean>;
     const beltHasMaterial: Record<BeltName, boolean> = { belt1: false, belt2: false, belt3: false, belt4: false };
     let belt1EntryBlocked = false;
 
