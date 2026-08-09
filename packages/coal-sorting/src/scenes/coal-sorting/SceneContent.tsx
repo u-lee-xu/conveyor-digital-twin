@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useBeltStore, type BeltSensorName } from './useBeltStore';
 import {
   SENSOR_POSITIONS, INDICATOR_POSITIONS,
-  COLLECTION_BOX_POSITION, SMALL_PARTICLE_BOX_POSITION,
+  COLLECTION_BOX_POSITION, SMALL_PARTICLE_BOX_POSITION, IMPURITY_BOX_POSITION,
   type IndicatorName, VISUAL, COMPONENT,
 } from './constants';
 import { BeltConveyor, IndicatorLight } from './components/BeltConveyor';
@@ -41,6 +41,7 @@ export function ThreeStageBeltSceneContent() {
       <Hopper /><FeedCylinder /><SortingStations />
       <CollectionBox position={COLLECTION_BOX_POSITION} color={VISUAL.LARGE_BOX_COLOR} label="大料收集框" />
       <CollectionBox position={SMALL_PARTICLE_BOX_POSITION} color={VISUAL.SMALL_BOX_COLOR} label="小料收集箱" />
+      <CollectionBox position={IMPURITY_BOX_POSITION} color={VISUAL.STONE_BOX_COLOR} label="矸石收集箱" />
 
       {Object.entries(indicators).map(([name, active]) => {
         const pos = INDICATOR_POSITIONS[name as IndicatorName];

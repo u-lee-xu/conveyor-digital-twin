@@ -104,8 +104,12 @@ export const BeltDemoPanel: React.FC = () => {
             <span className="text-[0.62rem] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{materials.length} pcs</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[0.62rem] text-slate-500">大料收集</span>
-            <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.large} pcs</span>
+            <span className="text-[0.62rem] text-slate-500">精煤收集</span>
+            <span className="text-[0.62rem] font-mono text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">{materialCount.coal} pcs</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[0.62rem] text-slate-500">矸石收集</span>
+            <span className="text-[0.62rem] font-mono text-stone-400 bg-stone-500/10 px-1.5 py-0.5 rounded">{materialCount.stone} pcs</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[0.62rem] text-slate-500">小料收集</span>

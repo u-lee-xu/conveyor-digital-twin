@@ -19,6 +19,7 @@ export type MaterialPhase =
   | 'on_belt'        // 在皮带上，kinematic 驱动
   | 'transitioning'  // 皮带间转接，Dynamic 自由落体
   | 'sieving'        // 过筛中，Dynamic 下落至筛下皮带
+  | 'blown'          // 气吹中，Dynamic 侧向力吹离
   | 'in_box';        // 已入箱，待回收
 
 export interface BeltMaterial {
@@ -51,7 +52,7 @@ interface BeltState {
   indicators: { belt1_run: boolean; belt2_run: boolean; belt3_run: boolean; belt4_run: boolean; fault: boolean };
   buzzer: boolean;
   /** 分拣计数：小料（筛下）/ 大料（收集框） */
-  materialCount: { small: number; large: number };
+  materialCount: { small: number; coal: number; stone: number };
   autoFeed: boolean;
   autoFeedInterval: number;
   autoFeedType: FeedTypeOption;
@@ -78,7 +79,7 @@ interface BeltState {
   setMaterialPhase: (id: string, phase: MaterialPhase) => void;
   setIndicator: (name: keyof BeltState['indicators'], active: boolean) => void;
   setBuzzer: (active: boolean) => void;
-  incrementCount: (type: 'small' | 'large') => void;
+  incrementCount: (type: 'small' | 'coal' | 'stone') => void;
   setAutoFeed: (active: boolean) => void;
   setAutoFeedInterval: (interval: number) => void;
   setAutoFeedType: (type: FeedTypeOption) => void;
@@ -110,7 +111,7 @@ const initialState = {
   separator: { active: false },
   indicators: { belt1_run: false, belt2_run: false, belt3_run: false, belt4_run: false, fault: false },
   buzzer: false,
-  materialCount: { small: 0, large: 0 },
+  materialCount: { small: 0, coal: 0, stone: 0 },
   autoFeed: false,
   autoFeedInterval: 2.0,
   autoFeedType: 'mixed' as FeedTypeOption,
