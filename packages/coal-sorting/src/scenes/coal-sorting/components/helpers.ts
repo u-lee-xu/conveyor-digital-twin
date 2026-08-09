@@ -13,9 +13,11 @@ export function worldToLocal(pos: { x: number; y: number; z: number }, belt: Bel
   };
 }
 
-/** 检测世界坐标位置在哪条皮带附近，返回皮带名和局部坐标 */
-export function detectBelt(pos: { x: number; y: number; z: number }): { belt: BeltName; lx: number; lz: number } | null {
-  for (const name of ['belt1', 'belt2', 'belt3', 'belt4'] as BeltName[]) {
+/** 检测世界坐标位置在哪条皮带附近，返回皮带名和局部坐标
+ *  belts：候选皮带列表（转接时按源带限定目标带，避免下落途中误匹配下层皮带） */
+export function detectBelt(pos: { x: number; y: number; z: number }, belts?: BeltName[]): { belt: BeltName; lx: number; lz: number } | null {
+  const list = belts ?? ['belt1', 'belt2', 'belt3', 'belt4'];
+  for (const name of list) {
     const { lx, lz } = worldToLocal(pos, name);
     const surfaceY = BELT_SURFACE_Y[name];
     if (

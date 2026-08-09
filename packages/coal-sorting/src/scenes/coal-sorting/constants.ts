@@ -272,8 +272,10 @@ export const PHYSICS = {
 
   // 气吹排矸（belt2 末端吹矸区，矸石被吹向带 +x 侧）
   // 布置：气阀在带 -x 侧（气流横穿带面），矸石箱在 +x 侧承接
+  // BLOW_VELOCITY_Y 需足够大：矸石在飞出带面宽度前（约 0.15s）必须高于带面碰撞体，
+  // 否则撞带面弹回无法飞越；vy=1.0 时落点 x≈0.10~0.20 仍在矸石箱检测区（±0.3）
   BLOW_VELOCITY_X: 1.5,
-  BLOW_VELOCITY_Y: 0.3,
+  BLOW_VELOCITY_Y: 1.0,
   BLOW_TIMEOUT: 4000,
 
   // 整列侧向力（belt2 局部 Z 偏移每帧收敛系数，把物料聚拢到带中心以便吹射）
