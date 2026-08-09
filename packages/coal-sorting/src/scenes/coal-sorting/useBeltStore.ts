@@ -49,6 +49,8 @@ interface BeltState {
   materials: BeltMaterial[];
   feedCylinder: { extended: boolean; currentExtension: number };
   separator: { active: boolean };
+  /** 气阀喷吹脉冲：矸石被吹离瞬间置亮，短暂后复位（吹嘴视觉） */
+  blowFlash: boolean;
   indicators: { belt1_run: boolean; belt2_run: boolean; belt3_run: boolean; belt4_run: boolean; fault: boolean };
   buzzer: boolean;
   /** 分拣计数：小料（筛下）/ 大料（收集框） */
@@ -70,6 +72,7 @@ interface BeltState {
   setSensors: (updates: Partial<Record<BeltSensorName, boolean>>) => void;
   setFeedCylinder: (extended: boolean) => void;
   setSeparator: (active: boolean) => void;
+  setBlowFlash: (active: boolean) => void;
   updateFeedCylinderExtension: (extension: number) => void;
   spawnMaterial: (type?: MaterialType, size?: ParticleSize) => void;
   removeMaterial: (id: string) => void;
@@ -109,6 +112,7 @@ const initialState = {
   materials: [] as BeltMaterial[],
   feedCylinder: { extended: false, currentExtension: -0.15 },
   separator: { active: false },
+  blowFlash: false,
   indicators: { belt1_run: false, belt2_run: false, belt3_run: false, belt4_run: false, fault: false },
   buzzer: false,
   materialCount: { small: 0, coal: 0, stone: 0 },
@@ -164,6 +168,7 @@ export const useBeltStore = create<BeltState>((set, get) => ({
 
   setFeedCylinder: (extended) => set((s) => ({ feedCylinder: { ...s.feedCylinder, extended } })),
   setSeparator: (active) => set(() => ({ separator: { active } })),
+  setBlowFlash: (active) => set(() => ({ blowFlash: active })),
   updateFeedCylinderExtension: (extension) => set((s) => ({ feedCylinder: { ...s.feedCylinder, currentExtension: extension } })),
 
   spawnMaterial: (type, size) => {

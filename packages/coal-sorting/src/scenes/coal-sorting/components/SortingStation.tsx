@@ -55,7 +55,9 @@ export function FeedCylinder() {
 }
 
 export function SortingStations() {
-  const active = useBeltStore((s) => s.separator?.active || false);
+  // X光检测门：皮带运行即持续检测；吹嘴：喷吹脉冲时点亮（平时不亮）
+  const belt2Running = useBeltStore((s) => s.belts?.belt2?.running || false);
+  const blowFlash = useBeltStore((s) => s.blowFlash);
   return (
     <group>
       {/* V形整列 - 旋转π/2匹配belt2方向，翻转板角度使宽口朝上游、窄口朝下游 */}
@@ -68,7 +70,7 @@ export function SortingStations() {
       <group position={SORTING_STATIONS.xrayGate.position} rotation={[0, Math.PI / 2, 0]}>
         <mesh position={[0, COMPONENT.XRAY_PILLAR_Y, -COMPONENT.XRAY_PILLAR_OFFSET]}><boxGeometry args={[COMPONENT.XRAY_PILLAR_SIZE, COMPONENT.XRAY_PILLAR_HEIGHT, COMPONENT.XRAY_PILLAR_SIZE]} /><meshStandardMaterial color={VISUAL.XRAY_FRAME_COLOR} /></mesh>
         <mesh position={[0, COMPONENT.XRAY_PILLAR_Y, COMPONENT.XRAY_PILLAR_OFFSET]}><boxGeometry args={[COMPONENT.XRAY_PILLAR_SIZE, COMPONENT.XRAY_PILLAR_HEIGHT, COMPONENT.XRAY_PILLAR_SIZE]} /><meshStandardMaterial color={VISUAL.XRAY_FRAME_COLOR} /></mesh>
-        <mesh position={[0, COMPONENT.XRAY_BEAM_Y, 0]}><boxGeometry args={[COMPONENT.XRAY_BEAM_WIDTH, COMPONENT.XRAY_BEAM_HEIGHT, COMPONENT.XRAY_BEAM_LENGTH]} /><meshStandardMaterial color={active ? VISUAL.XRAY_ACTIVE_COLOR : VISUAL.XRAY_INACTIVE_COLOR} /></mesh>
+        <mesh position={[0, COMPONENT.XRAY_BEAM_Y, 0]}><boxGeometry args={[COMPONENT.XRAY_BEAM_WIDTH, COMPONENT.XRAY_BEAM_HEIGHT, COMPONENT.XRAY_BEAM_LENGTH]} /><meshStandardMaterial color={belt2Running ? VISUAL.XRAY_ACTIVE_COLOR : VISUAL.XRAY_INACTIVE_COLOR} /></mesh>
         <SceneLabel text="X射线检测" position={[0, COMPONENT.XRAY_LABEL_Y, 0]} />
       </group>
       {/* 气阀阵列 — 皮带侧面朝向吹出区的一排喷吹喷嘴 */}
@@ -78,7 +80,7 @@ export function SortingStations() {
           return (
             <mesh key={i} position={[0, 0, z]} rotation={[0, 0, -Math.PI / 2]}>
               <cylinderGeometry args={[COMPONENT.AIR_VALVE_RADIUS_TOP, COMPONENT.AIR_VALVE_RADIUS_BOTTOM, COMPONENT.AIR_VALVE_LENGTH, 8]} />
-              <meshStandardMaterial color={active ? VISUAL.XRAY_ACTIVE_COLOR : VISUAL.XRAY_FRAME_COLOR} />
+              <meshStandardMaterial color={blowFlash ? VISUAL.XRAY_ACTIVE_COLOR : VISUAL.XRAY_FRAME_COLOR} />
             </mesh>
           );
         })}

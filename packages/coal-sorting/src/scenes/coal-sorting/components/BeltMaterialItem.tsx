@@ -5,7 +5,7 @@ import { useBeltStore, type BeltName, PARTICLE_SIZE_MAP } from '../useBeltStore'
 import {
   BELT_SURFACE_Y, BELT_LAYOUT, getBeltLength,
   COLLECTION_BOX_POSITION, SMALL_PARTICLE_BOX_POSITION, IMPURITY_BOX_POSITION,
-  MATERIAL_SIZE, VISUAL, PHYSICS,
+  MATERIAL_SIZE, VISUAL, PHYSICS, COMPONENT,
 } from '../constants';
 import { worldToLocal, detectBelt } from './helpers';
 import { registerMaterialPos, unregisterMaterialPos } from '../materialRegistry';
@@ -111,15 +111,21 @@ export function BeltMaterialItem({ id }: { id: string }) {
           break;
         }
 
-        // 整列：belt2 整列区内把物料向带中心聚拢（局部 Z → 0），保证吹矸精度
+        // 整列：belt2 整列区内把物料向带中心聚拢（局部 Z → 0）
+        // 目标 lz 钳制在 V 形挡板内沿内（内沿随 lx 线性收窄），物料贴板走不穿模
         let lateralOffset = 0;
         if (onBelt === 'belt2' && lx >= PHYSICS.ALIGN_ZONE_START_LX && lx <= PHYSICS.ALIGN_ZONE_END_LX) {
-          lateralOffset = -lz * PHYSICS.ALIGN_LATERAL_FACTOR;
+          const halfWidth = COMPONENT.ALIGNER_OFFSET - (lx - PHYSICS.ALIGNER_CENTER_LX) * Math.tan(COMPONENT.ALIGNER_ANGLE);
+          const targetLz = lz * (1 - PHYSICS.ALIGN_LATERAL_FACTOR);
+          const clamped = Math.max(-halfWidth * 0.98, Math.min(halfWidth * 0.98, targetLz));
+          lateralOffset = clamped - lz;
         }
 
-        // 吹矸检测：belt2 吹矸区 + 矸石 + 分拣机开启 → 气吹离带
+        // 吹矸检测：belt2 吹矸区 + 矸石 + 分拣机开启 → 气吹离带（吹嘴脉冲点亮）
         if (onBelt === 'belt2' && lx >= PHYSICS.BLOW_ZONE_START_LX && lx <= PHYSICS.BLOW_ZONE_END_LX
           && matState.type === 'stone' && state.separator?.active) {
+          state.setBlowFlash(true);
+          setTimeout(() => useBeltStore.getState().setBlowFlash(false), 500);
           setPhase(id, 'blown');
           break;
         }
