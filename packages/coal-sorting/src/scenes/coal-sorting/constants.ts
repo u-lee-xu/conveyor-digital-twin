@@ -64,8 +64,8 @@ export const SORTING_STATIONS = {
   aligner: { position: [-0.6, 0.83, 1.05] as [number, number, number] },
   /** X光检测门跨在吹矸区前（lx=0.6），检测后由气阀阵列吹离 */
   xrayGate: { position: [-0.6, 0.82, 1.4] as [number, number, number], rotation: 1.5708 },
-  /** 气阀阵列位于带侧 -x 侧，把矸石横向吹入矸石箱（z∈[1.4,1.55]） */
-  airValveArray: { position: [-0.95, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
+  /** 气阀阵列位于带 -x 侧，气流横穿带面把矸石吹向 +x 侧矸石箱（z∈[1.4,1.55]） */
+  airValveArray: { position: [-0.95, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '+x' },
 };
 
 /**
@@ -93,8 +93,8 @@ export const FEED_CYLINDER_POSITION: [number, number, number] = [-2.9, 1.22, -0.
 export const COLLECTION_BOX_POSITION: [number, number, number] = [-1.9, 0.1, 1.9];
 /** 小料收集箱 — belt3 出口外侧（与 belt4 带错开） */
 export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-0.6, 0.1, 1.3];
-/** 矸石收集箱 — belt2 吹矸区带侧（-x 侧），承接被气吹离带的矸石 */
-export const IMPURITY_BOX_POSITION: [number, number, number] = [-1.3, 0.1, 1.3];
+/** 矸石收集箱 — belt2 吹矸区带 +x 侧（与 -x 侧气阀分列皮带两边），承接被气吹横穿带面的矸石 */
+export const IMPURITY_BOX_POSITION: [number, number, number] = [0.0, 0.1, 1.3];
 
 /**
  * 运行指示灯 — 位于各皮带中心线正上方（离带面 0.35），与传感器垂直错开
@@ -270,8 +270,9 @@ export const PHYSICS = {
   // 转接切 dynamic 时抬离带面的高度（m），消除带面摩擦刹停，保持水平滑出
   THROW_CLEARANCE: 0.03,
 
-  // 气吹排矸（belt2 末端吹矸区，矸石横向吹入带侧矸石箱）
-  BLOW_VELOCITY_X: -1.5,
+  // 气吹排矸（belt2 末端吹矸区，矸石被吹向带 +x 侧）
+  // 布置：气阀在带 -x 侧（气流横穿带面），矸石箱在 +x 侧承接
+  BLOW_VELOCITY_X: 1.5,
   BLOW_VELOCITY_Y: 0.3,
   BLOW_TIMEOUT: 4000,
 
