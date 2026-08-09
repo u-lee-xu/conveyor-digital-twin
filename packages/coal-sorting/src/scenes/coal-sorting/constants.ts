@@ -60,9 +60,11 @@ export const BELT_HEIGHTS = {
 
 export const SORTING_STATIONS = {
   screening: { startZ: -0.2, endZ: 0.3 },
-  /** V形整列器位于 belt2 前半段（lx∈[0,0.5]），与整列侧向力作用区对齐 */
+  /** V形整列器位于 belt2 前半段（lx∈[0.2,0.55]），与整列侧向力作用区对齐 */
   aligner: { position: [-0.6, 0.83, 1.05] as [number, number, number] },
-  xrayGate: { position: [-0.6, 0.82, 1.0] as [number, number, number], rotation: 1.5708 },
+  /** X光检测门跨在吹矸区前（lx=0.6），检测后由气阀阵列吹离 */
+  xrayGate: { position: [-0.6, 0.82, 1.4] as [number, number, number], rotation: 1.5708 },
+  /** 气阀阵列位于带侧 -x 侧，把矸石横向吹入矸石箱（z∈[1.4,1.55]） */
   airValveArray: { position: [-0.95, 0.87, 1.4] as [number, number, number], count: 6, spacing: 0.08, blowDir: '-x' },
 };
 
@@ -87,10 +89,12 @@ export const SENSOR_POSITIONS = {
 
 export const HOPPER_POSITION: [number, number, number] = [-2.6, 1.57, 0.1];
 export const FEED_CYLINDER_POSITION: [number, number, number] = [-2.9, 1.22, -0.25];
-/** 大料收集框 — belt4 尽头（左端） */
+/** 大料收集框 — belt4 尽头（左端），收精煤（中/大粒） */
 export const COLLECTION_BOX_POSITION: [number, number, number] = [-1.9, 0.1, 1.9];
 /** 小料收集箱 — belt3 出口外侧（与 belt4 带错开） */
 export const SMALL_PARTICLE_BOX_POSITION: [number, number, number] = [-0.6, 0.1, 1.3];
+/** 矸石收集箱 — belt2 吹矸区带侧（-x 侧），承接被气吹离带的矸石 */
+export const IMPURITY_BOX_POSITION: [number, number, number] = [-1.3, 0.1, 1.3];
 
 /**
  * 运行指示灯 — 位于各皮带中心线正上方（离带面 0.35），与传感器垂直错开
@@ -159,6 +163,9 @@ export const VISUAL = {
   XRAY_FRAME_COLOR: 0x334155,
   XRAY_ACTIVE_COLOR: 0x22c55e,
   XRAY_INACTIVE_COLOR: 0x1e293b,
+
+  // 收集容器
+  STONE_BOX_COLOR: 0x57534e,
 
   // 电机外壳
   MOTOR_HOUSING_COLOR: 0x334155,
@@ -262,6 +269,20 @@ export const PHYSICS = {
 
   // 转接切 dynamic 时抬离带面的高度（m），消除带面摩擦刹停，保持水平滑出
   THROW_CLEARANCE: 0.03,
+
+  // 气吹排矸（belt2 末端吹矸区，矸石横向吹入带侧矸石箱）
+  BLOW_VELOCITY_X: -1.5,
+  BLOW_VELOCITY_Y: 0.3,
+  BLOW_TIMEOUT: 4000,
+
+  // 整列侧向力（belt2 局部 Z 偏移每帧收敛系数，把物料聚拢到带中心以便吹射）
+  ALIGN_LATERAL_FACTOR: 0.25,
+
+  // 整列区 / 吹矸区（belt2 局部 X 坐标，吹矸区段皮带无侧挡板）
+  ALIGN_ZONE_START_LX: 0.2,
+  ALIGN_ZONE_END_LX: 0.55,
+  BLOW_ZONE_START_LX: 0.55,
+  BLOW_ZONE_END_LX: 0.75,
 
   // 2# 筛分皮带入口承接段（实板）几何（局部 X 坐标）
   SIEVE_ENTRY_ZONE_CENTER: -0.7,
