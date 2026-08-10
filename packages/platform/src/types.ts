@@ -57,4 +57,9 @@ export interface DeviceDefinition {
   onModeChange?: (mode: Mode) => void;
   /** 工作区退出时的设备侧清理（断开连接等） */
   onCleanup?: () => void;
+  /**
+   * 观众只读镜像：把广播快照（PLC 变量名→布尔）应用到设备自己的 store，驱动 3D 场景。
+   * 观众端/边缘广播服务不感知设备内部实现，由设备包自包含。
+   */
+  applyBroadcast?: (vars: Record<string, boolean>) => void;
 }

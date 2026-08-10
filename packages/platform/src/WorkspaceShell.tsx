@@ -27,6 +27,20 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
     };
   }, [device]);
 
+  // 边缘部署：进入设备工作区时向广播服务上报激活设备（观众端自动跟随；非边缘环境静默失败无影响）
+  useEffect(() => {
+    const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(`ws://${host}:8082`);
+      ws.onopen = () => ws?.send(JSON.stringify({ type: 'set-device', deviceId: device.id }));
+      ws.onerror = () => ws?.close();
+    } catch {
+      ws = null;
+    }
+    return () => ws?.close();
+  }, [device.id]);
+
   const activeMode = device.modes.find((m) => m.id === mode) ?? device.modes[0];
   const ModePanel = activeMode?.panel;
   const Extras = device.sidebarExtras;
