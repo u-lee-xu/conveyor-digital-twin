@@ -37,7 +37,8 @@ type WSMessage = {
   [key: string]: unknown;
 };
 
-const WS_URL = 'ws://localhost:8081';
+/** 动态解析 WebSocket 桥地址：远程访问取页面 hostname（边缘部署），本机/Electron file:// 回退 localhost */
+const WS_URL = `ws://${typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost'}:8081`;
 
 import { MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS } from '../scenes/coal-sorting/constants';
 
