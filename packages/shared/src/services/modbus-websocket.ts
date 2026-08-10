@@ -21,6 +21,15 @@
  * 前端 <-> WebSocket(8081) <-> Node.js代理 <-> PLC(ModbusTCP:502 或 S7:102)
  */
 
+/** 动态解析 WebSocket 桥地址：
+ * - 浏览器远程访问（边缘部署）：取页面 hostname（树莓派 IP），连树莓派上的桥
+ * - 本机 / Electron file://（hostname 为空）：回退 localhost
+ */
+function getWsHost(): string {
+  if (typeof location !== 'undefined' && location.hostname) return location.hostname;
+  return 'localhost';
+}
+
 export const MODBUS_ADDRESSES = {
   START: 0,
   RESET: 1,
@@ -227,7 +236,7 @@ export class ModbusService {
     }
     
     try {
-      this.ws = new WebSocket('ws://localhost:8081');
+      this.ws = new WebSocket(`ws://${getWsHost()}:8081`);
       
       this.ws.onopen = () => {
         console.log('WebSocket已连接');
