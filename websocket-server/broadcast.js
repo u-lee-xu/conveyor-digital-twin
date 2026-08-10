@@ -77,7 +77,8 @@ class Broadcaster {
   constructor() {
     this.bridge = null;
     this.connected = false;
-    this.deviceId = config.activeDevice || Object.keys(config.devices)[0];
+    // 初始无激活设备：等待主控端 set-device 后才开始轮询（观众端黑屏等待）
+    this.deviceId = null;
     this.lastSnapshot = null;
     this.viewers = new Set();
     this.pollTimer = null;
@@ -86,7 +87,7 @@ class Broadcaster {
   }
 
   get device() {
-    return config.devices[this.deviceId] || Object.values(config.devices)[0];
+    return this.deviceId ? (config.devices[this.deviceId] || null) : null;
   }
 
   start() {
@@ -113,6 +114,11 @@ class Broadcaster {
 
   async tryConnect() {
     if (!this.bridge || this.bridge.readyState !== WebSocket.OPEN) return;
+    if (!this.device) {
+      // 无激活设备：广播等待状态，不连 PLC（主控进入后 set-device 再来）
+      this.broadcastSnapshot({ vars: {}, error: '主控尚未进入设备' });
+      return;
+    }
     const dev = this.device;
     const res = await bridgeRequest(this.bridge, {
       type: 'connect',
@@ -150,13 +156,13 @@ class Broadcaster {
     }
   }
 
-  /** 切换激活设备：断开旧 PLC 会话并重连新设备（不同协议/地址） */
+  /** 切换激活设备：null 表示主控离开（观众等待）；非 null 校验后重连新设备 */
   setActiveDevice(deviceId) {
-    if (!config.devices[deviceId]) {
+    if (deviceId && !config.devices[deviceId]) {
       console.error(`[broadcast] 未知设备: ${deviceId}`);
       return;
     }
-    if (deviceId === this.deviceId && this.connected) {
+    if (deviceId === this.deviceId && (deviceId === null || this.connected)) {
       console.log(`[broadcast] 设备未变化，忽略: ${deviceId}`);
       return;
     }
@@ -174,7 +180,7 @@ class Broadcaster {
       deviceId: this.deviceId,
       ts: Date.now(),
       connected: this.connected,
-      protocol: protocol || this.device.protocol,
+      protocol: protocol || (this.device ? this.device.protocol : 'none'),
       vars,
       error,
     };
@@ -204,12 +210,12 @@ class Broadcaster {
       if (this.lastSnapshot) {
         ws.send(JSON.stringify(this.lastSnapshot));
       }
-      // 教师端上报激活设备（控制消息；观众连接无影响）
+      // 教师端上报激活设备（控制消息；观众连接无影响）；deviceId 为 null 表示主控离开
       ws.on('message', (raw) => {
         let msg;
         try { msg = JSON.parse(raw.toString()); } catch { return; }
-        if (msg && msg.type === 'set-device' && msg.deviceId) {
-          this.setActiveDevice(msg.deviceId);
+        if (msg && msg.type === 'set-device') {
+          this.setActiveDevice(msg.deviceId ?? null);
         }
       });
       ws.on('close', () => this.viewers.delete(ws));

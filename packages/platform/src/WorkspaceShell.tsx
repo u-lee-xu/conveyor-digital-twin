@@ -27,7 +27,7 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
     };
   }, [device]);
 
-  // 边缘部署：进入设备工作区时向广播服务上报激活设备（观众端自动跟随；非边缘环境静默失败无影响）
+  // 边缘部署：进入设备工作区时向广播服务上报激活设备（观众端自动跟随）；离开时上报 null（观众等待）
   useEffect(() => {
     const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
     let ws: WebSocket | null = null;
@@ -38,7 +38,17 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
     } catch {
       ws = null;
     }
-    return () => ws?.close();
+    return () => {
+      // 主控离开工作区：通知广播清空激活设备（观众端黑屏等待）
+      try {
+        const bye = new WebSocket(`ws://${host}:8082`);
+        bye.onopen = () => bye.send(JSON.stringify({ type: 'set-device', deviceId: null }));
+        bye.onerror = () => bye.close();
+      } catch {
+        // 非边缘环境无广播服务，静默
+      }
+      ws?.close();
+    };
   }, [device.id]);
 
   const activeMode = device.modes.find((m) => m.id === mode) ?? device.modes[0];

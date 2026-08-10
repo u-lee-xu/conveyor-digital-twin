@@ -1,5 +1,0 @@
-import ReactDOM from 'react-dom/client'
-import { ViewerApp } from './ViewerApp'
-import '../index.css'
-
-ReactDOM.createRoot(document.getElementById('root')!).render(<ViewerApp />)
