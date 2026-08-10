@@ -1,0 +1,19 @@
+{
+  "bridgeUrl": "ws://127.0.0.1:8081",
+  "broadcastPort": 8082,
+  "pollIntervalMs": 1000,
+  "plc": {
+    "protocol": "modbus",
+    "host": "192.168.1.10",
+    "port": 502
+  },
+  "vars": [
+    "START", "RESET", "STOP",
+    "SENSOR_FEED", "SENSOR_COLOR", "SENSOR_MATERIAL",
+    "MAGNETIC_FEED_RETRACT", "MAGNETIC_FEED_EXTEND",
+    "MAGNETIC_SORTING1_RETRACT", "MAGNETIC_SORTING1_EXTEND",
+    "MAGNETIC_SORTING2_RETRACT", "MAGNETIC_SORTING2_EXTEND",
+    "FEED_CYLINDER_VALVE", "SORTING1_CYLINDER_VALVE", "SORTING2_CYLINDER_VALVE",
+    "CONVEYOR"
+  ]
+}
