@@ -48,4 +48,29 @@ export const conveyorDevice: DeviceDefinition = {
     disconnectIfNeeded();
   },
   onCleanup: disconnectIfNeeded,
+  /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useDeviceStore */
+  applyBroadcast: (v) => {
+    const s = useDeviceStore.getState();
+    const conveyor = !!v['CONVEYOR'];
+    if (conveyor !== s.conveyorRunning) {
+      if (conveyor) s.startConveyor(); else s.stopConveyor();
+    }
+    const syncCylinder = (name: 'feed' | 'sorting1' | 'sorting2', valveKey: string) => {
+      const valve = !!v[valveKey];
+      if (valve !== s.cylinders[name].extended) {
+        if (valve) s.extendCylinder(name); else s.retractCylinder(name);
+      }
+    };
+    syncCylinder('feed', 'FEED_CYLINDER_VALVE');
+    syncCylinder('sorting1', 'SORTING1_CYLINDER_VALVE');
+    syncCylinder('sorting2', 'SORTING2_CYLINDER_VALVE');
+    s.setSensor('feed', !!v['SENSOR_FEED']);
+    s.setSensor('color', !!v['SENSOR_COLOR']);
+    s.setSensor('material', !!v['SENSOR_MATERIAL']);
+    s.setSignalTower({
+      red: !!v['SIGNAL_TOWER_RED'],
+      green: !!v['SIGNAL_TOWER_GREEN'],
+      yellow: !!v['SIGNAL_TOWER_YELLOW'],
+    });
+  },
 };

@@ -49,4 +49,15 @@ export const trafficLightDevice: DeviceDefinition = {
     disconnectIfNeeded();
   },
   onCleanup: disconnectIfNeeded,
+  /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useTrafficStore 灯状态 */
+  applyBroadcast: (v) => {
+    useTrafficStore.getState().setLamps({
+      ew_green: !!v['LIGHT_EW_GREEN'],
+      ew_yellow: !!v['LIGHT_EW_YELLOW'],
+      ew_red: !!v['LIGHT_EW_RED'],
+      ns_green: !!v['LIGHT_NS_GREEN'],
+      ns_yellow: !!v['LIGHT_NS_YELLOW'],
+      ns_red: !!v['LIGHT_NS_RED'],
+    });
+  },
 };

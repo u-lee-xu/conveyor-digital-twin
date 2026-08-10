@@ -49,4 +49,15 @@ export const pneumaticDevice: DeviceDefinition = {
     disconnectIfNeeded();
   },
   onCleanup: disconnectIfNeeded,
+  /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useRobotStore（单电控跟随 + 指示灯） */
+  applyBroadcast: (v) => {
+    const store = useRobotStore.getState();
+    store.setCylinder('forward', !!v['SOLENOID_FORWARD_EXTEND']);
+    store.setCylinder('lift', !!v['SOLENOID_LIFT_EXTEND']);
+    store.setCylinder('clamp', !v['SOLENOID_CLAMP_CLOSE']);
+    store.setIndicator('home', !!v['INDICATOR_ORIGIN']);
+    store.setIndicator('running', !!v['INDICATOR_WORKING']);
+    store.setIndicator('processing', !!v['INDICATOR_PROCESSING']);
+    store.setIndicator('alarm', !!v['INDICATOR_ALARM']);
+  },
 };
