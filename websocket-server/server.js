@@ -126,6 +126,11 @@ class SimpleModbusTCP {
 
   async connect(host, port) {
     return new Promise((resolve, reject) => {
+      // 幂等：重复 connect 前释放旧 socket（多客户端共享网关场景）
+      if (this.client) {
+        try { this.client.destroy(); } catch {}
+      }
+      this.connected = false;
       this.client = new net.Socket();
       
       this.client.on('connect', () => {
@@ -1509,15 +1514,9 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('close', async () => {
-    console.log('[WS] 客户端断开，清理PLC连接');
-    if (currentProtocol === 's7' && s7Client.connected) {
-      await s7Client.disconnect();
-    } else if (currentProtocol === 'modbus' && modbusClient.connected) {
-      await modbusClient.disconnect();
-    } else if (currentProtocol === 'mitsubishi' && mitsubishiClient.connected) {
-      await mitsubishiClient.disconnect();
-    }
-    currentProtocol = null;
+  ws.on('close', () => {
+    // 多客户端共享网关：客户端断开不再释放 PLC 连接，
+    // 会话保留供其他客户端/广播服务复用（显式 disconnect 消息才断开）
+    console.log('[WS] 客户端断开（PLC 会话保留，供其他客户端复用）');
   });
 });
