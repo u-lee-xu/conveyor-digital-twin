@@ -2,19 +2,47 @@
   "bridgeUrl": "ws://127.0.0.1:8081",
   "broadcastPort": 8082,
   "pollIntervalMs": 1000,
-  "plc": {
-    "protocol": "modbus",
-    "host": "192.168.1.10",
-    "port": 502
-  },
-  "vars": [
-    "START", "RESET", "STOP",
-    "SENSOR_FEED", "SENSOR_COLOR", "SENSOR_MATERIAL",
-    "MAGNETIC_FEED_RETRACT", "MAGNETIC_FEED_EXTEND",
-    "MAGNETIC_SORTING1_RETRACT", "MAGNETIC_SORTING1_EXTEND",
-    "MAGNETIC_SORTING2_RETRACT", "MAGNETIC_SORTING2_EXTEND",
-    "FEED_CYLINDER_VALVE", "SORTING1_CYLINDER_VALVE", "SORTING2_CYLINDER_VALVE",
-    "CONVEYOR",
-    "SIGNAL_TOWER_RED", "SIGNAL_TOWER_GREEN", "SIGNAL_TOWER_YELLOW"
-  ]
+  "activeDevice": "conveyor-sorting",
+  "devices": {
+    "conveyor-sorting": {
+      "protocol": "modbus",
+      "host": "192.168.1.10",
+      "port": 502,
+      "vars": [
+        "START", "RESET", "STOP",
+        "SENSOR_FEED", "SENSOR_COLOR", "SENSOR_MATERIAL",
+        "MAGNETIC_FEED_RETRACT", "MAGNETIC_FEED_EXTEND",
+        "MAGNETIC_SORTING1_RETRACT", "MAGNETIC_SORTING1_EXTEND",
+        "MAGNETIC_SORTING2_RETRACT", "MAGNETIC_SORTING2_EXTEND",
+        "FEED_CYLINDER_VALVE", "SORTING1_CYLINDER_VALVE", "SORTING2_CYLINDER_VALVE",
+        "CONVEYOR",
+        "SIGNAL_TOWER_RED", "SIGNAL_TOWER_GREEN", "SIGNAL_TOWER_YELLOW"
+      ]
+    },
+    "pneumatic-robot": {
+      "protocol": "modbus",
+      "host": "192.168.1.11",
+      "port": 502,
+      "vars": [
+        "BUTTON_START", "BUTTON_ESTOP", "BUTTON_STOP",
+        "MAG_FORWARD_REAR", "MAG_FORWARD_FRONT",
+        "MAG_LIFT_REAR", "MAG_LIFT_FRONT",
+        "MAG_CLAMP_OPEN", "MAG_CLAMP_CLOSE",
+        "SOLENOID_FORWARD_RETRACT", "SOLENOID_FORWARD_EXTEND",
+        "SOLENOID_LIFT_RETRACT", "SOLENOID_LIFT_EXTEND",
+        "SOLENOID_CLAMP_OPEN", "SOLENOID_CLAMP_CLOSE",
+        "INDICATOR_ORIGIN", "INDICATOR_WORKING", "INDICATOR_PROCESSING", "INDICATOR_ALARM"
+      ]
+    },
+    "traffic-light": {
+      "protocol": "modbus",
+      "host": "192.168.1.12",
+      "port": 502,
+      "vars": [
+        "BUTTON_START", "BUTTON_STOP", "BUTTON_ESTOP",
+        "LIGHT_EW_GREEN", "LIGHT_EW_YELLOW", "LIGHT_EW_RED",
+        "LIGHT_NS_GREEN", "LIGHT_NS_YELLOW", "LIGHT_NS_RED"
+      ]
+    }
+  }
 }
