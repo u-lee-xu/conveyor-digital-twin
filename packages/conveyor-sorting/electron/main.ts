@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess } from 'child_process';
@@ -10,6 +10,8 @@ const __dirname = path.dirname(__filename);
 let mainWindow: BrowserWindow | null = null;
 let modbusService: ReturnType<typeof createModbusService> | null = null;
 let wsServerProcess: ChildProcess | null = null;
+/** 应用主动退出标记：避免 WS 子进程随退出的 exit 事件误报异常弹窗 */
+let isQuitting = false;
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -24,9 +26,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    if (process.env.NODE_ENV !== 'development') {
-      startWebSocketServer();
-    }
+    startWebSocketServer();
     createWindow();
     setupModbusIPC();
 
@@ -73,8 +73,13 @@ function createWindow(): void {
 }
 
 function startWebSocketServer(): void {
-  const serverPath = path.join(process.resourcesPath, 'websocket-server', 'server.js');
-  const nodeModulesPath = path.join(process.resourcesPath, 'websocket-server', 'node_modules');
+  // 开发模式：指向仓库内 websocket-server（源码热改即时生效）；生产：随包 resources
+  const serverPath = process.env.NODE_ENV === 'development'
+    ? path.join(__dirname, '../../../websocket-server/server.js')
+    : path.join(process.resourcesPath, 'websocket-server', 'server.js');
+  const nodeModulesPath = process.env.NODE_ENV === 'development'
+    ? path.join(__dirname, '../../../websocket-server/node_modules')
+    : path.join(process.resourcesPath, 'websocket-server', 'node_modules');
 
   wsServerProcess = spawn(process.execPath, [serverPath], {
     env: {
@@ -96,11 +101,17 @@ function startWebSocketServer(): void {
 
   wsServerProcess.on('error', (err) => {
     console.error('WebSocket服务器启动失败:', err.message);
+    if (process.env.NODE_ENV !== 'development') {
+      dialog.showErrorBox('通信网关启动失败', `无法启动内置 PLC 网关：${err.message}\n请重新安装应用后重试。`);
+    }
   });
 
   wsServerProcess.on('exit', (code) => {
     console.log('WebSocket服务器已退出, code:', code);
     wsServerProcess = null;
+    if (process.env.NODE_ENV !== 'development' && !isQuitting) {
+      dialog.showErrorBox('通信网关异常退出', `内置 PLC 网关已停止（code: ${code}）。\n仿真/评分功能将不可用，请重启应用。`);
+    }
   });
 }
 
@@ -188,6 +199,7 @@ function setupModbusIPC(): void {
 }
 
 app.on('before-quit', () => {
+  isQuitting = true;
   stopWebSocketServer();
   if (modbusService) {
     modbusService.disconnect();
