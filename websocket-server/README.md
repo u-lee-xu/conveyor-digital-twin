@@ -88,3 +88,25 @@ npm run dev
 - 检查ModbusTCP连接是否成功
 - 检查地址映射是否正确
 - 查看WebSocket服务器日志
+## 煤料智能分拣 仿真模式（mock-coal-server.js）
+
+无硬件环境验证煤料场景"仿真模式"链路：前端连接面板 → 网关(8081) → 虚拟 PLC → 状态回读驱动 3D。
+
+```bash
+node mock-coal-server.js [端口]   # 默认 1502；演示端口被占用时可指定，如 1504
+# 状态接口：http://127.0.0.1:5084/status   复位：/reset
+```
+
+地址表与 `packages/coal-sorting/src/scenes/coal-sorting/constants.ts` 一致（线圈 0-26）：
+
+| 类别 | 线圈 | 说明 |
+|---|---|---|
+| 0-2 | BUTTON_START/STOP/ESTOP | 孪生按钮写入 |
+| 3-6 | BELT1_RUN~BELT4_RUN | 程序驱动（依次启动 800ms） |
+| 7-8 | FEED_CYL_EXTEND/RETRACT | 孪生气缸反馈 |
+| 9 | SEPARATOR_ON | 程序驱动（启动完成后开启分拣机） |
+| 10-19 | S1~S10 传感器 | 孪生模型反馈 |
+| 20-21 | CYL_FEED_OUT/IN 磁性开关 | 孪生反馈 |
+| 22-26 | IND_BELT1~4_RUN、IND_FAULT | 程序驱动（指示灯跟随皮带；急停亮故障灯） |
+
+程序逻辑：启动上升沿 → 1#→4# 依次启带（800ms）→ 分拣机开 + 指示灯跟随；停止 → 全停；急停 → 全停 + 故障灯，复位后熄灭。
