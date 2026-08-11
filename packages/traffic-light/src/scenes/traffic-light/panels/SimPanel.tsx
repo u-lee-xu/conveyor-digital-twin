@@ -50,8 +50,7 @@ function getReadVars(protocol: ProtocolType) {
   return MITSUBISHI_READ_VARS;
 }
 
-export function SimPanel({ onShowHelp, protocol, connected, setConnected }: {
-  onShowHelp: () => void;
+export function SimPanel({ protocol, connected, setConnected }: {
   protocol: ProtocolType;
   connected: boolean;
   setConnected: (c: boolean) => void;
@@ -247,15 +246,6 @@ export function SimPanel({ onShowHelp, protocol, connected, setConnected }: {
           </div>
         </div>
       </div>
-
-      {/* ===== 帮助链接 ===== */}
-      <button
-        className="btn btn-xs btn-ghost w-full touch-manipulation"
-        style={{ fontSize: '0.62rem' }}
-        onClick={onShowHelp}
-      >
-        使用说明 & IO地址分配
-      </button>
     </div>
   );
 }
