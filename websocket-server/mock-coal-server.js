@@ -24,6 +24,7 @@
  */
 const ModbusRTU = require('modbus-serial');
 const http = require('http');
+const { COAL_ADDRESSES } = require('./mock-addresses');
 
 const PORT = parseInt(process.argv[2] || '1502', 10);
 const HTTP_PORT = 5084;
@@ -31,18 +32,8 @@ const STARTUP_STEP_MS = 800;
 
 const coils = new Array(64).fill(false);
 
-const A = {
-  BUTTON_START: 0, BUTTON_STOP: 1, BUTTON_ESTOP: 2,
-  BELT1_RUN: 3, BELT2_RUN: 4, BELT3_RUN: 5, BELT4_RUN: 6,
-  FEED_CYL_EXTEND: 7, FEED_CYL_RETRACT: 8, SEPARATOR_ON: 9,
-  S1_BELT1_ENTRY: 10, S2_BELT1_RUN: 11, S3_BELT1_EXIT: 12,
-  S4_BELT2_ENTRY: 13, S5_BELT2_RUN: 14, S6_BELT2_EXIT: 15,
-  S7_BELT3_ENTRY: 16, S8_BELT3_RUN: 17, S9_BELT3_EXIT: 18,
-  S10_PILEUP: 19,
-  CYL_FEED_OUT: 20, CYL_FEED_IN: 21,
-  IND_BELT1_RUN: 22, IND_BELT2_RUN: 23, IND_BELT3_RUN: 24, IND_BELT4_RUN: 25,
-  IND_FAULT: 26,
-};
+// 地址表单一来源：mock-addresses.js（与前端 constants.ts 一致，可用 --check 校验）
+const A = COAL_ADDRESSES;
 
 const BELT_ORDER = ['BELT1_RUN', 'BELT2_RUN', 'BELT3_RUN', 'BELT4_RUN'];
 
