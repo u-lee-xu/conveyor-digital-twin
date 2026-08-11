@@ -110,3 +110,12 @@ node mock-coal-server.js [端口]   # 默认 1502；演示端口被占用时可�
 | 22-26 | IND_BELT1~4_RUN、IND_FAULT | 程序驱动（指示灯跟随皮带；急停亮故障灯） |
 
 程序逻辑：启动上升沿 → 1#→4# 依次启带（800ms）→ 分拣机开 + 指示灯跟随；停止 → 全停；急停 → 全停 + 故障灯，复位后熄灭。
+
+## 开发注意事项
+
+- **地址表单一来源**：煤料仿真地址定义在 `mock-addresses.js`（与前端 `constants.ts` 一致）。
+  修改前端地址后运行 `node mock-addresses.js --check` 校验一致性。
+- **修改网关后必须重启**：`server.js` 的改动需要重启网关进程才生效
+  （旧进程不会加载新代码，曾导致煤料变量表路由失效）。
+  生产环境用 `deploy-edge.sh` 的 systemd 服务（`systemctl restart dt-websocket`），
+  开发机手工 `node server.js` 时注意重启。
