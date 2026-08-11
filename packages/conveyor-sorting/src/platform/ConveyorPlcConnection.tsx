@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { PlcConnectionPanel, HelpPanel, modbusService, type PlcConnConfig } from '@digital-twin/shared';
+import { useEffect } from 'react';
+import { PlcConnectionPanel, modbusService, type PlcConnConfig } from '@digital-twin/shared';
 import { useDeviceStore } from '../stores';
-import { buildHelpContent } from '../constants/plc-addresses';
 
 const PRESETS: { label: string; config: PlcConnConfig }[] = [
   { label: '汇川H5U (Modbus)', config: { host: '127.0.0.1', port: 502, protocol: 'modbus' } },
@@ -18,7 +17,6 @@ export function ConveyorPlcConnection({ modeLabel }: { modeLabel: string }) {
   const setConnected = useDeviceStore((s) => s.setConnected);
   const setScoringRunning = useDeviceStore((s) => s.setScoringRunning);
   const disconnectTick = useDeviceStore((s) => s.plcDisconnectTick);
-  const [showHelp, setShowHelp] = useState(false);
 
   // 外部断连（PLC 主动断开）→ 复位连接状态 + 停止评分
   useEffect(() => {
@@ -51,9 +49,7 @@ export function ConveyorPlcConnection({ modeLabel }: { modeLabel: string }) {
           if (!connected) setScoringRunning(false);
         }}
         onConfigChange={setPlcConfig}
-        onHelp={() => setShowHelp(true)}
       />
-      {showHelp && <HelpPanel content={buildHelpContent()} onClose={() => setShowHelp(false)} />}
     </>
   );
 }

@@ -52,11 +52,10 @@ function getReadVars(protocol: ProtocolType) {
   return MITSUBISHI_READ_VARS;
 }
 
-export function SimPanel({ onShowHelp, protocol, connected, setConnected }: {
-  onShowHelp: () => void;
+export function SimPanel({ protocol, connected, setConnected }: {
   protocol: ProtocolType;
   connected: boolean;
-  setConnected: (c: boolean) => void;
+  setConnected: (connected: boolean) => void;
 }) {
   const simRunning = useAppStore((s) => s.simRunning);
   const simEStop = useAppStore((s) => s.simEStop);
@@ -405,15 +404,6 @@ export function SimPanel({ onShowHelp, protocol, connected, setConnected }: {
           <IndicatorLight label="报警" active={!!ioSignals.indAlarm} color="#ef4444" addr={getIndAddr('alarm')} />
         </div>
       </div>
-
-      {/* ===== 帮助链接 ===== */}
-      <button
-        className="btn btn-xs btn-ghost w-full touch-manipulation"
-        style={{ fontSize: '0.62rem' }}
-        onClick={onShowHelp}
-      >
-        使用说明 & IO地址分配
-      </button>
     </div>
   );
 }

@@ -125,7 +125,6 @@ export default function App() {
               onHelp={() => setShowHelp(true)}
             />
             <SimPanel
-              onShowHelp={() => setShowHelp(true)}
               protocol={protocol}
               connected={connected}
               setConnected={setConnected}
@@ -194,8 +193,7 @@ export default function App() {
                     onHelp={() => setShowHelp(true)}
                   />
                   <SimPanel
-                    onShowHelp={() => setShowHelp(true)}
-                    protocol={protocol}
+                          protocol={protocol}
                     connected={connected}
                     setConnected={setConnected}
                   />

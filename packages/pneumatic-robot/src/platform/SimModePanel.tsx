@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { PlcConnectionPanel, HelpPanel, type PlcConnConfig } from '@digital-twin/shared';
+import { PlcConnectionPanel, type PlcConnConfig } from '@digital-twin/shared';
 import { SimPanel } from '../scenes/pneumatic-robot/panels/SimPanel';
 import { plcService } from '../services/plc-websocket';
-import { buildRobotHelpContent } from '../scenes/pneumatic-robot/helpContent';
 import type { ProtocolType } from '../services/plc-websocket';
 
 export function SimModePanel() {
-  const [showHelp, setShowHelp] = useState(false);
   const [protocol, setProtocol] = useState<ProtocolType>('mitsubishi');
   const [connected, setConnected] = useState(false);
 
@@ -36,15 +34,12 @@ export function SimModePanel() {
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         onConnectedChange={setConnected}
-        onHelp={() => setShowHelp(true)}
       />
       <SimPanel
-        onShowHelp={() => setShowHelp(true)}
         protocol={protocol}
         connected={connected}
         setConnected={setConnected}
       />
-      {showHelp && <HelpPanel content={buildRobotHelpContent()} onClose={() => setShowHelp(false)} />}
     </>
   );
 }
