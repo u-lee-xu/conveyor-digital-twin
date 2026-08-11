@@ -10,6 +10,7 @@ interface WorkspaceShellProps {
 export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const isMobile = useMobile();
   const [showHelp, setShowHelp] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const { mode, setMode } = device.useModeState();
   const onModeChangeRef = useRef(device.onModeChange);
   onModeChangeRef.current = device.onModeChange;
@@ -108,34 +109,77 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
         </div>
       )}
 
-      {isMobile && ModePanel && (
-        <div className="absolute bottom-4 left-4 right-4 z-10">
-          <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl">
-            <div className="flex items-center justify-between mb-3">
+      {isMobile && (
+        <>
+          {/* 收起态：底部悬浮操作条（不遮场景主体） */}
+          <div className="absolute bottom-3 left-3 right-3 z-10">
+            <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-xl border border-slate-700/50 rounded-2xl px-2.5 py-2 shadow-xl">
               <button
                 onClick={onBack}
-                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors btn-active"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-300 hover:text-white transition-colors btn-active text-sm shrink-0"
+                aria-label="返回"
               >
                 <span>←</span>
-                <span>返回</span>
               </button>
-              <span className="text-sm font-bold text-white">{device.icon} {device.name}</span>
-              {device.helpContent && (
-                <button
-                  onClick={() => setShowHelp(true)}
-                  title="使用说明与地址映射"
-                  className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-lg"
-                >
-                  ❓
-                </button>
-              )}
-            </div>
-            <ModeSelector currentMode={mode} onModeChange={setMode} modes={device.modes} />
-            <div className="mt-4">
-              <ModePanel isMobile={true} />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-white truncate">{device.icon} {device.name}</div>
+                <div className="text-[0.65rem] text-gray-400 truncate">
+                  {device.modes.find((m) => m.id === mode)?.label ?? mode}
+                </div>
+              </div>
+              {/* 紧凑模式切换（不打开抽屉也能换模式） */}
+              <div className="flex items-center gap-1 shrink-0">
+                {device.modes.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setMode(m.id)}
+                    aria-label={m.label}
+                    className={`w-9 h-9 flex items-center justify-center rounded-xl text-base transition-all ${
+                      mode === m.id
+                        ? `bg-gradient-to-br ${m.color} text-white shadow-md scale-105`
+                        : 'bg-dark-800 text-gray-400 border border-dark-600 hover:border-gray-500'
+                    }`}
+                  >
+                    {m.icon}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setPanelOpen((v) => !v)}
+                aria-label={panelOpen ? '收起面板' : '展开面板'}
+                className={`w-9 h-9 flex items-center justify-center rounded-xl text-sm transition-colors shrink-0 ${
+                  panelOpen
+                    ? 'bg-slate-600/80 text-white'
+                    : 'bg-slate-700/60 border border-slate-600/50 text-slate-200'
+                }`}
+              >
+                {panelOpen ? '✕' : '☰'}
+              </button>
             </div>
           </div>
-        </div>
+
+          {/* 展开态：底部抽屉（可滚动，最高 58vh，其余留白给 3D 场景） */}
+          {panelOpen && (
+            <div className="absolute bottom-[4.5rem] left-3 right-3 z-10 max-h-[58vh] overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900/95 backdrop-blur-2xl p-4 shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-bold text-white">{device.icon} {device.name}</span>
+                {device.helpContent && (
+                  <button
+                    onClick={() => setShowHelp(true)}
+                    title="使用说明与地址映射"
+                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-lg"
+                  >
+                    ❓
+                  </button>
+                )}
+              </div>
+              <ModeSelector currentMode={mode} onModeChange={setMode} modes={device.modes} />
+              <div className="mt-4">
+                <ModePanel isMobile={true} />
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
