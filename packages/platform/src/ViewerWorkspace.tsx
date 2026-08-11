@@ -19,7 +19,7 @@ interface Snapshot {
  * - 默认跟随主控：主控进入设备 → 广播 deviceId → 自动切换对应场景；主控未进入 → 等待页
  * - 也可自选设备（自选同样向广播请求切换，所有观众同步）
  */
-export function ViewerWorkspace() {
+export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
   const [link, setLink] = useState<BridgeLink>('connecting');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [follow, setFollow] = useState(true);
@@ -109,8 +109,15 @@ export function ViewerWorkspace() {
         <Scene SceneContent={activeDevice.SceneContent} cameraPosition={activeDevice.cameraPosition} />
       )}
 
-      {/* 顶部：设备选择条（默认跟随主控，可自选） */}
+      {/* 顶部：返回入口 + 设备选择条（默认跟随主控，可自选） */}
       <div className="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center gap-2">
+        <button
+          onClick={onBack}
+          aria-label="返回入口页"
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-900/60 backdrop-blur border border-slate-600/40 text-slate-300 hover:text-white transition-colors"
+        >
+          ←
+        </button>
         <button
           onClick={() => setFollow(true)}
           className={`text-xs px-2.5 py-1 rounded-full border backdrop-blur transition-colors ${
