@@ -28,7 +28,9 @@
     "start:traffic-light": "concurrently \"npm run websocket:dev\" \"npm run dev:traffic-light\"",
     "test:conveyor": "npm run test -w @digital-twin/conveyor-sorting",
     "test:coal": "npm run test -w @digital-twin/coal-sorting",
-    "lint": "eslint packages/"
+    "lint": "eslint packages/",
+    "dev:dispensing": "npm run dev -w @digital-twin/auto-dispensing",
+    "build:dispensing": "npm run build -w @digital-twin/auto-dispensing"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
