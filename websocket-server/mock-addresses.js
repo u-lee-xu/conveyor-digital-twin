@@ -1,8 +1,8 @@
 /**
- * 煤料分拣场景 仿真地址表（单一来源）
+ * 场景仿真地址表（单一来源）
  *
- * 与 packages/coal-sorting/src/scenes/coal-sorting/constants.ts 的
- * MODBUS_READ_VARS / MODBUS_WRITE_VARS 保持一致（线圈 0-26）。
+ * - COAL_ADDRESSES          煤料分拣场景（线圈 0-26）
+ * - DISPENSING_ADDRESSES    自动配药场景（线圈 0-47，含编码器 8 位）
  *
  * ⚠️ 同步规则：修改前端 constants.ts 地址后，必须同步本文件；
  * 运行 `node mock-addresses.js --check` 可对照 constants.ts 做一致性检查。
@@ -22,49 +22,64 @@ const COAL_ADDRESSES = {
   IND_FAULT: 26,
 };
 
-/**
- * 对照前端 constants.ts 做一致性检查。
- * 用法：node mock-addresses.js --check
- * 说明：前端为 TS 模块无法直接 require，采用文本正则解析（仅取数字型线圈映射）。
- */
-function checkAgainstConstants() {
+/** 自动配药 IO 地址（Modbus 线圈号，与前端 constants 一致） */
+const DISPENSING_ADDRESSES = {
+  BUTTON_START: 0, BUTTON_STOP: 1, BUTTON_RESET: 2, BUTTON_ESTOP: 3, BUTTON_CONFIRM: 4,
+  S_LIMIT_START: 10, S_LIMIT_END: 11,
+  S_MAG_A_EMPTY: 12, S_MAG_B_EMPTY: 13, S_MAG_C_EMPTY: 14,
+  S_BIN_HAS_DRUG: 15,
+  MSC_A_BACK: 20, MSC_A_FRONT: 21,
+  MSC_B_BACK: 22, MSC_B_FRONT: 23,
+  MSC_C_BACK: 24, MSC_C_FRONT: 25,
+  MSC_TILT_HOLD: 26, MSC_TILT_DUMP: 27,
+  MOTOR_FWD: 30, MOTOR_REV: 31,
+  CYL_SEND_A: 32, CYL_SEND_B: 33, CYL_SEND_C: 34, CYL_TILT: 35,
+  LAMP_GREEN: 36, LAMP_YELLOW: 37, LAMP_RED: 38,
+  ENCODER_BIT0: 40, ENCODER_BIT1: 41, ENCODER_BIT2: 42, ENCODER_BIT3: 43,
+  ENCODER_BIT4: 44, ENCODER_BIT5: 45, ENCODER_BIT6: 46, ENCODER_BIT7: 47,
+};
+
+/** 对照前端 constants.ts 做一致性检查（text 正则解析，仅数字型线圈映射） */
+function checkSceneAgainstConstants(scene, addrMap, constPath, blockName) {
   const fs = require('fs');
   const path = require('path');
-  const target = path.join(__dirname, '../packages/coal-sorting/src/scenes/coal-sorting/constants.ts');
+  const target = path.join(__dirname, constPath);
   if (!fs.existsSync(target)) {
-    console.error(`[check] 未找到前端常量文件: ${target}`);
+    console.error(`[check][${scene}] 未找到前端常量文件: ${target}`);
     return false;
   }
   const src = fs.readFileSync(target, 'utf8');
-  // 解析 MODBUS_READ_VARS 块内的 name: number 映射
-  const block = src.match(/MODBUS_READ_VARS\s*=\s*\{([\s\S]*?)\n\}/);
+  const block = src.match(new RegExp(`${blockName}\\s*=\\s*\\{([\\s\\S]*?)\\n\\}`));
   if (!block) {
-    console.error('[check] 未找到 MODBUS_READ_VARS 块');
+    console.error(`[check][${scene}] 未找到 ${blockName} 块`);
     return false;
   }
   const parsed = {};
-  const re = /^\s*([A-Z0-9_]+):\s*(\d+),?\s*$/gm;
+  const re = /^\s*([A-Z0-9_]+):\s*(\d+),?\s*(\/\/.*)?$/gm;
   let m;
-  while ((m = re.exec(block[1])) !== null) {
-    parsed[m[1]] = parseInt(m[2], 10);
-  }
-  const keys = Object.keys(COAL_ADDRESSES);
+  while ((m = re.exec(block[1])) !== null) parsed[m[1]] = parseInt(m[2], 10);
+  const keys = Object.keys(addrMap);
   const missing = keys.filter((k) => !(k in parsed));
-  const mismatched = keys.filter((k) => (k in parsed) && parsed[k] !== COAL_ADDRESSES[k]);
-  const extra = Object.keys(parsed).filter((k) => !(k in COAL_ADDRESSES));
+  const mismatched = keys.filter((k) => (k in parsed) && parsed[k] !== addrMap[k]);
+  const extra = Object.keys(parsed).filter((k) => !(k in addrMap));
   if (missing.length || mismatched.length || extra.length) {
-    console.error('[check] ❌ 地址不一致：');
+    console.error(`[check][${scene}] ❌ 地址不一致：`);
     if (missing.length) console.error('  mock 有而 constants 缺:', missing.join(', '));
-    if (mismatched.length) console.error('  地址不同:', mismatched.map((k) => `${k}: mock=${COAL_ADDRESSES[k]} constants=${parsed[k]}`).join(', '));
+    if (mismatched.length) console.error('  地址不同:', mismatched.map((k) => `${k}: mock=${addrMap[k]} constants=${parsed[k]}`).join(', '));
     if (extra.length) console.error('  constants 有而 mock 缺:', extra.join(', '));
     return false;
   }
-  console.log(`[check] ✅ 地址一致（${keys.length} 项）`);
+  console.log(`[check][${scene}] ✅ 地址一致（${keys.length} 项）`);
   return true;
 }
 
 if (require.main === module && process.argv.includes('--check')) {
-  process.exit(checkAgainstConstants() ? 0 : 1);
+  let ok = true;
+  ok = checkSceneAgainstConstants('coal', COAL_ADDRESSES,
+    '../packages/coal-sorting/src/scenes/coal-sorting/constants.ts', 'MODBUS_READ_VARS') && ok;
+  ok = checkSceneAgainstConstants('dispensing', DISPENSING_ADDRESSES,
+    '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts', 'MODBUS_READ_VARS') && ok;
+  process.exit(ok ? 0 : 1);
 }
 
-module.exports = { COAL_ADDRESSES };
+module.exports = { COAL_ADDRESSES, DISPENSING_ADDRESSES };
