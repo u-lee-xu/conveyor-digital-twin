@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useDeviceStore } from '../../stores';
-import { Button } from '@digital-twin/shared';
 import { SCORING_MODULES } from '../../hooks/useConveyorScoring';
 import type { ScoringItemStatus } from '../../stores/useDeviceStore';
 
@@ -70,7 +69,7 @@ export const ScoringPanel: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+    <div className="space-y-3 pb-6">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -126,33 +125,28 @@ export const ScoringPanel: React.FC = () => {
                 {score >= 90 ? '优秀' : score >= 80 ? '良好' : score >= 60 ? '及格' : '不及格'}
               </div>
             </div>
-            <Button
+            <button
               onClick={() => { setScoringRunning(false); }}
-              variant="primary"
-              className="w-full mt-3 h-10 text-sm font-bold"
+              className="btn btn-sm btn-primary w-full mt-3 touch-manipulation"
             >
               返回
-            </Button>
+            </button>
           </div>
         ) : !isScoringRunning ? (
-          <Button
+          <button
             onClick={handleStartAutoTest}
-            variant="primary"
-            className="w-full mb-4 h-12 text-base font-bold disabled:opacity-50"
+            className="btn btn-md btn-primary w-full mb-4 touch-manipulation"
             disabled={!isConnected}
-            glow
           >
             开始自动评分
-          </Button>
+          </button>
         ) : (
-          <Button
+          <button
             onClick={handleStopAutoTest}
-            variant="danger"
-            className="w-full mb-4 h-12 text-base font-bold animate-pulse"
-            glow
+            className="btn btn-md btn-danger w-full mb-4 touch-manipulation"
           >
             停止当前评分
-          </Button>
+          </button>
         )}
 
         {isScoringRunning && !scoringComplete && scoringPrompt && (

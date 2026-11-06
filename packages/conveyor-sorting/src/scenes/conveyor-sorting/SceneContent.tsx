@@ -10,6 +10,7 @@ import { PhysicsMaterial } from './components/PhysicsMaterial';
 import { PhysicsMaterialTable } from './components/PhysicsMaterialTable';
 import { PhysicsSignalTower } from './components/PhysicsSignalTower';
 import { PhysicsLabel } from './components/PhysicsLabel';
+import { CameraRig } from './CameraRig';
 
 /**
  * 传送带分拣场景内容
@@ -20,6 +21,7 @@ export function ConveyorSortingSceneContent() {
 
   return (
     <>
+      <CameraRig />
       <PhysicsConveyorBelt />
       <PhysicsMaterialTable position={MATERIAL_TABLE_POSITION} />
       <PhysicsLabel key="material-table" text="物料台" position={MATERIAL_TABLE_POSITION} offset={[0, 0.2, 0]} color="gray" />

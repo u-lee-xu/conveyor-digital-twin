@@ -11,16 +11,15 @@ export function AutoModePanel() {
     resetDemo: demoReset,
   } = useDemoMode();
 
+  // 面板自带 card / device-card，包装层不再叠玻璃卡片（与独立 App 一致）
   return (
-    <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-      <DemoPanel
-        demoState={demoState}
-        isStarted={demoStarted}
-        isPaused={demoPaused}
-        onStart={startDemoMode}
-        onTogglePause={demoTogglePause}
-        onReset={demoReset}
-      />
-    </div>
+    <DemoPanel
+      demoState={demoState}
+      isStarted={demoStarted}
+      isPaused={demoPaused}
+      onStart={startDemoMode}
+      onTogglePause={demoTogglePause}
+      onReset={demoReset}
+    />
   );
 }

@@ -7,7 +7,8 @@ export function PhysicsLabel({ text, position, offset = [0, 0.5, 0], color = 'bl
 }) {
   const showLabels = useDeviceStore((s) => s.showLabels);
   if (!showLabels) return null;
-  const c = VISUAL.LABEL_COLORS[color] || VISUAL.LABEL_COLORS.blue;
+  // 与自动配药 PhysicsLabel 同一份 chip 配色，未知颜色回落灰色
+  const c = VISUAL.LABEL_COLORS[color] || VISUAL.LABEL_COLORS.gray;
   return (
     <Html position={[position[0] + offset[0], position[1] + offset[1], position[2] + offset[2]]} center zIndexRange={[1, 0]}>
       <div style={{

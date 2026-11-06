@@ -304,7 +304,9 @@ export function useConveyorScoring() {
     try {
       const result = await globalModbus.readAllControlSignals();
       if (result.success && result.values) return result.values;
-    } catch {}
+    } catch {
+      // 单次读取失败：下一帧重试，不中断评分主循环
+    }
     return null;
   };
 
@@ -359,7 +361,9 @@ export function useConveyorScoring() {
           material: sensors.material,
         },
       });
-    } catch {}
+    } catch {
+      // 快照写入失败：保留上一帧状态，下一帧继续
+    }
   }, []);
 
   const getFrames = () => {

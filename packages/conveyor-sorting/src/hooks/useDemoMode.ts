@@ -368,7 +368,8 @@ export function useDemoMode() {
       loopRunningRef.current = false;
       clearAllTimers();
     };
-  }, [mode]); // ❗️ 只依赖 mode，不能依赖 startDemo！
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 演示循环只在 mode 变化时重建；加入 startDemo/clearAllTimers/delay 会导致每帧重启循环
+  }, [mode]);
 
   const startDemoMode = useCallback(() => {
     if (!startedRef.current) {

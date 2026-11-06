@@ -6,7 +6,16 @@
  *   VISUAL    — 颜色、外观风格
  *   COMPONENT — 部件尺寸参数
  *   ADDRESS   — PLC 变量地址表（与 websocket-server/mock-addresses.js 保持一致）
+ *
+ * 颜色 / 布光 / 贴面间隙来自 @digital-twin/shared 的工业视觉令牌，
+ * 与传送带分拣场景共用同一来源；本文件只保留配药设备专属的配色与几何。
  */
+
+// 直接引用共享包里的纯常量模块：本文件会被 Node 端自检单测导入，
+// 走 @digital-twin/shared 总入口会把 React / WebSocket 服务一并拉进来。
+import {
+  INDUSTRIAL_VISUAL, INDUSTRIAL_LIGHTING, INDUSTRIAL_DETAIL,
+} from '../../../../shared/src/styles/industrialVisual';
 
 // ============================================================
 // LAYOUT 布局坐标
@@ -425,7 +434,7 @@ export const MAGAZINE_ASSEMBLY: Record<MagazineId, Vec3> = {
  * 若两个实体必须接触，则让贴合面**嵌进宿主内部**（朝内的面不可见），
  * 而不是让两个朝外的面停在同一平面。
  */
-export const SURFACE_GAP = 0.0025;
+export const SURFACE_GAP = INDUSTRIAL_DETAIL.SURFACE_GAP;
 
 /**
  * 落料斜槽的侧挡边（视觉 MagazineUnit.ChuteRamp 与物理 railCollidersWorld 共用）。
@@ -789,43 +798,21 @@ export const MIRROR_ORIGIN_VIEW: ViewPreset = {
  * 整机配色：深中性背景 + 铝银灰结构件 + 石墨蓝灰柜体 + 浅灰门板，
  * 暖色功能件收敛成「琥珀家族（滑台深 / 料斗亮）+ 一个砖橙对比（取药仓）」，
  * 四料筒保留药品区分但降饱和；绿/黄/红是安全色，只做微调不换色相。
- * 场景背景与灯光也放在这里，独立 App 与平台壳两个 Canvas 共用同一套。
+ *
+ * 公共工业色 / 布光直接展开自共享令牌（与传送带分拣同源），
+ * 这里只补配药设备专属的琥珀、砖橙、药仓与药片色。
  */
 export const VISUAL = {
-  SCENE_BACKGROUND: '#1b2431',
-  SCENE_LIGHTING: {
-    ambient: 1.35,
-    key: 1.4,
-    fill: 0.4,
-    fillColor: '#9ab8dc',
-    keyPosition: [10, 10, 5] as [number, number, number],
-    fillPosition: [-7, 5, -4] as [number, number, number],
-  },
-  BASE_COLOR: '#8b98a8',         // 底架 / 铝型材银灰
-  STRUCT_COLOR: '#39434f',       // 深色结构件（石墨灰，不再近黑）
-  SLEEVE_COLOR: '#5d6b7c',       // 导套 / 螺母 / 轴承座
-  SILVER_COLOR: '#dfe6ee',       // 亮银（导轨 / 推杆 / 斜槽）
-  PROFILE_SLOT_COLOR: '#2b3441', // 铝挤型 T 槽开口 / 台面螺纹孔（暗槽）
-  ENDCAP_COLOR: '#cbd3dc',       // 端盖 / 仓口包边
-  BRASS_COLOR: '#c08a3e',        // 黄铜气接头
-  MAGSWITCH_COLOR: '#161c24',    // 磁性开关
+  ...INDUSTRIAL_VISUAL,
+  SCENE_LIGHTING: INDUSTRIAL_LIGHTING,
   FLANGE_COLOR: '#e0a51c',       // 旋转气缸输出法兰
-  AXIS_COLOR: '#a8b4c2',         // 传动轴
   SLIDER_COLOR: '#d18f16',       // 滑台（深琥珀）
   HOPPER_COLOR: '#f0b429',       // 料斗（亮琥珀，同族不同明度）
   TUBE_COLOR: '#94a3b8',         // 药仓通道
   TUBE_BACK_COLOR: '#475569',
-  CYL_BODY_COLOR: '#8794a4',     // 气缸缸体（铝银）
-  CYL_ROD_COLOR: '#e2e8f0',      // 推杆
   MAG_COLOR: { A: '#d96666', B: '#4f9e72', C: '#5b87c4', D: '#9a76bd' }, // 四药仓标识色（降饱和）
   PILL_COLOR: { A: '#b3382f', B: '#2e8b57', C: '#2563a8', D: '#7d54a8' }, // 药片色（比料筒更深）
   BIN_COLOR: '#d45f24',          // 取药仓（砖橙红，与琥珀拉开）
-  CABINET_COLOR: '#3c4d63',      // 控制柜（石墨蓝灰）
-  PANEL_COLOR: '#d8dee6',        // 柜门面板（RAL7035 浅灰）
-  LAMP_DARK: '#243040',          // 灭态玻璃透镜
-  LAMP_GREEN: '#2fb862',
-  LAMP_YELLOW: '#e0a91a',
-  LAMP_RED: '#e04b3c',
 } as const;
 
 // ============================================================

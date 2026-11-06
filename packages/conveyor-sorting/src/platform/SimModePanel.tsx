@@ -22,23 +22,21 @@ export function SimModePanel({ isMobile }: { isMobile?: boolean }) {
   }
 
   return (
-    <>
+    <div className="space-y-2">
       <ConveyorPlcConnection modeLabel="仿真模式" />
-      <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 shadow-xl">
-        <SimPanel
-          step={simStep}
-          isSimulationRunning={simRunning}
-          errorMessage={simError}
-          stats={simStats}
-          controlSignals={simControlSignals}
-          onPublishAllFeedback={simPublishFeedback}
-          onSimulationStart={simStart}
-          onSimulationStop={simStop}
-          onSimulationReset={simReset}
-          onSpawnMaterial={simSpawnMaterial}
-          onInitialize={simInitialize}
-        />
-      </div>
-    </>
+      <SimPanel
+        step={simStep}
+        isSimulationRunning={simRunning}
+        errorMessage={simError}
+        stats={simStats}
+        controlSignals={simControlSignals}
+        onPublishAllFeedback={simPublishFeedback}
+        onSimulationStart={simStart}
+        onSimulationStop={simStop}
+        onSimulationReset={simReset}
+        onSpawnMaterial={simSpawnMaterial}
+        onInitialize={simInitialize}
+      />
+    </div>
   );
 }
