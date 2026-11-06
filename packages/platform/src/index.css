@@ -3,8 +3,9 @@
 @source "../../shared/src";
 @source "../src";
 @source "../../conveyor-sorting/src";
-@source "../../coal-sorting/src";
 @source "../../pneumatic-robot/src";
+@source "../../traffic-light/src";
+@source "../../auto-dispensing/src";
 
 /* 全局样式 */
 * {

@@ -313,6 +313,9 @@ export function useDemoMode() {
     }
   }, [delay, delayWhilePaused, extendCylinder, retractCylinder, startConveyor, stopConveyor, waitForMaterialPosition, waitForMaterialZ, waitForMaterialCleared]);
 
+  const startDemoRef = useRef(startDemo);
+  startDemoRef.current = startDemo;
+
   useEffect(() => {
     if (mode !== 'auto') {
       abortRef.current?.abort();
@@ -342,7 +345,7 @@ export function useDemoMode() {
             continue;
           }
 
-          await startDemo();
+          await startDemoRef.current();
 
           if (!startedRef.current) continue;
 

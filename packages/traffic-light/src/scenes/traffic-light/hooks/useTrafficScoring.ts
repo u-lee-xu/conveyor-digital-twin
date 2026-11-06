@@ -188,7 +188,6 @@ export function useTrafficScoring() {
   const setScoringComplete = useTrafficStore((s) => s.setScoringComplete);
   const markScoringItem = useTrafficStore((s) => s.markScoringItem);
   const markItemsSkipped = useTrafficStore((s) => s.markItemsSkipped);
-  const resetScore = useTrafficStore((s) => s.resetScore);
   const setScoringPrompt = useTrafficStore((s) => s.setScoringPrompt);
 
   const stepRef = useRef<Step>('IDLE');
@@ -196,6 +195,7 @@ export function useTrafficScoring() {
   const timeoutsRef = useRef<number[]>([]);
   const processingRef = useRef(false);
   const moduleFailedRef = useRef(-1);
+  const abortRef = useRef(false);
 
   /** 启动脉冲发出时间（M1 互锁窗口起点） */
   const startPulseAtRef = useRef(0);
@@ -267,12 +267,17 @@ export function useTrafficScoring() {
     for (let i = 0; i < retries; i++) {
       try {
         const result = await plcService.writeVar(name, value);
+        if (abortRef.current) return false;
         if (result.success) return true;
         console.warn(`[评分] 写入变量 ${name} 值 ${value} 失败(${i + 1}/${retries}):`, result.error);
       } catch (e) {
+        if (abortRef.current) return false;
         console.warn(`[评分] 写入变量 ${name} 值 ${value} 异常(${i + 1}/${retries}):`, e);
       }
-      if (i < retries - 1) await new Promise<void>(r => { safeTimeout(r, 500); });
+      if (i < retries - 1) {
+        await new Promise<void>(r => { safeTimeout(r, 500); });
+        if (abortRef.current) return false;
+      }
     }
     return false;
   };
@@ -280,6 +285,7 @@ export function useTrafficScoring() {
   /** 自复位按钮脉冲：置位 → 保持 → 复位 */
   const sendPulse = async (name: string, duration = 800): Promise<boolean> => {
     const ok = await writeVarWithRetry(name, true);
+    if (abortRef.current) return false;
     if (!ok) {
       console.error(`[评分] 发送脉冲信号 ${name} 失败: 写入true重试耗尽`);
       return false;
@@ -287,6 +293,7 @@ export function useTrafficScoring() {
     await new Promise<void>(r => {
       safeTimeout(r, duration);
     });
+    if (abortRef.current) return false;
     await writeVarWithRetry(name, false);
     return true;
   };
@@ -383,6 +390,7 @@ export function useTrafficScoring() {
 
   useEffect(() => {
     if (mode !== 'scoring') {
+      abortRef.current = true;
       setScoringRunning(false);
       stepRef.current = 'IDLE';
       clearAllTimeouts();
@@ -391,6 +399,7 @@ export function useTrafficScoring() {
 
   useEffect(() => {
     if (!isScoringRunning) {
+      abortRef.current = true;
       stepRef.current = 'IDLE';
       processingRef.current = false;
       moduleFailedRef.current = -1;
@@ -401,16 +410,17 @@ export function useTrafficScoring() {
       ggTicksRef.current = 0;
       gyTicksRef.current = 0;
       clearAllTimeouts();
-      setScoringPrompt('');
+      useTrafficStore.getState().setScoringPrompt('');
       return;
     }
 
-    resetScore();
+    abortRef.current = false;
+    useTrafficStore.getState().resetScore();
     useTrafficStore.getState().allLampsOff();
     stepRef.current = 'M1_INIT';
     timerRef.current = Date.now();
     moduleFailedRef.current = -1;
-    setScoringPrompt('⏳ 正在验证连接...');
+    useTrafficStore.getState().setScoringPrompt('⏳ 正在验证连接...');
 
     const tick = async () => {
       if (processingRef.current) return;
@@ -425,8 +435,15 @@ export function useTrafficScoring() {
     const scoringInterval = SCORING_POLL_INTERVAL[plcService.protocol] ?? 300;
     const processInterval = setInterval(tick, scoringInterval);
     return () => { clearInterval(processInterval); clearAllTimeouts(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isScoringRunning, resetScore]);
+  }, [isScoringRunning, clearAllTimeouts]);
+
+  /* Unmount cleanup — abort pending async, clear all timers */
+  useEffect(() => {
+    return () => {
+      abortRef.current = true;
+      clearAllTimeouts();
+    };
+  }, [clearAllTimeouts]);
 
   const getModuleIndex = (step: Step): number => {
     if (step.startsWith('M1')) return 0;
@@ -468,6 +485,7 @@ export function useTrafficScoring() {
     const now = Date.now();
 
     const signals = await readVarsOnce();
+    if (abortRef.current) return;
     if (!signals) return;
     if (step !== 'M1_SEND_START' && step !== 'M4_SEND_STOP'
       && step !== 'M4_SEND_RESTART' && step !== 'M4_SEND_ESTOP' && step !== 'M4_SEND_RESTART2') {
@@ -539,6 +557,7 @@ export function useTrafficScoring() {
 
       case 'M1_SEND_START': {
         const ok = await sendPulse('BUTTON_START');
+        if (abortRef.current) return;
         if (ok) {
           pass('m1_btn', '【初始状态】启动按钮检测', 2);
           startPulseAtRef.current = now;
@@ -800,6 +819,7 @@ export function useTrafficScoring() {
 
       case 'M4_SEND_STOP': {
         const ok = await sendPulse('BUTTON_STOP');
+        if (abortRef.current) return;
         if (ok) {
           pass('m4_stop_btn', '【停止/急停】停止按钮检测', 2);
         } else {
@@ -834,6 +854,7 @@ export function useTrafficScoring() {
 
       case 'M4_SEND_RESTART': {
         const ok = await sendPulse('BUTTON_START');
+        if (abortRef.current) return;
         if (!ok) {
           fail('m4_restart', '【停止/急停】停止后重启信号发送失败', 4);
         }
@@ -861,6 +882,7 @@ export function useTrafficScoring() {
 
       case 'M4_SEND_ESTOP': {
         const ok = await sendPulse('BUTTON_ESTOP');
+        if (abortRef.current) return;
         if (ok) {
           pass('m4_estop_btn', '【停止/急停】急停按钮检测', 2);
         } else {
@@ -890,6 +912,7 @@ export function useTrafficScoring() {
 
       case 'M4_SEND_RESTART2': {
         const ok = await sendPulse('BUTTON_START');
+        if (abortRef.current) return;
         if (!ok) {
           fail('m4_restart2', '【停止/急停】急停复位后重启信号发送失败', 4);
         }

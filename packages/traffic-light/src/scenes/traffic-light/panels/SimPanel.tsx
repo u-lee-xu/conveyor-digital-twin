@@ -129,6 +129,7 @@ export function SimPanel({ protocol, connected, setConnected }: {
     } else {
       stopPolling();
     }
+    return () => { stopPolling(); };
   }, [connected, startPolling, stopPolling]);
 
   /* ---- 自复位按钮：写入 PLC ---- */

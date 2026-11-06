@@ -49,7 +49,7 @@ export const conveyorDevice: DeviceDefinition = {
   },
   onCleanup: disconnectIfNeeded,
   /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useDeviceStore */
-  applyBroadcast: (v) => {
+  applyBroadcast: (v: Record<string, boolean>) => {
     const s = useDeviceStore.getState();
     const conveyor = !!v['CONVEYOR'];
     if (conveyor !== s.conveyorRunning) {

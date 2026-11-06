@@ -53,6 +53,8 @@ export class PlcWebSocketService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private consecutiveErrors = 0;
+  private _disposed = false;
+  private _heartbeatRunning = false;
   private static readonly MAX_RECONNECT_ATTEMPTS = 20;
   private static readonly MAX_CONSECUTIVE_ERRORS = 20;
   private static readonly MAX_PENDING = 50;
@@ -89,12 +91,15 @@ export class PlcWebSocketService {
     const interval = this._protocol === 's7' ? 5000 : 3000;
     const maxFails = this._protocol === 's7' ? 2 : 3;
     this.heartbeatTimer = setInterval(async () => {
+      if (this._heartbeatRunning) return;
+      this._heartbeatRunning = true;
       try {
         const result = this._protocol === 'modbus'
           ? await this._sendRaw({ type: 'read-coils', address: 0, length: 1 })
           : await this._sendRaw({ type: 'read-vars', names: ['BUTTON_START'] });
         if (result.success) { this.heartbeatFailCount = 0; } else { this.heartbeatFailCount++; }
       } catch { this.heartbeatFailCount++; }
+      finally { this._heartbeatRunning = false; }
       if (this.heartbeatFailCount >= maxFails) {
         console.warn('[PLC心跳] 连续无响应，判定断连');
         this.stopHeartbeat();
@@ -108,9 +113,10 @@ export class PlcWebSocketService {
     this.heartbeatFailCount = 0;
   }
 
-  constructor() { this._connectWS(); }
+  constructor() { /* lazy: connect on demand */ }
 
   private _connectWS() {
+    if (this._disposed) return;
     if (this.reconnecting) return;
     this.reconnecting = true;
 
@@ -152,7 +158,7 @@ export class PlcWebSocketService {
         this.reconnectAttempts++;
         this.clearHandlers();
         if (this.reconnectAttempts <= PlcWebSocketService.MAX_RECONNECT_ATTEMPTS) {
-          this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this._connectWS(); }, 5000);
+          this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; if (this._disposed) return; this._connectWS(); }, 5000);
         } else {
           console.warn('[PLC WS] 达到最大重连次数');
         }
@@ -230,13 +236,20 @@ export class PlcWebSocketService {
   }
 
   async connect(config: PlcConfig): Promise<PlcResult> {
+    this._disposed = false;
     this._protocol = config.protocol;
     this._lastConfig = config;
 
     if (!this._connected) {
       this._connectWS();
-      await new Promise<void>((resolve) => {
-        const check = () => { if (this._connected || !this.reconnecting) resolve(); else setTimeout(check, 100); };
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('PLC connection timeout'));
+        }, 30000);
+        const check = () => {
+          if (this._connected || !this.reconnecting) { clearTimeout(timeout); resolve(); }
+          else setTimeout(check, 100);
+        };
         setTimeout(check, 100);
       });
       if (!this._connected) return { success: false, error: 'WebSocket代理连接失败(端口8081)' };
@@ -246,6 +259,7 @@ export class PlcWebSocketService {
   }
 
   async disconnect(): Promise<PlcResult> {
+    this._disposed = true;
     this.stopHeartbeat();
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.reconnecting = false;

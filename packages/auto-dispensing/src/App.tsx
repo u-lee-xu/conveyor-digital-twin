@@ -1,8 +1,6 @@
 import { Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { Physics } from '@react-three/rapier';
-import { PhysicsGround } from '@digital-twin/shared';
 import { PlcConnectionPanel, HelpPanel, useMobile, type PlcConnConfig } from '@digital-twin/shared';
 import { useAppStore, type AppMode } from './stores/useAppStore';
 import { DispenseControlPanel } from './scenes/auto-dispensing/panels/DispenseControlPanel';
@@ -13,6 +11,13 @@ import { DispensingSceneContent } from './scenes/auto-dispensing/SceneContent';
 import { plcService } from './services/plc-websocket';
 import { buildDispensingHelpContent } from './scenes/auto-dispensing/helpContent';
 import { useDispenseLoop } from './scenes/auto-dispensing/hooks/useDispenseLoop';
+import {
+  HOPPER_PREVIEW_CAMERA, HOPPER_PREVIEW_TARGET, HOPPER_PREVIEW_FOV,
+  MAGAZINE_PREVIEW_CAMERA, MAGAZINE_PREVIEW_TARGET, MAGAZINE_PREVIEW_FOV,
+  PART_STAGES, PART_STAGE_ORIGIN, VISUAL,
+} from './scenes/auto-dispensing/constants';
+import { resolveViewTuples } from './scenes/auto-dispensing/viewGoals';
+import { ViewSwitcher } from './platform/ViewSwitcher';
 import type { ProtocolType } from './services/plc-websocket';
 
 const MODES: { key: AppMode; label: string; icon: string }[] = [
@@ -21,12 +26,37 @@ const MODES: { key: AppMode; label: string; icon: string }[] = [
   { key: 'sim', label: '\u2699\u2009仿真', icon: '' },
 ];
 
+/**
+ * 首屏相机：URL 只在初始化时解析一次，之后的机位/展台/镜像切换全部由
+ * store 驱动、CameraRig 做阻尼过渡，无需刷新页面。
+ * 旧的 ?part= 单件预览仍保留作调试入口，优先级高于机位。
+ */
+const query = new URLSearchParams(window.location.search);
+const isHopperPreview = query.get('part') === 'hopper';
+const isMagazinePreview = query.get('part') === 'magazine';
+const initialView = resolveViewTuples(
+  query.get('view') ?? 'overview',
+  query.get('stage'),
+  query.get('mirror') === '1',
+);
+const preview = isHopperPreview
+  ? { camera: HOPPER_PREVIEW_CAMERA, target: HOPPER_PREVIEW_TARGET, fov: HOPPER_PREVIEW_FOV }
+  : isMagazinePreview
+    ? { camera: MAGAZINE_PREVIEW_CAMERA, target: MAGAZINE_PREVIEW_TARGET, fov: MAGAZINE_PREVIEW_FOV }
+    : null;
+const cameraPosition = preview?.camera ?? initialView.camera;
+const cameraTarget = preview?.target ?? initialView.target;
+const cameraFov = preview?.fov ?? initialView.fov;
+
+/** 展台相机只有 0.5~2m：整机 minDistance=2 会把近景强行推远，故展台单独放宽到 0.2m */
 export default function App() {
   useDispenseLoop();
   const mode = useAppStore((s) => s.mode);
   const setMode = useAppStore((s) => s.setMode);
   const showLabels = useAppStore((s) => s.showLabels);
   const setShowLabels = useAppStore((s) => s.setShowLabels);
+  const activeStage = useAppStore((s) => s.activeStage);
+  const panelCollapsed = useAppStore((s) => s.panelCollapsed);
   const isMobile = useMobile();
   const [showHelp, setShowHelp] = useState(false);
   const [protocol, setProtocol] = useState<ProtocolType>('modbus');
@@ -44,30 +74,57 @@ export default function App() {
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#1e293b', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: '100vw', height: '100vh', background: VISUAL.SCENE_BACKGROUND, position: 'relative', overflow: 'hidden' }}>
       <Canvas
         style={{ position: 'absolute', inset: 0 }}
         shadows
-        camera={{ position: [-1.7, 7.5, 9.0], fov: 45, near: 0.1, far: 1000 }}
+        camera={{ position: cameraPosition, fov: cameraFov, near: 0.1, far: 1000 }}
       >
         <OrbitControls
-          target={[-1.7, 1.2, 1.5]}
+          makeDefault
+          target={cameraTarget}
           enableDamping dampingFactor={0.1}
-          minDistance={3} maxDistance={30}
+          minDistance={activeStage ? 0.2 : 2}
+          maxDistance={25}
           maxPolarAngle={Math.PI / 2}
         />
         <Suspense fallback={null}>
-          <Physics gravity={[0, -9.8, 0]} debug={false} timeStep={1 / 30}>
-            <color attach="background" args={['#334155']} />
-            <ambientLight intensity={1.5} />
-            <directionalLight position={[10, 10, 5]} intensity={1} />
-            <PhysicsGround />
-            <DispensingSceneContent />
-          </Physics>
+          <color attach="background" args={[VISUAL.SCENE_BACKGROUND]} />
+          <ambientLight intensity={VISUAL.SCENE_LIGHTING.ambient} />
+          <directionalLight position={VISUAL.SCENE_LIGHTING.keyPosition} intensity={VISUAL.SCENE_LIGHTING.key} />
+          <directionalLight
+            position={VISUAL.SCENE_LIGHTING.fillPosition}
+            intensity={VISUAL.SCENE_LIGHTING.fill}
+            color={VISUAL.SCENE_LIGHTING.fillColor}
+          />
+          {/* 物理世界（含 rapier 刚体与静态碰撞体）由 DispensingSceneContent 统一挂载 */}
+          <DispensingSceneContent />
         </Suspense>
       </Canvas>
-      {/* 左侧极窄控制栏（手机端隐藏，使用底部抽屉） */}
-      {!isMobile && (
+
+      {/* 部件展台：隐藏操作面板，避免遮挡 1:1 模型；左上角标注尺度与局部原点 */}
+      {activeStage && (
+        <div
+          className="absolute top-3 left-3 z-10 rounded-xl px-3 py-2 text-xs"
+          style={{
+            background: 'rgba(15,23,42,0.88)', color: '#e2e8f0',
+            border: '1px solid #475569', maxWidth: '28rem', pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>部件展台 · {PART_STAGES[activeStage]?.label}</div>
+          <div style={{ color: '#94a3b8', lineHeight: 1.6 }}>
+            1:1 真实尺度 · 标尺网格 0.1 m<br />
+            局部原点：{PART_STAGE_ORIGIN[activeStage] ?? '—'}<br />
+            拖拽旋转 / 滚轮缩放
+          </div>
+        </div>
+      )}
+
+      {/* 右上角视图工具栏：机位 / 部件展台 / 镜像布局 / 标签 / 面板折叠 */}
+      <ViewSwitcher showPanelToggle />
+
+      {/* 左侧极窄控制栏（手机端隐藏，使用底部抽屉；部件展台下也隐藏） */}
+      {!activeStage && !isMobile && !panelCollapsed && (
         <div
           className="absolute top-3 left-3 z-10 overflow-y-auto space-y-2 scrollbar-thin"
           style={{ width: '17rem', maxHeight: 'calc(100vh - 1.5rem)' }}
@@ -142,7 +199,7 @@ export default function App() {
         </div>
       )}
 
-      {isMobile && (
+      {!activeStage && isMobile && (
         <>
           {/* 顶部迷你条：模式切换 + 帮助 */}
           <div className="absolute top-2 left-2 right-2 z-10">

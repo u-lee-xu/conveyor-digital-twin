@@ -25,16 +25,14 @@ const STATUS_BG: Record<ScoringItemStatus, string> = {
 };
 
 export function RobotScoringPanel({ connected }: { connected: boolean }) {
-  const {
-    isScoringRunning,
-    scoringComplete,
-    setScoringRunning,
-    score,
-    scoringStatus,
-    scoringLog,
-    scoringPrompt,
-    resetScore,
-  } = useRobotStore();
+  const isScoringRunning = useRobotStore(s => s.isScoringRunning);
+  const scoringComplete = useRobotStore(s => s.scoringComplete);
+  const setScoringRunning = useRobotStore(s => s.setScoringRunning);
+  const score = useRobotStore(s => s.score);
+  const scoringStatus = useRobotStore(s => s.scoringStatus);
+  const scoringLog = useRobotStore(s => s.scoringLog);
+  const scoringPrompt = useRobotStore(s => s.scoringPrompt);
+  const resetScore = useRobotStore(s => s.resetScore);
 
   const logEndRef = useRef<HTMLDivElement>(null);
 

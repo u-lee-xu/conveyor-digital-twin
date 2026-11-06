@@ -1,5 +1,7 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
-import { SLIDER_MIN_X, PULSES_PER_M, MODBUS_DISPLAY_VARS, type MagazineId } from '../constants';
+import {
+  MODBUS_DISPLAY_VARS, MODBUS_HOLDING_REGISTERS, ENCODER_REG_LABEL, type MagazineId,
+} from '../constants';
 
 /** IO 信号 LED 指示灯（地址 title 提示） */
 function IOLed({ label, active, addr }: { label: string; active: boolean; addr?: string }) {
@@ -31,8 +33,9 @@ export function DispenseStatusPanel() {
   const motorFwd = useDispensingStore((s) => s.motorFwd);
   const motorRev = useDispensingStore((s) => s.motorRev);
 
-  const encoder = Math.round((sliderX - SLIDER_MIN_X) * PULSES_PER_M);
-  const mags: MagazineId[] = ['A', 'B', 'C'];
+  const encoderPulses = useDispensingStore((s) => s.encoderPulses);
+  const encoderDir = useDispensingStore((s) => s.encoderDir);
+  const mags: MagazineId[] = ['A', 'B', 'C', 'D'];
 
   return (
     <div className="space-y-2">
@@ -48,19 +51,24 @@ export function DispenseStatusPanel() {
         </div>
       </div>
 
-      {/* 位置与限位 */}
+      {/* 位置、数据寄存器与原点/终点传感器 */}
       <div className="card">
-        <div className="section-title !mb-1">位置</div>
+        <div className="section-title !mb-1">位置 · 增量式编码器寄存器</div>
+        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+          <span className="badge badge-blue">HR{MODBUS_HOLDING_REGISTERS.ENCODER_PULSES} = {encoderPulses} 脉冲</span>
+          <span className="badge badge-slate">X {sliderX.toFixed(2)} m</span>
+          <span className="badge badge-slate">{encoderDir > 0 ? '↑ 前进 +' : encoderDir < 0 ? '↓ 后退 −' : '静止'}</span>
+        </div>
         <div className="grid grid-cols-3 gap-x-1">
-          <IOLed label={`编码器 ${encoder}`} active={encoder > 0} addr="0.01m/脉冲" />
-          <IOLed label="起点限位" active={sensors.limitStart} addr={ADDR.S_LIMIT_START} />
-          <IOLed label="终点限位" active={sensors.limitEnd} addr={ADDR.S_LIMIT_END} />
+          <IOLed label="原点传感器" active={sensors.limitStart} addr={ADDR.S_LIMIT_START} />
+          <IOLed label="终点传感器" active={sensors.limitEnd} addr={ADDR.S_LIMIT_END} />
+          <IOLed label="Z相回零" active={sensors.limitStart && encoderPulses === 0} addr={`${ENCODER_REG_LABEL} · 0.01m/脉冲`} />
         </div>
       </div>
 
       {/* 药仓 */}
       <div className="card">
-        <div className="section-title !mb-1">药仓（A/B/C）</div>
+        <div className="section-title !mb-1">药仓（A/B/C/D）</div>
         <div className="grid grid-cols-3 gap-x-1">
           {mags.map((mag) => (
             <IOLed

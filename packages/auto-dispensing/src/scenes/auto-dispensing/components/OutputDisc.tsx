@@ -1,16 +1,17 @@
 import { materials } from '../../../components/scene/shared/materials';
 
 /**
- * 旋转气缸输出盘（独立部件）：扁圆柱盘体，绕自身轴（Y）摆动 90°
+ * [已弃用] 旧版旋转气缸输出盘，当前场景不再引用，保留供造型对照。
  *
- * 盘面朝上（+Y），安装于气缸基座顶部宽面；尺寸按 0.74 比例缩小
+ * 现行装配见 SliderHopper.tsx：气缸侧立、盘面朝 +Z、输出轴沿 Z，
+ * 料斗经连接支架固定在盘面上，随盘绕 Z 轴摆动 -90° 倒药。
+ * 几何常量统一由 constants.ts 的 ROTARY_* / HOPPER_* 提供。
  */
-export function OutputDisc({ angle, position }: { angle: number; position: [number, number, number] }) {
-  // 缩小后盘体半径/厚度
+export function OutputDisc({ position }: { position: [number, number, number] }) {
   const R = 0.028;
   const TH = 0.014;
   return (
-    <group position={position} rotation={[0, angle * Math.PI / 2 - Math.PI / 4, 0]}>
+    <group position={position}>
       {/* 盘体（银色，轴线沿 Y） */}
       <mesh material={materials.endCap}>
         <cylinderGeometry args={[R, R, TH, 24]} />
@@ -19,7 +20,7 @@ export function OutputDisc({ angle, position }: { angle: number; position: [numb
       <mesh rotation={[Math.PI / 2, 0, 0]} material={materials.sleeve}>
         <torusGeometry args={[R, 0.003, 10, 24]} />
       </mesh>
-      {/* 刻度线 ×12（盘面放射刻度，沿盘面径向，位于 XZ 平面） */}
+      {/* 刻度线 ×12（盘面放射刻度） */}
       {Array.from({ length: 12 }, (_, i) => {
         const a = (i / 12) * Math.PI * 2;
         return (
@@ -28,7 +29,7 @@ export function OutputDisc({ angle, position }: { angle: number; position: [numb
           </mesh>
         );
       })}
-      {/* 螺栓孔 ×8（盘缘沉孔，极薄圆片平贴盘面：位于 XZ 平面、法线朝 Y，任何角度不可见厚度） */}
+      {/* 螺栓孔 ×8（盘缘沉孔） */}
       {Array.from({ length: 8 }, (_, i) => {
         const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
         return (

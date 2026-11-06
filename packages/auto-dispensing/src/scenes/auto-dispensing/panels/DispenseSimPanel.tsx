@@ -3,7 +3,7 @@ import { useAppStore } from '../../../stores/useAppStore';
 import { useDispensingStore, type MagazineId } from '../../../stores/useDispensingStore';
 import {
   MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS,
-  SLIDER_MIN_X, PULSES_PER_M,
+  ENCODER_REG_LABEL, encoderMirrorBits,
 } from '../constants';
 import type { ProtocolType } from '../../../services/plc-websocket';
 import { plcService } from '../../../services/plc-websocket';
@@ -24,15 +24,7 @@ function getReadVars(protocol: ProtocolType) {
   return MITSUBISHI_READ_VARS;
 }
 
-const MAG: MagazineId[] = ['A', 'B', 'C'];
-
-/** 编码器 8 位二进制写入 PLC（0.01m = 1 脉冲） */
-function encoderBits(x: number): boolean[] {
-  const pulses = Math.max(0, Math.round((x - SLIDER_MIN_X) * PULSES_PER_M));
-  const bits: boolean[] = [];
-  for (let i = 0; i < 8; i++) bits.push(((pulses >> i) & 1) === 1);
-  return bits;
-}
+const MAG: MagazineId[] = ['A', 'B', 'C', 'D'];
 
 export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected }: {
   onShowHelp: () => void;
@@ -82,6 +74,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
           confirm: !!v['BUTTON_CONFIRM'],
           motorFwd: !!v['MOTOR_FWD'], motorRev: !!v['MOTOR_REV'],
           cylA: !!v['CYL_SEND_A'], cylB: !!v['CYL_SEND_B'], cylC: !!v['CYL_SEND_C'],
+          cylD: !!v['CYL_SEND_D'],
           tilt: !!v['CYL_TILT'],
           lampGreen: !!v['LAMP_GREEN'], lampYellow: !!v['LAMP_YELLOW'], lampRed: !!v['LAMP_RED'],
         };
@@ -131,7 +124,8 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         MAG.forEach((mag) => { push(`MSC_${mag}_BACK`, s.sensors.mscBack[mag]); push(`MSC_${mag}_FRONT`, s.sensors.mscFront[mag]); });
         push('MSC_TILT_HOLD', s.sensors.mscTiltHold);
         push('MSC_TILT_DUMP', s.sensors.mscTiltDump);
-        const bits = encoderBits(s.sliderX);
+        // 8 位线圈只是数据寄存器的位镜像，寄存器才是唯一真值
+        const bits = encoderMirrorBits(s.encoderPulses);
         for (let i = 0; i < 8; i++) push(`ENCODER_BIT${i}`, bits[i]);
         await plcService.writeVars(writeNames, writeValues);
       } catch (e) {
@@ -174,8 +168,8 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
   };
 
   const sensors = useDispensingStore((s) => s.sensors);
-  const sliderX = useDispensingStore((s) => s.sliderX);
-  const encoder = Math.round((sliderX - SLIDER_MIN_X) * PULSES_PER_M);
+  const encoderPulses = useDispensingStore((s) => s.encoderPulses);
+  const encoderDir = useDispensingStore((s) => s.encoderDir);
 
   return (
     <div className="space-y-2">
@@ -257,8 +251,26 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
             <button className="btn btn-xs btn-outline touch-manipulation" style={{ fontSize: '0.62rem' }}
               onClick={() => setSimEStop(false)}>复位</button>
           )}
-          <button className="btn btn-xs btn-ghost ml-auto touch-manipulation" style={{ fontSize: '0.62rem' }}
+          <button className="btn btn-xs btn-outline ml-auto touch-manipulation" style={{ fontSize: '0.62rem' }}
+            onClick={() => useDispensingStore.getState().refillAll()}>⊕ 补满药仓</button>
+          <button className="btn btn-xs btn-ghost touch-manipulation" style={{ fontSize: '0.62rem' }}
             onClick={() => useDispensingStore.getState().resetAll()}>复位全部</button>
+        </div>
+      </div>
+
+      {/* ===== 增量式编码器数据寄存器 ===== */}
+      <div className="card">
+        <div className="section-title !mb-1.5">位置数据寄存器（增量式编码器）</div>
+        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+          <span className="badge badge-blue">HR120 = {encoderPulses} 脉冲</span>
+          <span className="badge badge-slate">0.01 m / 脉冲</span>
+          <span className={`badge ${encoderDir > 0 ? 'badge-green' : encoderDir < 0 ? 'badge-yellow' : 'badge-slate'}`}>
+            {encoderDir > 0 ? '↑ 前进 +' : encoderDir < 0 ? '↓ 后退 −' : '静止'}
+          </span>
+        </div>
+        <div className="text-[0.55rem] text-slate-500 leading-relaxed">
+          {ENCODER_REG_LABEL} · 随滑台前进递增、后退递减；回到原点传感器（Z 相）自动归零。
+          8 位线圈 ENCODER_BIT0-7 只是该寄存器的位镜像。
         </div>
       </div>
 
@@ -270,11 +282,12 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
           <div>
             <div className="text-[0.5rem] text-slate-500 mb-0.5">输入信号（孪生 → PLC）</div>
             <div className="grid grid-cols-3 gap-x-1">
-              <IOLed label="起点限位" active={sensors.limitStart} addr={getAddr('S_LIMIT_START')} />
-              <IOLed label="终点限位" active={sensors.limitEnd} addr={getAddr('S_LIMIT_END')} />
+              <IOLed label="原点传感器" active={sensors.limitStart} addr={getAddr('S_LIMIT_START')} />
+              <IOLed label="终点传感器" active={sensors.limitEnd} addr={getAddr('S_LIMIT_END')} />
               <IOLed label="A空仓" active={sensors.magEmpty.A} addr={getAddr('S_MAG_A_EMPTY')} />
               <IOLed label="B空仓" active={sensors.magEmpty.B} addr={getAddr('S_MAG_B_EMPTY')} />
               <IOLed label="C空仓" active={sensors.magEmpty.C} addr={getAddr('S_MAG_C_EMPTY')} />
+              <IOLed label="D空仓" active={sensors.magEmpty.D} addr={getAddr('S_MAG_D_EMPTY')} />
               <IOLed label="取药仓有药" active={sensors.binHasDrug} addr={getAddr('S_BIN_HAS_DRUG')} />
               <IOLed label="A缸后" active={sensors.mscBack.A} addr={getAddr('MSC_A_BACK')} />
               <IOLed label="A缸前" active={sensors.mscFront.A} addr={getAddr('MSC_A_FRONT')} />
@@ -282,9 +295,11 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
               <IOLed label="B缸前" active={sensors.mscFront.B} addr={getAddr('MSC_B_FRONT')} />
               <IOLed label="C缸后" active={sensors.mscBack.C} addr={getAddr('MSC_C_BACK')} />
               <IOLed label="C缸前" active={sensors.mscFront.C} addr={getAddr('MSC_C_FRONT')} />
+              <IOLed label="D缸后" active={sensors.mscBack.D} addr={getAddr('MSC_D_BACK')} />
+              <IOLed label="D缸前" active={sensors.mscFront.D} addr={getAddr('MSC_D_FRONT')} />
               <IOLed label="翻转盛药位" active={sensors.mscTiltHold} addr={getAddr('MSC_TILT_HOLD')} />
               <IOLed label="翻转倒药位" active={sensors.mscTiltDump} addr={getAddr('MSC_TILT_DUMP')} />
-              <IOLed label={`编码器 ${encoder}`} active={encoder > 0} addr="8位二进制 ENCODER_BIT0-7" />
+              <IOLed label={`寄存器 ${encoderPulses}`} active={encoderPulses > 0} addr={`${ENCODER_REG_LABEL} · 8位镜像 ENCODER_BIT0-7`} />
             </div>
           </div>
 
@@ -299,6 +314,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
               <IOLed label="A送药缸" active={!!ioSignals.cylA} addr={getAddr('CYL_SEND_A')} />
               <IOLed label="B送药缸" active={!!ioSignals.cylB} addr={getAddr('CYL_SEND_B')} />
               <IOLed label="C送药缸" active={!!ioSignals.cylC} addr={getAddr('CYL_SEND_C')} />
+              <IOLed label="D送药缸" active={!!ioSignals.cylD} addr={getAddr('CYL_SEND_D')} />
               <IOLed label="翻转缸" active={!!ioSignals.tilt} addr={getAddr('CYL_TILT')} />
               <IOLed label="灯塔绿" active={!!ioSignals.lampGreen} addr={getAddr('LAMP_GREEN')} />
               <IOLed label="灯塔黄" active={!!ioSignals.lampYellow} addr={getAddr('LAMP_YELLOW')} />
