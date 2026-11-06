@@ -4,14 +4,32 @@ import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/ra
 import { DoubleSide } from 'three';
 import { useDeviceStore } from '../../../stores';
 import { geometries, materials } from '../../../components/scene/shared';
+import { type CylinderName } from '../../../types/device';
 import {
   CONVEYOR_SPEED, CONVEYOR_END_X, CONVEYOR_Z_MIN, CONVEYOR_Z_MAX,
-  CYLINDER_POSITIONS, SENSOR_POSITIONS,
-  COMPONENT, PHYSICS,
+  CYLINDER_POSITIONS, CYLINDER_RETRACT_POS, SENSOR_POSITIONS,
+  COMPONENT, PHYSICS, SORT_CHUTE, type SortSlot,
 } from '../constants';
-import { getPushPlateWorldZ } from './helpers';
+import { readCylinderExtensions } from '../cylinderKinematics';
+import { getPushedMaterialZ } from './helpers';
+import { sortChutePoint, isAtChuteEntry } from '../sortChute';
 
 const COLLIDERS_ONLY = false;
+
+type MaterialPhase = 'free' | 'pushing' | 'sliding' | 'settled';
+type Vec = { x: number; y: number; z: number };
+
+const CYLINDER_ENTRIES: { name: CylinderName; cylinderZ: number; x: number; y: number }[] = [
+  { name: 'feed', cylinderZ: CYLINDER_POSITIONS.feed[2], x: CYLINDER_POSITIONS.feed[0], y: CYLINDER_POSITIONS.feed[1] },
+  { name: 'sorting1', cylinderZ: CYLINDER_POSITIONS.sorting1[2], x: CYLINDER_POSITIONS.sorting1[0], y: CYLINDER_POSITIONS.sorting1[1] },
+  { name: 'sorting2', cylinderZ: CYLINDER_POSITIONS.sorting2[2], x: CYLINDER_POSITIONS.sorting2[0], y: CYLINDER_POSITIONS.sorting2[1] },
+];
+
+const SENSOR_ENTRIES = [
+  { name: 'feed' as const, pos: SENSOR_POSITIONS.feed },
+  { name: 'color' as const, pos: SENSOR_POSITIONS.color },
+  { name: 'material' as const, pos: SENSOR_POSITIONS.material },
+];
 
 function DebugBox({ args, color = '#22c55e', opacity = 0.25 }: {
   args: [number, number, number]; color?: string; opacity?: number;
@@ -25,14 +43,30 @@ function DebugBox({ args, color = '#22c55e', opacity = 0.25 }: {
   );
 }
 
+/**
+ * 在途工件。
+ *
+ * 穿模修复：不再靠 kinematic 推板去「撞」dynamic 工件，也不再用两个
+ * useFrame 各算各的行程。推板与工件都读 cylinderKinematics 的同一份快照，
+ * 工件中心严格等于「推板中心 − FOLLOW_GAP」，间隙由两个半厚推导，
+ * 因此推板永远追不上、更不会插进工件。
+ *
+ * 推出带面后进入 sliding → settled：沿 sortChute.ts 的轨迹滑进收集盒，
+ * 停留 SETTLE_SECONDS 再计入 sortedItems 并清理刚体，替代旧版
+ * 「z < -0.30 立刻消失」。
+ */
 export function PhysicsMaterial() {
   const materialVisible = useDeviceStore((s) => s.material.visible);
   const materialColor = useDeviceStore((s) => s.material.color);
-  const clearMaterial = useDeviceStore((s) => s.clearMaterial);
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const lastVisible = useRef(false);
   const isKinematicRef = useRef(false);
-  const conveyorYRef = useRef<number>(COMPONENT.CONVEYOR_SURFACE_Y);
+
+  const phaseRef = useRef<MaterialPhase>('free');
+  const slideElapsedRef = useRef(0);
+  const settleElapsedRef = useRef(0);
+  const slotRef = useRef<SortSlot>('sorting1');
+  const slideStartXRef = useRef(0);
 
   useEffect(() => {
     if (rigidBodyRef.current && materialVisible && !lastVisible.current) {
@@ -47,120 +81,124 @@ export function PhysicsMaterial() {
         rigidBodyRef.current.setBodyType(0 as const, true);
         isKinematicRef.current = false;
       }
+      phaseRef.current = 'free';
+      slideElapsedRef.current = 0;
+      settleElapsedRef.current = 0;
     }
     lastVisible.current = materialVisible;
   }, [materialVisible]);
 
   useFrame((_, delta) => {
-    if (!rigidBodyRef.current || !materialVisible) return;
+    const body = rigidBodyRef.current;
+    if (!body || !materialVisible) return;
 
-    const pos = rigidBodyRef.current.translation();
-
+    const pos = body.translation();
     const state = useDeviceStore.getState();
-    const conveyorRunning = state.conveyorRunning;
-    const cylinders = state.cylinders;
+    const extensions = readCylinderExtensions();
 
-    let pushingCylinder: { pushPlateZ: number } | null = null;
+    let next: Vec = { x: pos.x, y: pos.y, z: pos.z };
+    let kinematic = true;
 
-    const cylinderEntries = [
-      { name: 'feed' as const, pos: CYLINDER_POSITIONS.feed },
-      { name: 'sorting1' as const, pos: CYLINDER_POSITIONS.sorting1 },
-      { name: 'sorting2' as const, pos: CYLINDER_POSITIONS.sorting2 },
-    ];
-
-    for (const cyl of cylinderEntries) {
-      const cylState = cylinders[cyl.name];
-      const isExtending = cylState.extended && cylState.currentExtension > -0.20;
-
-      if (!isExtending) continue;
-
-      const pushPlateZ = getPushPlateWorldZ(cyl.pos[2], cylState.currentExtension);
-      const pushPlateX = cyl.pos[0];
-      const pushPlateY = cyl.pos[1];
-
-      const dx = Math.abs(pos.x - pushPlateX);
-      const dy = Math.abs(pos.y - pushPlateY);
-
-      if (dx < PHYSICS.PUSH_DETECT_RANGE_X && dy < PHYSICS.PUSH_DETECT_RANGE_Y) {
-        const isOnConveyor = pos.z >= CONVEYOR_Z_MIN && pos.z <= CONVEYOR_Z_MAX;
-        if (!isOnConveyor) {
-          pushingCylinder = { pushPlateZ };
-        }
-        break;
+    if (phaseRef.current === 'sliding') {
+      slideElapsedRef.current += delta;
+      const t = Math.min(1, slideElapsedRef.current / SORT_CHUTE.SLIDE_SECONDS);
+      const [x, y, z] = sortChutePoint(slotRef.current, t);
+      // 手动模式下工件 X 可能偏离分拣位，滑落时平滑归位而不是瞬移
+      const blend = Math.min(1, t * 2.5);
+      next = { x: slideStartXRef.current + (x - slideStartXRef.current) * blend, y, z };
+      if (t >= 1) {
+        phaseRef.current = 'settled';
+        settleElapsedRef.current = 0;
       }
-    }
-
-    const isOnConveyor = pos.z >= CONVEYOR_Z_MIN && pos.z <= CONVEYOR_Z_MAX
-      && pos.x >= -COMPONENT.CONVEYOR_LENGTH / 2 && pos.x <= COMPONENT.CONVEYOR_LENGTH / 2;
-
-    if (pushingCylinder) {
-      if (!isKinematicRef.current) {
-        rigidBodyRef.current.setBodyType(2 as const, true);
-        isKinematicRef.current = true;
+    } else if (phaseRef.current === 'settled') {
+      settleElapsedRef.current += delta;
+      const [x, y, z] = sortChutePoint(slotRef.current, 1);
+      next = { x, y, z };
+      if (settleElapsedRef.current >= SORT_CHUTE.SETTLE_SECONDS) {
+        state.addSortedItem(slotRef.current, state.material.color);
+        state.clearMaterial();
+        phaseRef.current = 'free';
+        return;
       }
-
-      const targetZ = pushingCylinder.pushPlateZ - COMPONENT.CYLINDER_PUSH_TARGET_OFFSET;
-      const newZ = Math.min(pos.z, targetZ);
-      rigidBodyRef.current.setNextKinematicTranslation({
-        x: pos.x,
-        y: pos.y,
-        z: newZ,
-      });
-    } else if (isOnConveyor && conveyorRunning) {
-      if (!isKinematicRef.current) {
-        conveyorYRef.current = pos.y;
-        rigidBodyRef.current.setBodyType(2 as const, true);
-        isKinematicRef.current = true;
-      }
-
-      const moveX = CONVEYOR_SPEED * 60 * delta;
-      rigidBodyRef.current.setNextKinematicTranslation({
-        x: pos.x + moveX,
-        y: conveyorYRef.current,
-        z: pos.z,
-      });
     } else {
-      if (isKinematicRef.current) {
-        rigidBodyRef.current.setBodyType(0 as const, true);
-        isKinematicRef.current = false;
-        rigidBodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        rigidBodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
-        rigidBodyRef.current.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+      // 任一气缸正在伸出且工件在其作用范围内：工件改为严格跟随推板。
+      // 旧版这里额外要求 !isOnConveyor，结果分拣气缸根本不接管带上的工件，
+      // 只能靠 kinematic 推板去撞 dynamic 工件 —— 这正是偶发穿模的来源。
+      let pushing: (typeof CYLINDER_ENTRIES)[number] | null = null;
+      for (const cyl of CYLINDER_ENTRIES) {
+        if (!state.cylinders[cyl.name].extended) continue;
+        const ext = extensions[cyl.name];
+        if (ext <= CYLINDER_RETRACT_POS + 0.02) continue;
+        if (
+          Math.abs(pos.x - cyl.x) < PHYSICS.PUSH_DETECT_RANGE_X
+          && Math.abs(pos.y - cyl.y) < PHYSICS.PUSH_DETECT_RANGE_Y
+        ) {
+          pushing = cyl;
+          break;
+        }
+      }
+
+      if (pushing) {
+        phaseRef.current = 'pushing';
+        const materialZ = getPushedMaterialZ(pushing.cylinderZ, extensions[pushing.name]);
+        // 单向跟随：推板缩回时不把工件拉回 +Z
+        const z = Math.min(pos.z, materialZ);
+        next = { x: pos.x, y: pos.y, z };
+
+        if (pushing.name !== 'feed' && isAtChuteEntry(z)) {
+          slotRef.current = pushing.name as SortSlot;
+          phaseRef.current = 'sliding';
+          slideElapsedRef.current = 0;
+          slideStartXRef.current = pos.x;
+          const [, sy, sz] = sortChutePoint(slotRef.current, 0);
+          next = { x: pos.x, y: sy, z: sz };
+        }
+      } else {
+        phaseRef.current = 'free';
+        const isOnConveyor = pos.z >= CONVEYOR_Z_MIN && pos.z <= CONVEYOR_Z_MAX
+          && pos.x >= -COMPONENT.CONVEYOR_LENGTH / 2 && pos.x <= COMPONENT.CONVEYOR_LENGTH / 2;
+
+        if (isOnConveyor && state.conveyorRunning) {
+          next = { x: pos.x + CONVEYOR_SPEED * 60 * delta, y: pos.y, z: pos.z };
+        } else {
+          kinematic = false;
+        }
       }
     }
 
-    const sensorEntries = [
-      { name: 'feed' as const, pos: SENSOR_POSITIONS.feed },
-      { name: 'color' as const, pos: SENSOR_POSITIONS.color },
-      { name: 'material' as const, pos: SENSOR_POSITIONS.material },
-    ];
+    if (kinematic) {
+      if (!isKinematicRef.current) {
+        body.setBodyType(2 as const, true);
+        isKinematicRef.current = true;
+      }
+      body.setNextKinematicTranslation(next);
+    } else if (isKinematicRef.current) {
+      body.setBodyType(0 as const, true);
+      isKinematicRef.current = false;
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    }
 
-    for (const sen of sensorEntries) {
-      const dx = Math.abs(pos.x - sen.pos[0]);
-      const dz = Math.abs(pos.z - sen.pos[2]);
-      const inRange = dx < PHYSICS.SENSOR_DETECT_RANGE_X && dz < PHYSICS.SENSOR_DETECT_RANGE_Z;
+    // 兜底：走完传送带仍未分拣 / 掉出世界才清理，不再因 z < -0.30 瞬间消失
+    if (next.x > CONVEYOR_END_X || next.y < PHYSICS.FALL_RECOVERY_Y) {
+      state.clearMaterial();
+      phaseRef.current = 'free';
+      return;
+    }
 
+    for (const sen of SENSOR_ENTRIES) {
+      const inRange = Math.abs(next.x - sen.pos[0]) < PHYSICS.SENSOR_DETECT_RANGE_X
+        && Math.abs(next.z - sen.pos[2]) < PHYSICS.SENSOR_DETECT_RANGE_Z;
       if (sen.name === 'color') {
-        state.setSensor('color', inRange && materialColor === 'black');
+        state.setSensor('color', inRange && state.material.color === 'black');
       } else {
         state.setSensor(sen.name, inRange);
       }
     }
 
-    state.updateMaterialPosition([pos.x, pos.y, pos.z]);
+    state.updateMaterialPosition([next.x, next.y, next.z]);
   });
-
-  useEffect(() => {
-    if (!materialVisible || !rigidBodyRef.current) return;
-    const checkPosition = () => {
-      const pos = rigidBodyRef.current?.translation();
-      if (pos && (pos.x > CONVEYOR_END_X || pos.z < CONVEYOR_Z_MIN + PHYSICS.CONVEYOR_Z_MARGIN || pos.y < PHYSICS.FALL_RECOVERY_Y)) {
-        clearMaterial();
-      }
-    };
-    const interval = setInterval(checkPosition, 100);
-    return () => clearInterval(interval);
-  }, [materialVisible, clearMaterial]);
 
   if (!materialVisible) return null;
 

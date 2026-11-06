@@ -30,19 +30,34 @@ export function PhysicsSensor({ name, position }: { name: string; position: [num
           <boxGeometry args={[0.05, SURFACE_GAP, 0.032]} />
         </mesh>
 
-        {/* 传感器壳体：浅灰工业塑料，前脸贴深色透镜环 */}
+        {/* 传感器壳体：浅灰工业塑料；两面都贴透镜，机位换到 -Z 侧也看得到 */}
         <mesh geometry={geometries.sensor} material={materials.sensor} position={[0, 0.03, 0]} />
         <mesh position={[0, 0.03, 0.04 + SURFACE_GAP]} material={materials.decalDark}>
           <boxGeometry args={[0.03, 0.045, SURFACE_GAP]} />
         </mesh>
+        <mesh
+          position={[0, 0.03, -0.04 - SURFACE_GAP]}
+          material={active ? materials.sensorPanelGlow : materials.decalDark}
+        >
+          <boxGeometry args={[0.03, 0.045, SURFACE_GAP]} />
+        </mesh>
 
-        {/* 状态 LED：亮绿 / 灭态暗玻璃 */}
+        {/* 顶部状态 LED：亮琥珀橙 / 灭态暗玻璃，朝上，任意斜俯视机位都可见 */}
+        {active && (
+          <mesh
+            position={[0, 0.061 + SURFACE_GAP, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            material={materials.sensorHalo}
+          >
+            <ringGeometry args={[COMPONENT.SENSOR_HALO_INNER, COMPONENT.SENSOR_HALO_OUTER, 20]} />
+          </mesh>
+        )}
         <mesh
           position={[0, COMPONENT.SENSOR_BULB_OFFSET_Y, COMPONENT.SENSOR_BULB_OFFSET_Z]}
           scale={[COMPONENT.SENSOR_BULB_SCALE, COMPONENT.SENSOR_BULB_SCALE, COMPONENT.SENSOR_BULB_SCALE]}
           material={active ? materials.sensorDetected : materials.lampDark}
         >
-          <sphereGeometry args={[COMPONENT.SENSOR_BULB_RADIUS, 10, 10]} />
+          <sphereGeometry args={[COMPONENT.SENSOR_BULB_RADIUS, 12, 12]} />
         </mesh>
 
         {/* 类型色标 + 出线接头 */}

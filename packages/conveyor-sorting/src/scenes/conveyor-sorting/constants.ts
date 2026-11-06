@@ -65,9 +65,11 @@ export const SENSOR_POSITIONS = {
 export const MATERIAL_TABLE_POSITION: [number, number, number] = [-1.3, 0.98, 0.6];
 
 // 气缸行程参数
+// 分拣行程由 0.33 加到 0.40：推板要一直把工件送过带边、送到斜槽槽口，
+// 否则工件会停在带面上再由推板「撞出去」，既容易穿模也看不到滑落过程。
 export const CYLINDER_RETRACT_POS = -0.22;
 export const CYLINDER_EXTEND_POS_FEED = 0.405;
-export const CYLINDER_EXTEND_POS_SORT = 0.33;
+export const CYLINDER_EXTEND_POS_SORT = 0.40;
 export const CYLINDER_LIMIT_ZONE = 0.04;
 
 // ============================================================
@@ -92,6 +94,12 @@ export const VISUAL = {
   SENSOR_EMISSIVE_INTENSITY: 1.5,
   LED_EMISSIVE_INTENSITY: 2.0,
 
+  // 传感器「检测到」状态：浅绿在深蓝背景下对比不足，改用高饱和亮琥珀橙
+  // （区别于灯塔的红/黄/绿，又比原浅绿亮得多），并提高自发光档位。
+  SENSOR_ACTIVE_COLOR: '#ff9020',
+  // 3.6 会在 tone mapping 下过曝成白点，反而失去橙色辨识度
+  SENSOR_ACTIVE_EMISSIVE: 2.0,
+
   // 三维标签 chip：与配药场景共用同一份配色
   LABEL_COLORS,
 } as const;
@@ -113,22 +121,26 @@ export const COMPONENT = {
   ROLLER_RADIUS: 0.06,
   ROLLER_SPEED: 0.03,
 
-  // 物料
+  // 物料：可见 BoxGeometry 与 CuboidCollider 都由这一个半尺寸推导，
+  // 不允许再出现「看得见的 0.075 / 碰得到的 0.07」这种错位（穿模来源之一）。
   MATERIAL_HALF_SIZE: 0.07,
   MATERIAL_TABLE_HALF_XZ: 0.25,
   MATERIAL_TABLE_HALF_Y: 0.025,
   MATERIAL_TABLE_LEG_OFFSET: 0.12,
   MATERIAL_TABLE_LEG_HEIGHT: 0.5,
 
-  // 气缸
-  CYLINDER_BODY_HALF_LEN: 0.4,
+  // 气缸：紧凑型带导杆气缸（截面 0.22 见方、缸长 0.62），比旧的
+  // 0.18×0.8 细长盒更接近实物的缸径/行程比例；推板加宽到 0.26×0.20。
+  CYLINDER_BODY_HALF_LEN: 0.31,
+  CYLINDER_BODY_HALF_XZ: 0.11,
   CYLINDER_ROD_LEN: 0.7,
-  CYLINDER_PUSH_PLATE_HALF: [0.1, 0.09, 0.02] as [number, number, number],
-  CYLINDER_SMOOTH_FACTOR: 0.12,
+  CYLINDER_PUSH_PLATE_HALF: [0.13, 0.10, 0.0225] as [number, number, number],
+  CYLINDER_SMOOTH_FACTOR: 0.10,
+  /** 单帧最大行程：kinematic 瞬移过快会穿透刚体，也便于物料严格跟随 */
+  CYLINDER_MAX_STEP: 0.045,
   CYLINDER_THRESHOLD: 0.001,
   CYLINDER_SURFACE_OFFSET: 0.72,
   CYLINDER_PUSH_OFFSET: 0.02,
-  CYLINDER_PUSH_TARGET_OFFSET: 0.12,
 
   // 信号灯塔
   TOWER_MODULE_RADIUS: 0.065,
@@ -144,11 +156,13 @@ export const COMPONENT = {
   TOWER_GLOW_OFFSET: 0.025,
   TOWER_POSITION: [1.6, 0.98, -0.5] as [number, number, number],
 
-  // 传感器
-  SENSOR_BULB_SCALE: 1.5,
-  SENSOR_BULB_RADIUS: 0.012,
-  SENSOR_BULB_OFFSET_Y: 0.06,
-  SENSOR_BULB_OFFSET_Z: 0.04,
+  // 传感器：LED 移到壳体顶部并放大，机位翻到 -Z 侧后仍从斜上方可见
+  SENSOR_BULB_SCALE: 1.35,
+  SENSOR_BULB_RADIUS: 0.018,
+  SENSOR_BULB_OFFSET_Y: 0.085,
+  SENSOR_BULB_OFFSET_Z: 0,
+  SENSOR_HALO_INNER: 0.026,
+  SENSOR_HALO_OUTER: 0.046,
 } as const;
 
 // ============================================================
@@ -180,11 +194,11 @@ export const BELT_DETAIL = {
   LAMP_STEP: 0.13,       // 三色灯塔分层灯罩间距
 } as const;
 
-/** 气缸拟真细节：拉杆、T 槽贴片、黄铜气接头与端盖螺栓 */
+/** 气缸拟真细节：拉杆、双导杆、T 槽贴片、黄铜气接头与安装支座 */
 export const CYLINDER_DETAIL = {
   TIE_ROD_R: 0.008,      // 四角拉杆
   TIE_ROD_XZ: 0.072,     // 拉杆中心距气缸轴线
-  TIE_ROD_LEN: 0.82,
+  TIE_ROD_LEN: 0.66,     // 随缸体缩短到 0.62
   SLOT_W: 0.014,         // 缸体侧向 T 槽
   SLOT_T: 0.004,
   PORT_R: 0.018,         // 气口
@@ -192,24 +206,83 @@ export const CYLINDER_DETAIL = {
   BOLT_R: 0.006,         // 端盖螺栓
   BOLT_T: 0.004,
   BOLT_XZ: 0.062,
+  GUIDE_ROD_R: 0.014,    // 双导杆（防推板转动，实物带导杆气缸标配）
+  GUIDE_ROD_X: 0.088,
+  GUIDE_ROD_LEN: 0.60,
+  MOUNT_Z0: 0.36,        // 安装支座从带侧梁外沿伸到缸体下方
+  MOUNT_Z1: 0.82,
+  MOUNT_Y: 0.96,
+  MOUNT_T: 0.016,
 } as const;
+
+/**
+ * 推板 → 工件跟随的运动学常量。
+ * 推板刚体中心 Z 与工件中心 Z 的差必须 ≥ 两个半厚之和，否则必然视觉穿模；
+ * 这里由几何常量推导，不再像旧版那样写死 0.12 的「目标偏移」。
+ */
+export const PUSH_KINEMATICS = {
+  CLEARANCE: 0.012,
+  FOLLOW_GAP: COMPONENT.CYLINDER_PUSH_PLATE_HALF[2]
+    + COMPONENT.MATERIAL_HALF_SIZE + 0.012,
+} as const;
+
+/**
+ * 分拣槽 / 收集盒：工件被推出带面后沿斜槽滑落，不再凭空消失。
+ * 两个分拣位各一条槽，X 与 CYLINDERS.sorting1 / sorting2 对齐；
+ * 槽在 -Z 侧（推料方向），整体低于带面，避免挡住带面上的工件。
+ */
+export const SORT_CHUTE = {
+  ENTRY_Z: -0.40,        // 槽口：刚过带边 / 侧梁外沿
+  EXIT_Z: -1.00,         // 槽尾
+  ENTRY_Y: 0.98,         // 槽面高度（带面 1.00 略低，工件顺势滑出）
+  EXIT_Y: 0.50,
+  HALF_W: 0.16,          // 槽半宽（工件半宽 0.07，留足余量）
+  WALL_H: 0.075,
+  PLATE_T: 0.02,
+
+  // 槽面细节：亮银钢板 + 窄导向暗线 + 横向防滑压条。
+  // 旧版把整条槽面铺成深槽色，从总览机位看就是两条黑带，读不出「斜槽」。
+  GUIDE_HALF_W: 0.022,
+  CLEAT_COUNT: 5,
+  CLEAT_T: 0.006,
+  CLEAT_D: 0.014,
+
+  BIN_HALF_X: 0.20,
+  BIN_HALF_Z: 0.18,
+  BIN_FLOOR_Y: 0.42,
+  BIN_WALL_H: 0.18,
+  // 靠近观察者的 -Z 侧做成低唇口，否则四壁等高会把盒子画成一块实心方块
+  BIN_FRONT_WALL_H: 0.075,
+  BIN_RIM_T: 0.008,
+  WALL_T: 0.014,
+  SLIDE_SECONDS: 0.70,   // 沿槽滑落时长
+  SETTLE_SECONDS: 0.40,  // 落盒后停留（让观众看到入盒）
+  MAX_STACK: 6,          // 3 列 × 2 排刚好装满一层，不会溢出盒口
+  SLOTS: ['sorting1', 'sorting2'] as const,
+} as const;
+
+export type SortSlot = typeof SORT_CHUTE.SLOTS[number];
 
 // ============================================================
 // 机位（与自动配药 VIEW_PRESETS / CameraRig 同款交互）
 // ============================================================
 
 /**
- * 默认总览机位：与自动配药「整机总览」保持相近的画面占比。
- * 传送带本体世界尺寸比放大 3 倍的配药整机小，故用 36° 收窄视角；
- * target.x 略向 -X 偏，让设备落在左侧固定面板右边的可用视口里。
+ * 默认总览机位：从**传送带侧（-Z）**看向 +Z 侧的气缸，看到的是推板前脸，
+ * 而不是气缸后端盖（原 +Z 机位等于从「屁股」方向看）。
+ *
+ * - 气缸全部位于 +Z 侧（CYLINDER_POSITIONS.z = 0.8 / 1.2），推料方向 -Z；
+ * - 相机移到 -Z 后，屏幕右方向变为 (-X, -Z)，因此 target.x 取正值才能把
+ *   设备整体推到左侧固定面板右边的可用视口里（原 +Z 机位取的是负值）；
+ * - FOV 36° 与自动配药「整机总览」保持相近的画面占比。
  */
 export const SCENE_FOV = 36;
-export const SCENE_CAMERA: [number, number, number] = [4.2, 3.1, 5.4];
-export const SCENE_TARGET: [number, number, number] = [-0.25, 0.95, 0.1];
+export const SCENE_CAMERA: [number, number, number] = [4.2, 3.2, -5.4];
+export const SCENE_TARGET: [number, number, number] = [0.25, 0.95, 0.0];
 
 export const VIEW_PRESETS = {
   overview: {
-    label: '整机总览', desc: '微斜正侧，看清整条输送线、三组气缸与灯塔',
+    label: '整机总览', desc: '从传送带侧看气缸前脸，看清整条输送线、三组气缸与灯塔',
     camera: SCENE_CAMERA, target: SCENE_TARGET, fov: SCENE_FOV,
   },
   top: {
@@ -218,19 +291,19 @@ export const VIEW_PRESETS = {
     target: [0, 0.95, 0] as [number, number, number], fov: 45,
   },
   feed: {
-    label: '上料段', desc: '近景核对上料气缸、物料台与上料传感器',
-    camera: [-2.6, 2.0, 2.6] as [number, number, number],
-    target: [-1.15, 1.05, 0.25] as [number, number, number], fov: 38,
+    label: '上料段', desc: '近景核对上料气缸推板正面、物料台与上料传感器',
+    camera: [-2.6, 2.1, -2.7] as [number, number, number],
+    target: [-1.15, 1.05, 0.3] as [number, number, number], fov: 38,
   },
   sorting: {
-    label: '分拣段', desc: '近景核对色标/物料传感器与两只分拣气缸',
-    camera: [2.4, 2.0, 2.7] as [number, number, number],
-    target: [0.55, 1.05, 0.15] as [number, number, number], fov: 38,
+    label: '分拣段', desc: '从带侧近景核对两只分拣气缸推板与分拣槽',
+    camera: [2.4, 2.1, -2.9] as [number, number, number],
+    target: [0.55, 1.0, -0.1] as [number, number, number], fov: 38,
   },
   tower: {
     label: '灯塔端', desc: '从末端看三色灯塔与输送线驱动端',
-    camera: [3.3, 1.9, -1.9] as [number, number, number],
-    target: [1.55, 1.2, -0.45] as [number, number, number], fov: 38,
+    camera: [3.3, 1.9, -2.4] as [number, number, number],
+    target: [1.55, 1.15, -0.45] as [number, number, number], fov: 38,
   },
 } as const;
 

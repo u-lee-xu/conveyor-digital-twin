@@ -16,6 +16,9 @@
  */
 
 import * as THREE from 'three';
+import { COMPONENT } from '../../../scenes/conveyor-sorting/constants';
+
+const C = COMPONENT;
 
 /**
  * 共享几何体集合
@@ -53,14 +56,18 @@ export const geometries = {
   // ============================================
   
   /**
-   * 气缸端盖（扁平型）
+   * 气缸端盖：比缸体每侧宽 0.01，符合紧凑型带导杆气缸的端盖比例
    */
-  cylinderEndCap: new THREE.BoxGeometry(0.2, 0.08, 0.2),
-  
+  cylinderEndCap: new THREE.BoxGeometry(
+    C.CYLINDER_BODY_HALF_XZ * 2 + 0.02, 0.07, C.CYLINDER_BODY_HALF_XZ * 2 + 0.02,
+  ),
+
   /**
-   * 气缸主体（标准长度）
+   * 气缸主体：截面与长度全部从 COMPONENT 推导，和端盖/拉杆/支架同源
    */
-  cylinderBody: new THREE.BoxGeometry(0.18, 0.8, 0.18),
+  cylinderBody: new THREE.BoxGeometry(
+    C.CYLINDER_BODY_HALF_XZ * 2, C.CYLINDER_BODY_HALF_LEN * 2, C.CYLINDER_BODY_HALF_XZ * 2,
+  ),
   
   /**
    * 气缸主体（加长版）
@@ -78,9 +85,14 @@ export const geometries = {
   cylinderRodLong: new THREE.CylinderGeometry(0.035, 0.035, 1.1, 16),
   
   /**
-   * 气缸推板（优化比例）
+   * 气缸推板：局部 Y 是厚度（旋转后为世界 Z），局部 Z 是高度（旋转后为世界 Y）。
+   * 与 CuboidCollider 的 [X, Y, Z] 半尺寸一一对应，杜绝「看见的比碰到的宽」。
    */
-  cylinderPushPlate: new THREE.BoxGeometry(0.2, 0.04, 0.18),
+  cylinderPushPlate: new THREE.BoxGeometry(
+    C.CYLINDER_PUSH_PLATE_HALF[0] * 2,
+    C.CYLINDER_PUSH_PLATE_HALF[2] * 2,
+    C.CYLINDER_PUSH_PLATE_HALF[1] * 2,
+  ),
   
   /**
    * 节流阀/接头主体
@@ -136,9 +148,12 @@ export const geometries = {
   // ============================================
   
   /**
-   * 物料方块
+   * 物料方块：可见尺寸严格等于 CuboidCollider 的 2×MATERIAL_HALF_SIZE。
+   * 旧版 0.15×0.12×0.15 与碰撞体 0.14³ 不一致，是推板贴面穿模的诱因之一。
    */
-  material: new THREE.BoxGeometry(0.15, 0.12, 0.15),
+  material: new THREE.BoxGeometry(
+    C.MATERIAL_HALF_SIZE * 2, C.MATERIAL_HALF_SIZE * 2, C.MATERIAL_HALF_SIZE * 2,
+  ),
   
   // ============================================
   // 物料台相关几何体

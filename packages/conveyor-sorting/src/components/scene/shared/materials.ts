@@ -156,13 +156,38 @@ export const materials = {
     color: VISUAL.LAMP_GREEN, emissive: VISUAL.LAMP_GREEN,
     emissiveIntensity: VISUAL.LED_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.1,
   }),
-  sensorActive: new THREE.MeshStandardMaterial({
-    color: VISUAL.LAMP_YELLOW, emissive: VISUAL.LAMP_YELLOW,
-    emissiveIntensity: VISUAL.SENSOR_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.2,
+  /**
+   * 传感器检测态：亮琥珀橙。
+   * LED 灯珠很小，若用 Standard + 高 emissive，经 ACES tone mapping 后会
+   * 直接削顶成白点，反而看不出橙色；这里改用不受 tone mapping 影响的纯色
+   * 基本材质，保证任意机位/曝光下都是稳定的 #ff9020。
+   */
+  sensorActive: new THREE.MeshBasicMaterial({
+    color: VISUAL.SENSOR_ACTIVE_COLOR, toneMapped: false,
   }),
-  sensorDetected: new THREE.MeshStandardMaterial({
-    color: VISUAL.LAMP_GREEN, emissive: VISUAL.LAMP_GREEN,
-    emissiveIntensity: VISUAL.SENSOR_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.2,
+  sensorDetected: new THREE.MeshBasicMaterial({
+    color: VISUAL.SENSOR_ACTIVE_COLOR, toneMapped: false,
+  }),
+  /** 背面状态条面积大，用带自发光的 Standard 材质做柔和橙光，不会削顶 */
+  sensorPanelGlow: new THREE.MeshStandardMaterial({
+    color: VISUAL.SENSOR_ACTIVE_COLOR, emissive: VISUAL.SENSOR_ACTIVE_COLOR,
+    emissiveIntensity: VISUAL.SENSOR_ACTIVE_EMISSIVE * 0.35,
+    roughness: 0.35, metalness: 0.1,
+  }),
+  /** LED 外圈的柔光圈：只做发光提示，不参与碰撞 / 深度写入 */
+  sensorHalo: new THREE.MeshBasicMaterial({
+    color: VISUAL.SENSOR_ACTIVE_COLOR, transparent: true, opacity: 0.32,
+    toneMapped: false, depthWrite: false, side: THREE.DoubleSide,
+  }),
+
+  /** 分拣斜槽亮银钢板：与带边/端盖同色族，避免整条槽读成黑色 */
+  chutePlate: new THREE.MeshStandardMaterial({
+    color: VISUAL.SILVER_COLOR, metalness: 0.7, roughness: 0.3,
+  }),
+  /** 收集盒内壁/底板：暗一档，露出盒内深度，不再像实心方块 */
+  binInterior: new THREE.MeshStandardMaterial({
+    color: VISUAL.PROFILE_SLOT_COLOR, metalness: 0.25, roughness: 0.8,
+    ...decalOptions,
   }),
 
   ground: new THREE.MeshStandardMaterial({

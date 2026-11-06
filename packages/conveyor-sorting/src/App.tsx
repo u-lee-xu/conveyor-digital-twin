@@ -39,7 +39,9 @@ function App() {
   const { state: demoState, isStarted: demoStarted, isPaused: demoPaused, startDemoMode, togglePause: demoTogglePause, resetDemo: demoReset } = useDemoMode();
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    // 生产构建默认不暴露调试接口；CDP 验收时用 ?debug=1 显式打开
+    const enabled = import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug');
+    if (!enabled) return;
     Object.assign(window, {
       __DEBUG__: {
         getState: useDeviceStore.getState,

@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/rapier';
 import { DoubleSide, type Group, type Mesh, type MeshStandardMaterial } from 'three';
-import { useDeviceStore } from '../../../stores';
 import { geometries, materials } from '../../../components/scene/shared';
 import { type CylinderName } from '../../../types/device';
 import {
   CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT,
   VISUAL, COMPONENT, CYLINDER_DETAIL, SURFACE_GAP,
 } from '../constants';
-import { getPushPlateWorldZ } from './helpers';
+import { readCylinderExtensions } from '../cylinderKinematics';
+import { getPushPlateCenterZ } from './helpers';
 
 const COLLIDERS_ONLY = false;
 const D = CYLINDER_DETAIL;
+const C = COMPONENT;
 
 function DebugBox({ args, color = '#22c55e', opacity = 0.25 }: {
   args: [number, number, number]; color?: string; opacity?: number;
@@ -26,12 +27,13 @@ function DebugBox({ args, color = '#22c55e', opacity = 0.25 }: {
   );
 }
 
-/** 缸体拟真细节：四角拉杆、侧向 T 槽贴片、端盖螺栓（与配药机机架同一套语言） */
+/** 缸体拟真细节：四角拉杆、侧向 T 槽贴片、端盖螺栓 */
 function CylinderDetail() {
   const corners: [number, number][] = [
     [-D.TIE_ROD_XZ, -D.TIE_ROD_XZ], [-D.TIE_ROD_XZ, D.TIE_ROD_XZ],
     [D.TIE_ROD_XZ, -D.TIE_ROD_XZ], [D.TIE_ROD_XZ, D.TIE_ROD_XZ],
   ];
+  const endY = C.CYLINDER_BODY_HALF_LEN + 0.035 + SURFACE_GAP;
   return (
     <group>
       {corners.map(([x, z]) => (
@@ -42,16 +44,16 @@ function CylinderDetail() {
       {[-1, 1].map((side) => (
         <mesh
           key={`slot-${side}`}
-          position={[side * (0.09 + SURFACE_GAP), 0, 0]}
+          position={[side * (C.CYLINDER_BODY_HALF_XZ + SURFACE_GAP), 0, 0]}
           material={materials.profileSlot}
         >
-          <boxGeometry args={[D.SLOT_T, 0.6, D.SLOT_W]} />
+          <boxGeometry args={[D.SLOT_T, C.CYLINDER_BODY_HALF_LEN * 1.5, D.SLOT_W]} />
         </mesh>
       ))}
       {[-1, 1].map((end) => corners.map(([x, z]) => (
         <mesh
           key={`bolt-${end}-${x}-${z}`}
-          position={[x, end * (COMPONENT.CYLINDER_BODY_HALF_LEN + 0.04 + SURFACE_GAP), z]}
+          position={[x, end * endY, z]}
           material={materials.decal}
         >
           <cylinderGeometry args={[D.BOLT_R, D.BOLT_R, D.BOLT_T, 8]} />
@@ -61,23 +63,55 @@ function CylinderDetail() {
   );
 }
 
+/** 双导杆：固定在推板上、穿过缸体端盖导向套，防止推板转动 */
+function GuideRods() {
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[side * D.GUIDE_ROD_X, C.CYLINDER_ROD_LEN - D.GUIDE_ROD_LEN / 2, 0]}
+          material={materials.brightSilver}
+        >
+          <cylinderGeometry args={[D.GUIDE_ROD_R, D.GUIDE_ROD_R, D.GUIDE_ROD_LEN, 10]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * 安装支座：把悬空的气缸固定到输送线 +Z 侧梁上。
+ * 用世界坐标（不套气缸的旋转 group），长度按该气缸实际 Z 位置推导，
+ * 上料气缸（z=1.2）比分拣气缸（z=0.8）自然长出一段。
+ */
+function MountBracket({ cylinderX, cylinderZ }: { cylinderX: number; cylinderZ: number }) {
+  const z0 = D.MOUNT_Z0;
+  const z1 = cylinderZ - 0.10;
+  const len = z1 - z0;
+  if (len <= 0) return null;
+  return (
+    <group position={[cylinderX, D.MOUNT_Y, (z0 + z1) / 2]}>
+      <mesh material={materials.base}>
+        <boxGeometry args={[0.24, D.MOUNT_T, len]} />
+      </mesh>
+      <mesh position={[0, 0.085, len / 2 - 0.03]} material={materials.darkMetal}>
+        <boxGeometry args={[0.20, 0.17, 0.03]} />
+      </mesh>
+      <mesh position={[0, D.MOUNT_T / 2 + SURFACE_GAP, 0]} material={materials.profileSlot}>
+        <boxGeometry args={[0.10, SURFACE_GAP, len - 0.06]} />
+      </mesh>
+    </group>
+  );
+}
+
 export function PhysicsCylinder({ name, position }: { name: CylinderName; position: [number, number, number] }) {
-  const extended = useDeviceStore((s) => s.cylinders[name].extended);
-  const updateCylinderExtension = useDeviceStore((s) => s.updateCylinderExtension);
   const rodRef = useRef<Group>(null);
   const led1Ref = useRef<Mesh>(null);
   const led2Ref = useRef<Mesh>(null);
   const pushPlateRef = useRef<RapierRigidBody>(null);
-
   const isFeed = name === 'feed';
-
   const targetExtend = isFeed ? CYLINDER_EXTEND_POS_FEED : CYLINDER_EXTEND_POS_SORT;
-  const targetRetract = CYLINDER_RETRACT_POS;
-  const targetValue = extended ? targetExtend : targetRetract;
-
-  // 初始伸出位置：仅挂载时确定；后续由 useFrame 直接更新 three 对象，重渲染不会重置
-  const [initialExtension] = useState(isFeed ? (extended ? 0.405 : -0.22) : (extended ? 0.33 : -0.22));
-  const currentExtensionRef = useRef(initialExtension);
 
   // 每实例创建一次 LED 材质（useFrame 中可变修改，不能共享单例），卸载时释放
   const ledMats = useMemo(() => {
@@ -89,7 +123,7 @@ export function PhysicsCylinder({ name, position }: { name: CylinderName; positi
     return () => ledMats.forEach((m) => m.dispose());
   }, [ledMats]);
 
-  /** 磁性开关 LED：亮态绿、灭态暗玻璃（颜色与配药机指示灯同源） */
+  /** 磁性开关 LED：亮态绿、灭态暗玻璃（与配药机指示灯同源） */
   const paintLed = (ref: RefObject<Mesh | null>, on: boolean) => {
     if (!ref.current) return;
     const mat = ref.current.material as MeshStandardMaterial;
@@ -104,64 +138,48 @@ export function PhysicsCylinder({ name, position }: { name: CylinderName; positi
     }
   };
 
-  useFrame((_, delta) => {
-    if (!rodRef.current) return;
+  /**
+   * 只读共享快照：视觉推杆、推板刚体与 PhysicsMaterial 里的工件
+   * 在同一帧使用完全相同的 extension，推板不可能插进工件。
+   */
+  useFrame(() => {
+    const ext = readCylinderExtensions()[name];
+    const plateZ = getPushPlateCenterZ(position[2], ext);
 
-    const current = currentExtensionRef.current;
-    const diff = targetValue - current;
-
-    let newExt = current;
-    if (Math.abs(diff) > COMPONENT.CYLINDER_THRESHOLD) {
-      const factor = 1 - Math.pow(1 - COMPONENT.CYLINDER_SMOOTH_FACTOR, delta * 60);
-      newExt = current + diff * factor;
-    } else if (current !== targetValue) {
-      newExt = targetValue;
-    } else {
-      const atRetract = currentExtensionRef.current <= CYLINDER_RETRACT_POS + 0.04;
-      const atExtend = currentExtensionRef.current >= targetExtend - 0.04;
-      paintLed(led1Ref, atExtend);
-      paintLed(led2Ref, atRetract);
-      if (pushPlateRef.current) {
-        const pushPlateZ = getPushPlateWorldZ(position[2], currentExtensionRef.current) + COMPONENT.CYLINDER_PUSH_OFFSET;
-        pushPlateRef.current.setNextKinematicTranslation({
-          x: position[0], y: position[1], z: pushPlateZ,
-        });
-      }
-      return;
-    }
-
-    currentExtensionRef.current = newExt;
-    rodRef.current.position.y = newExt;
-    updateCylinderExtension(name, newExt);
-
+    if (rodRef.current) rodRef.current.position.y = ext;
     if (pushPlateRef.current) {
-      const pushPlateZ = getPushPlateWorldZ(position[2], newExt) + COMPONENT.CYLINDER_PUSH_OFFSET;
       pushPlateRef.current.setNextKinematicTranslation({
-        x: position[0], y: position[1], z: pushPlateZ,
+        x: position[0], y: position[1], z: plateZ,
       });
     }
 
-    paintLed(led1Ref, newExt >= targetExtend - 0.04);
-    paintLed(led2Ref, newExt <= CYLINDER_RETRACT_POS + 0.04);
+    paintLed(led1Ref, ext >= targetExtend - 0.04);
+    paintLed(led2Ref, ext <= CYLINDER_RETRACT_POS + 0.04);
   });
 
   return (
     <>
-      <RigidBody ref={pushPlateRef} type="kinematicPosition" colliders={false}>
-        <CuboidCollider args={[...COMPONENT.CYLINDER_PUSH_PLATE_HALF]} />
-        <DebugBox args={[...COMPONENT.CYLINDER_PUSH_PLATE_HALF]} color="#f97316" opacity={0.4} />
+      <RigidBody
+        ref={pushPlateRef}
+        type="kinematicPosition"
+        colliders={false}
+        position={[position[0], position[1], getPushPlateCenterZ(position[2], CYLINDER_RETRACT_POS)]}
+      >
+        <CuboidCollider args={[...C.CYLINDER_PUSH_PLATE_HALF]} />
+        <DebugBox args={[...C.CYLINDER_PUSH_PLATE_HALF]} color="#f97316" opacity={0.4} />
       </RigidBody>
+
       <group position={position} rotation={[Math.PI / 2, 0, Math.PI]}>
         <group visible={!COLLIDERS_ONLY}>
           <mesh geometry={geometries.cylinderBody} material={materials.cylinderBody} />
-          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -COMPONENT.CYLINDER_BODY_HALF_LEN, 0]} />
-          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, COMPONENT.CYLINDER_BODY_HALF_LEN, 0]} />
+          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -C.CYLINDER_BODY_HALF_LEN, 0]} />
+          <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, C.CYLINDER_BODY_HALF_LEN, 0]} />
           <CylinderDetail />
 
           {/* 黄铜气接头 + 黑色节流调节头 */}
           {[
-            { y: COMPONENT.CYLINDER_BODY_HALF_LEN - 0.05, key: 'valve-top' },
-            { y: -COMPONENT.CYLINDER_BODY_HALF_LEN + 0.05, key: 'valve-bottom' },
+            { y: C.CYLINDER_BODY_HALF_LEN - 0.05, key: 'valve-top' },
+            { y: -C.CYLINDER_BODY_HALF_LEN + 0.05, key: 'valve-bottom' },
           ].map(({ y, key }) => (
             <group key={key} position={[0.1, y, 0]}>
               <mesh geometry={geometries.valveBody} material={materials.brass} />
@@ -172,8 +190,8 @@ export function PhysicsCylinder({ name, position }: { name: CylinderName; positi
 
           {/* 两只磁性开关（伸出位 / 缩回位） */}
           {[
-            { y: COMPONENT.CYLINDER_BODY_HALF_LEN - 0.1, ledRef: led1Ref, mat: ledMats[0], key: 'sw-ext' },
-            { y: -COMPONENT.CYLINDER_BODY_HALF_LEN + 0.1, ledRef: led2Ref, mat: ledMats[1], key: 'sw-ret' },
+            { y: C.CYLINDER_BODY_HALF_LEN - 0.1, ledRef: led1Ref, mat: ledMats[0], key: 'sw-ext' },
+            { y: -C.CYLINDER_BODY_HALF_LEN + 0.1, ledRef: led2Ref, mat: ledMats[1], key: 'sw-ret' },
           ].map(({ y, ledRef: ref, mat, key }) => (
             <group key={key}>
               <mesh geometry={geometries.magneticSwitch} material={materials.magneticSwitch} position={[0, y, -0.1]}>
@@ -182,15 +200,25 @@ export function PhysicsCylinder({ name, position }: { name: CylinderName; positi
             </group>
           ))}
 
-          <group ref={rodRef} position={[0, initialExtension, 0]}>
-            <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, COMPONENT.CYLINDER_ROD_LEN / 2, 0]} />
-            <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, COMPONENT.CYLINDER_ROD_LEN, 0]} />
-            <mesh position={[0, COMPONENT.CYLINDER_ROD_LEN + 0.021, 0]} material={materials.decalDark}>
-              <boxGeometry args={[0.19, SURFACE_GAP, 0.17]} />
+          <group ref={rodRef} position={[0, CYLINDER_RETRACT_POS, 0]}>
+            <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, C.CYLINDER_ROD_LEN / 2, 0]} />
+            <GuideRods />
+            <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, C.CYLINDER_ROD_LEN, 0]} />
+            <mesh
+              position={[0, C.CYLINDER_ROD_LEN + C.CYLINDER_PUSH_PLATE_HALF[2] + SURFACE_GAP, 0]}
+              material={materials.decalDark}
+            >
+              <boxGeometry args={[
+                C.CYLINDER_PUSH_PLATE_HALF[0] * 2 - 0.02,
+                SURFACE_GAP,
+                C.CYLINDER_PUSH_PLATE_HALF[1] * 2 - 0.02,
+              ]} />
             </mesh>
           </group>
         </group>
       </group>
+
+      {!COLLIDERS_ONLY && <MountBracket cylinderX={position[0]} cylinderZ={position[2]} />}
     </>
   );
 }

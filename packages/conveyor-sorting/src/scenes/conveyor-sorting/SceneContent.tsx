@@ -10,7 +10,11 @@ import { PhysicsMaterial } from './components/PhysicsMaterial';
 import { PhysicsMaterialTable } from './components/PhysicsMaterialTable';
 import { PhysicsSignalTower } from './components/PhysicsSignalTower';
 import { PhysicsLabel } from './components/PhysicsLabel';
+import { PhysicsSortChute } from './components/PhysicsSortChute';
 import { CameraRig } from './CameraRig';
+import { CylinderMotionDriver } from './CylinderMotionDriver';
+import { SORT_CHUTE } from './constants';
+import { BIN_CENTER_Z, sortSlotX } from './sortChute';
 
 /**
  * 传送带分拣场景内容
@@ -21,8 +25,20 @@ export function ConveyorSortingSceneContent() {
 
   return (
     <>
+      {/* 必须排在所有消费者之前：统一推进三个气缸行程并写入共享快照 */}
+      <CylinderMotionDriver />
       <CameraRig />
       <PhysicsConveyorBelt />
+      <PhysicsSortChute />
+      {SORT_CHUTE.SLOTS.map((slot, i) => (
+        <PhysicsLabel
+          key={`chute-${slot}`}
+          text={`${i + 1}号分拣槽`}
+          position={[sortSlotX(slot), SORT_CHUTE.BIN_FLOOR_Y + 0.3, BIN_CENTER_Z]}
+          offset={[0, 0.22, 0]}
+          color={i === 0 ? 'orange' : 'blue'}
+        />
+      ))}
       <PhysicsMaterialTable position={MATERIAL_TABLE_POSITION} />
       <PhysicsLabel key="material-table" text="物料台" position={MATERIAL_TABLE_POSITION} offset={[0, 0.2, 0]} color="gray" />
 
