@@ -144,7 +144,8 @@ export const CYLINDER_EXTEND_POS_FEED = 0.405;
  * 分拣气缸完全伸出时的活塞杆Y坐标
  * 用于判断分拣气缸是否到达伸出限位
  */
-export const CYLINDER_EXTEND_POS_SORT = 0.33;
+// 与 scenes/conveyor-sorting/constants.ts 同源：推板需把工件送到分拣槽槽口
+export const CYLINDER_EXTEND_POS_SORT = 0.40;
 
 /**
  * 限位触发区域宽度

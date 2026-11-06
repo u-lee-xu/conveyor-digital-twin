@@ -44,6 +44,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
   const retractCylinder = useDeviceStore((s) => s.retractCylinder);
   const spawnMaterial = useDeviceStore((s) => s.spawnMaterial);
   const clearMaterial = useDeviceStore((s) => s.clearMaterial);
+  const sortedItems = useDeviceStore((s) => s.sortedItems);
+  const clearSortedItems = useDeviceStore((s) => s.clearSortedItems);
   const setSignalTower = useDeviceStore((s) => s.setSignalTower);
 
   const cylinders: { key: CylinderName; label: string; extended: boolean; extendPos: number }[] = [
@@ -146,6 +148,18 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isMobile = false, on
             onClick={clearMaterial}
           >
             🗑 清除
+          </button>
+        </div>
+        <div className="flex items-center justify-between mt-2 gap-2">
+          <span className="text-xs text-gray-400">
+            分拣槽 <span className="badge badge-blue">{sortedItems.length} 件</span>
+          </span>
+          <button
+            className="btn btn-xs btn-outline touch-manipulation"
+            onClick={clearSortedItems}
+            disabled={sortedItems.length === 0}
+          >
+            清空料箱
           </button>
         </div>
       </div>

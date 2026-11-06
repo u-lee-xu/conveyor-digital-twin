@@ -225,9 +225,17 @@ describe('场景容器与机位：两个入口渲染一致', () => {
     // 传送带本体世界尺寸小于放大 3 倍的配药整机，45° 会让设备只占半屏。
     expect(SCENE_FOV).toBe(36);
     expect(SCENE_FOV).toBeLessThan(VIEW_PRESETS.top.fov);
-    expect(SCENE_TARGET[0]).toBeLessThan(0);
     expect(VIEW_PRESETS.overview.fov).toBe(SCENE_FOV);
     expect(VIEW_PRESETS.overview.target).toBe(SCENE_TARGET);
+  });
+
+  it('总览从传送带侧（-Z）看气缸前脸，不是从气缸后端看', () => {
+    // 气缸全部在 +Z 侧（0.8 / 1.2），相机必须落在 -Z 才能看到推板正面。
+    expect(SCENE_CAMERA[2]).toBeLessThan(0);
+    expect(VIEW_PRESETS.feed.camera[2]).toBeLessThan(0);
+    expect(VIEW_PRESETS.sorting.camera[2]).toBeLessThan(0);
+    // 屏幕右方向变为 (-X, -Z)，所以观察点要向 +X 偏才能把设备推离左侧面板。
+    expect(SCENE_TARGET[0]).toBeGreaterThan(0);
   });
 
   it('阻尼计算拆成纯函数模块，组件里不直接改 hook 返回值', () => {

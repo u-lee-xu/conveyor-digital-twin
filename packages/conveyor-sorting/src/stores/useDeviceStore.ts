@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Mode, CylinderName, SensorName, MaterialColor } from '../types';
 import type { ProtocolType } from '@digital-twin/shared';
+import { SORT_CHUTE } from '../scenes/conveyor-sorting/constants';
 
 export interface TraceEntry {
   timestamp: number;
@@ -16,6 +17,13 @@ export interface ScoringLogEntry {
   status: ScoringItemStatus;
   points: number;
   time: number;
+}
+
+/** 分拣槽里已收集的工件（视觉堆叠用，与在途的单个刚体物料互不干扰） */
+export interface SortedItem {
+  id: number;
+  slot: 'sorting1' | 'sorting2';
+  color: MaterialColor;
 }
 
 interface DeviceStore {
@@ -46,6 +54,9 @@ interface DeviceStore {
     onConveyor: boolean;
     conveyorDelay: number;
   };
+
+  /** 两个分拣槽 / 收集盒里已落位的工件，最多保留 SORT_CHUTE.MAX_STACK 个 */
+  sortedItems: SortedItem[];
 
   signalTower: {
     red: boolean;
@@ -98,6 +109,8 @@ interface DeviceStore {
   setMaterialConveyorDelay: (delay: number) => void;
   spawnMaterial: () => void;
   clearMaterial: () => void;
+  addSortedItem: (slot: SortedItem['slot'], color: MaterialColor) => void;
+  clearSortedItems: () => void;
   setSignalTower: (lights: { red?: boolean; green?: boolean; yellow?: boolean }) => void;
   reset: () => void;
   showLabels: boolean;
@@ -126,6 +139,7 @@ const initialState = {
     onConveyor: false,
     conveyorDelay: 0,
   },
+  sortedItems: [] as SortedItem[],
   signalTower: {
     red: true,
     green: false,
@@ -287,6 +301,12 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
       conveyorDelay: 0,
     },
   })),
+
+  addSortedItem: (slot, color) => set((state) => {
+    const next = [...state.sortedItems, { id: Date.now() + Math.random(), slot, color }];
+    return { sortedItems: next.slice(-SORT_CHUTE.MAX_STACK) };
+  }),
+  clearSortedItems: () => set({ sortedItems: [] }),
 
   setSignalTower: (lights) => set((state) => ({
     signalTower: {
