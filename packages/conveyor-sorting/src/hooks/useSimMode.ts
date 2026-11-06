@@ -280,7 +280,9 @@ export const useSimMode = () => {
       await globalModbus.writeSignal(MODBUS_ADDRESSES.FEED_CYLINDER_VALVE, toExtend.includes('feed'));
       await globalModbus.writeSignal(MODBUS_ADDRESSES.SORTING1_CYLINDER_VALVE, toExtend.includes('sorting1'));
       await globalModbus.writeSignal(MODBUS_ADDRESSES.SORTING2_CYLINDER_VALVE, toExtend.includes('sorting2'));
-    } catch {}
+    } catch {
+      // 写 PLC 失败时仍按本地状态推进仿真，避免界面卡死在半行程
+    }
 
     setControlSignals(prev => ({
       ...prev,

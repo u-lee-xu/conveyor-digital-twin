@@ -8,6 +8,13 @@ export type { PlcConnConfig } from './components/ui/PlcConnectionPanel';
 export { HelpPanel } from './components/ui/HelpPanel';
 export type { HelpContent, HelpStep, GuideCard, AddressTable, ProtocolGuide } from './components/ui/HelpPanel';
 
+// 工业场景统一视觉令牌（配药 / 传送带共用）
+export {
+  INDUSTRIAL_VISUAL, INDUSTRIAL_LIGHTING, INDUSTRIAL_DETAIL,
+  LABEL_COLORS, makeLabelColor,
+} from './styles/industrialVisual';
+export type { IndustrialLighting } from './styles/industrialVisual';
+
 // Physics Scene
 export { PhysicsScene } from './components/PhysicsScene';
 export { Ground, PhysicsGround, GROUND_SIZE, GROUND_COLOR, GROUND_GRID_COLOR } from './components/Ground';

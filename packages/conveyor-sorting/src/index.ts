@@ -1,9 +1,10 @@
 import type { DeviceDefinition } from '@digital-twin/platform';
 import { modbusService } from '@digital-twin/shared';
 import { ConveyorSortingSceneContent } from './scenes/conveyor-sorting/SceneContent';
-import { ViewControlPanel } from './components/panels';
+import { ConveyorSceneWrapper } from './platform/ConveyorSceneWrapper';
 import { useDeviceStore } from './stores';
 import { buildHelpContent } from './constants/plc-addresses';
+import { SCENE_CAMERA } from './scenes/conveyor-sorting/constants';
 import { ManualModePanel } from './platform/ManualModePanel';
 import { AutoModePanel } from './platform/AutoModePanel';
 import { ScoringModePanel } from './platform/ScoringModePanel';
@@ -40,7 +41,9 @@ export const conveyorDevice: DeviceDefinition = {
     { id: 'sim', label: '仿真', icon: '🔌', color: 'from-orange-500 to-yellow-500', panel: SimModePanel, needsConnection: true },
   ],
   SceneContent: ConveyorSortingSceneContent,
-  sidebarExtras: ViewControlPanel,
+  /** 自带工业布光/背景/机位，平台壳不再套用默认 PhysicsScene */
+  SceneWrapper: ConveyorSceneWrapper,
+  cameraPosition: SCENE_CAMERA,
   effects: ConveyorDeviceEffects,
   useModeState: useConveyorModeState,
   onModeChange: () => {

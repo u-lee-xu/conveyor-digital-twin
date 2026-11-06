@@ -139,12 +139,12 @@ export function useScoring() {
             stateTimerRef.current = Date.now();
             break;
 
-          case 'WAITING_RESET_DONE':
-            const allRetracted = coils[MODBUS_ADDRESSES.MAGNETIC_FEED_RETRACT] && 
-                                 coils[MODBUS_ADDRESSES.MAGNETIC_SORTING1_RETRACT] && 
+          case 'WAITING_RESET_DONE': {
+            const allRetracted = coils[MODBUS_ADDRESSES.MAGNETIC_FEED_RETRACT] &&
+                                 coils[MODBUS_ADDRESSES.MAGNETIC_SORTING1_RETRACT] &&
                                  coils[MODBUS_ADDRESSES.MAGNETIC_SORTING2_RETRACT];
             const conveyorStopped = !coils[MODBUS_ADDRESSES.CONVEYOR];
-            
+
             if (allRetracted && conveyorStopped) {
               addPassedItem('阶段 1/3：复位成功 - 设备已处于安全初始位');
               stepRef.current = 'PREPARING_CYCLE';
@@ -154,19 +154,21 @@ export function useScoring() {
               setScoringRunning(false);
             }
             break;
+          }
 
-          case 'PREPARING_CYCLE':
+          case 'PREPARING_CYCLE': {
             const color = cycleRef.current === 0 ? 'black' : 'blue';
             addPassedItem(`阶段 ${cycleRef.current + 2}/3：开始${color === 'black' ? '黑色' : '蓝色'}物料分拣测试`);
-            
+
             // 强制设置物料颜色进行测试
             useDeviceStore.setState((s) => ({
               material: { ...s.material, visible: true, color: color, position: [-1.3, 1.10, 0.6] }
             }));
-            
+
             stepRef.current = 'TRIGGER_START';
             stateTimerRef.current = Date.now();
             break;
+          }
 
           case 'TRIGGER_START':
             if (Date.now() - stateTimerRef.current > 2000) {

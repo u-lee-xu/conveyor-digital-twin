@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene, ModeSelector, HelpPanel, modbusService, useMobile } from '@digital-twin/shared';
-import { ControlPanel, StatusPanel, DemoPanel, ScoringPanel, SimPanel, ViewControlPanel } from './components/panels';
+import { HelpPanel, modbusService, useMobile } from '@digital-twin/shared';
+import { ControlPanel, StatusPanel, DemoPanel, ScoringPanel, SimPanel } from './components/panels';
 import { ConveyorPlcConnection } from './platform/ConveyorPlcConnection';
+import { ConveyorSceneWrapper } from './platform/ConveyorSceneWrapper';
 import { buildHelpContent } from './constants/plc-addresses';
-import { useDeviceStore } from './stores';
+import { useDeviceStore, useConveyorViewStore } from './stores';
 import { useDemoMode } from './hooks/useDemoMode';
 import { useSimMode } from './hooks/useSimMode';
 import { useConveyorScoring } from './hooks/useConveyorScoring';
 import { ConveyorSortingSceneContent } from './scenes/conveyor-sorting/SceneContent';
+import { VISUAL } from './scenes/conveyor-sorting/constants';
+
+/** 与自动配药 App 同款紧凑模式选择器（不再用共享 ModeSelector 的大标签） */
+const MODES = [
+  { key: 'manual', label: '手动' },
+  { key: 'auto', label: '演示' },
+  { key: 'scoring', label: '评分' },
+  { key: 'sim', label: '仿真' },
+] as const;
 
 function ConveyorScoringGate() {
   useConveyorScoring();
@@ -18,6 +28,9 @@ function App() {
   const mode = useDeviceStore((s) => s.mode);
   const setMode = useDeviceStore((s) => s.setMode);
   const isConnected = useDeviceStore((s) => s.isConnected);
+  const showLabels = useDeviceStore((s) => s.showLabels);
+  const toggleLabels = useDeviceStore((s) => s.toggleLabels);
+  const panelCollapsed = useConveyorViewStore((s) => s.panelCollapsed);
 
   const isMobile = useMobile();
   const prevModeRef = useRef(mode);
@@ -27,12 +40,14 @@ function App() {
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    (window as any).__DEBUG__ = {
-      getState: useDeviceStore.getState,
-      setState: useDeviceStore.setState,
-      spawnMaterial: () => { useDeviceStore.getState().spawnMaterial(); },
-      clearMaterial: () => { useDeviceStore.getState().clearMaterial(); },
-    };
+    Object.assign(window, {
+      __DEBUG__: {
+        getState: useDeviceStore.getState,
+        setState: useDeviceStore.setState,
+        spawnMaterial: () => { useDeviceStore.getState().spawnMaterial(); },
+        clearMaterial: () => { useDeviceStore.getState().clearMaterial(); },
+      },
+    });
   }, []);
 
   useEffect(() => {
@@ -52,11 +67,11 @@ function App() {
     onSpawnMaterial: simSpawnMaterial, onInitialize: simInitialize,
   } = useSimMode();
 
-  // 根据当前模式选择对应面板（IIFE 避免向子组件透传大量 props）
-  const desktopModePanel = (() => {
+  // 面板自身已带 card / device-card，外壳不再叠一层玻璃卡片
+  const modePanel = (() => {
     if (mode === 'manual') {
       return (
-        <div className="space-y-6">
+        <div className="space-y-3">
           <ControlPanel />
           <StatusPanel />
         </div>
@@ -64,93 +79,121 @@ function App() {
     }
     if (mode === 'auto') {
       return (
-        <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-          <DemoPanel demoState={demoState} isStarted={demoStarted} isPaused={demoPaused} onStart={startDemoMode} onTogglePause={demoTogglePause} onReset={demoReset} />
-        </div>
+        <DemoPanel
+          demoState={demoState} isStarted={demoStarted} isPaused={demoPaused}
+          onStart={startDemoMode} onTogglePause={demoTogglePause} onReset={demoReset}
+        />
       );
     }
     if (mode === 'scoring') {
       return (
-        <>
+        <div className="space-y-2">
           <ConveyorPlcConnection modeLabel="评分模式" />
-          <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-            <ScoringPanel />
-          </div>
-        </>
+          <ScoringPanel />
+        </div>
       );
     }
-    // sim mode
     return (
-      <>
+      <div className="space-y-2">
         <ConveyorPlcConnection modeLabel="仿真模式" />
-        <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 shadow-xl">
-          <SimPanel
-            step={simStep} isSimulationRunning={simRunning} errorMessage={simError}
-            stats={simStats} controlSignals={simControlSignals}
-            onPublishAllFeedback={simPublishFeedback} onSimulationStart={simStart}
-            onSimulationStop={simStop} onSimulationReset={simReset}
-            onSpawnMaterial={simSpawnMaterial} onInitialize={simInitialize}
-          />
-        </div>
-      </>
+        <SimPanel
+          step={simStep} isSimulationRunning={simRunning} errorMessage={simError}
+          stats={simStats} controlSignals={simControlSignals}
+          onPublishAllFeedback={simPublishFeedback} onSimulationStart={simStart}
+          onSimulationStop={simStop} onSimulationReset={simReset}
+          onSpawnMaterial={simSpawnMaterial} onInitialize={simInitialize}
+        />
+      </div>
     );
   })();
 
+  const modeTabs = (
+    <div className="mode-tabs" role="tablist" aria-label="运行模式选择">
+      {MODES.map((m) => (
+        <button
+          key={m.key} role="tab"
+          aria-selected={mode === m.key}
+          className={`mode-tab !text-[0.65rem] !py-1 touch-manipulation${mode === m.key ? ' mode-tab-active' : ''}`}
+          onClick={() => setMode(m.key)}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
+    <div style={{ width: '100vw', height: '100vh', background: VISUAL.SCENE_BACKGROUND, position: 'relative', overflow: 'hidden' }}>
       <div className="absolute inset-0">
-        <PhysicsScene SceneContent={ConveyorSortingSceneContent} />
+        <ConveyorSceneWrapper SceneContent={ConveyorSortingSceneContent} showPanelToggle />
       </div>
 
       <ConveyorScoringGate />
 
-      {!isMobile && (
-        <div className="absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
-          <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <span className="text-white text-xl">⚙</span>
+      {/* 桌面端左侧 17rem 窄栏：与自动配药 App 完全同款布局 */}
+      {!isMobile && !panelCollapsed && (
+        <div
+          className="absolute top-3 left-3 z-10 overflow-y-auto space-y-2 scrollbar-thin"
+          style={{ width: '17rem', maxHeight: 'calc(100vh - 1.5rem)' }}
+        >
+          <div className="card !p-2.5">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0">
+                <span className="text-white text-[0.65rem]" aria-hidden="true">&#128230;</span>
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-white">传送带分拣控制</h1>
-                <p className="text-xs text-gray-500">V1.1 · 老徐</p>
-              </div>
+              <h1 className="text-xs font-bold text-white truncate">传送带分拣控制</h1>
+              <button
+                onClick={() => setShowHelp(true)}
+                title="使用说明与地址映射"
+                className="ml-auto w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors text-sm"
+              >
+                ❓
+              </button>
+              <button
+                onClick={toggleLabels}
+                title="三维标签显示"
+                className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors text-sm ${
+                  showLabels
+                    ? 'text-blue-400 hover:text-blue-300 hover:bg-slate-700/60'
+                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/60'
+                }`}
+              >
+                🏷
+              </button>
             </div>
+            {modeTabs}
           </div>
-
-          <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">运行模式</div>
-            <ModeSelector currentMode={mode} onModeChange={setMode} />
-          </div>
-
-          <ViewControlPanel />
-          {desktopModePanel}
+          {modePanel}
         </div>
       )}
 
+      {/* 移动端：顶部迷你条 + 底部抽屉 */}
       {isMobile && (
-        <div className="absolute bottom-4 left-4 right-4 z-10">
-          <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-2xl p-4 shadow-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <ModeSelector currentMode={mode} onModeChange={setMode} />
+        <>
+          <div className="absolute top-2 left-2 right-2 z-10">
+            <div className="bg-slate-900/95 border border-slate-700/50 rounded-xl px-2 py-1.5 shadow-2xl flex items-center gap-2">
+              <div className="flex-1">{modeTabs}</div>
               <button
                 onClick={() => setShowHelp(true)}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white hover:bg-slate-600/80 transition-colors text-xl"
+                title="使用说明与地址映射"
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/60 border border-slate-600/50 text-slate-300 hover:text-white transition-colors text-base"
               >
                 ❓
               </button>
             </div>
-            <div className="mt-4">
-              {mode === 'manual' && <ControlPanel isMobile={true} />}
-              {mode === 'auto' && <DemoPanel demoState={demoState} isStarted={demoStarted} isPaused={demoPaused} onStart={startDemoMode} onTogglePause={demoTogglePause} onReset={demoReset} />}
-              {mode === 'scoring' && (<><ConveyorPlcConnection modeLabel="评分模式" /><ScoringPanel /></>)}
-              {mode === 'sim' && <div className="text-white text-center py-4">请在电脑端运行仿真</div>}
+          </div>
+          <div className="absolute bottom-2 left-2 right-2 z-10">
+            <div className="bg-slate-900/95 border border-slate-700/50 rounded-2xl p-3 shadow-2xl max-h-[52vh] overflow-y-auto scrollbar-thin">
+              {mode !== 'sim' && modePanel}
+              {mode === 'sim' && <div className="text-slate-300 text-xs text-center py-4">请在电脑端运行仿真</div>}
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
+      <div className="absolute bottom-2 right-3 text-[0.5rem] text-slate-600 select-none">
+        &copy; 2026
+      </div>
 
       {showHelp && <HelpPanel content={buildHelpContent()} onClose={() => setShowHelp(false)} />}
     </div>

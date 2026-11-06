@@ -1,25 +1,38 @@
 import React from 'react';
-import { Button } from '@digital-twin/shared';
-import { useDeviceStore } from '../../stores';
+import { useDeviceStore, useConveyorViewStore } from '../../stores';
+import { VIEW_PRESETS, VIEW_BUTTONS } from '../../scenes/conveyor-sorting/constants';
 
+/**
+ * 可选的侧栏视图控制（默认由右上角 ConveyorViewSwitcher 承担）。
+ * 保留为紧凑 card 版本，供平台壳 sidebarExtras 需要时直接挂载。
+ */
 export const ViewControlPanel: React.FC = () => {
   const showLabels = useDeviceStore((s) => s.showLabels);
   const toggleLabels = useDeviceStore((s) => s.toggleLabels);
+  const activeView = useConveyorViewStore((s) => s.activeView);
+  const setView = useConveyorViewStore((s) => s.setView);
 
   return (
-    <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">视图控制</div>
-      <div className="flex flex-col gap-3">
-        <Button 
-          onClick={toggleLabels}
-          variant={showLabels ? 'primary' : 'default'}
-          size="md"
-          className="w-full btn-hover-lift"
-          glow
-        >
-          {showLabels ? '👁 隐藏标签' : '👁 显示标签'}
-        </Button>
+    <div className="card mb-2">
+      <div className="section-title !mb-2">视图控制</div>
+      <div className="flex flex-wrap gap-1 mb-2">
+        {VIEW_BUTTONS.map((key) => (
+          <button
+            key={key}
+            className={`btn btn-xs touch-manipulation ${activeView === key ? 'btn-primary' : 'btn-outline'}`}
+            title={VIEW_PRESETS[key].desc}
+            onClick={() => setView(key)}
+          >
+            {VIEW_PRESETS[key].label}
+          </button>
+        ))}
       </div>
+      <button
+        className={`btn btn-xs w-full touch-manipulation ${showLabels ? 'btn-primary' : 'btn-outline'}`}
+        onClick={toggleLabels}
+      >
+        {showLabels ? '🏷 隐藏标签' : '🏷 显示标签'}
+      </button>
     </div>
   );
 };

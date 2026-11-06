@@ -13,8 +13,8 @@ import { getPushPlateWorldZ } from './helpers';
 
 const COLLIDERS_ONLY = false;
 
-function DebugBox({ args, color = 0x00ff00, opacity = 0.25 }: {
-  args: [number, number, number]; color?: number; opacity?: number;
+function DebugBox({ args, color = '#22c55e', opacity = 0.25 }: {
+  args: [number, number, number]; color?: string; opacity?: number;
 }) {
   if (!COLLIDERS_ONLY) return null;
   return (
@@ -175,7 +175,7 @@ export function PhysicsMaterial() {
       angularDamping={PHYSICS.MATERIAL_ANGULAR_DAMPING}
     >
       <CuboidCollider args={[COMPONENT.MATERIAL_HALF_SIZE, COMPONENT.MATERIAL_HALF_SIZE, COMPONENT.MATERIAL_HALF_SIZE]} />
-      <DebugBox args={[COMPONENT.MATERIAL_HALF_SIZE, COMPONENT.MATERIAL_HALF_SIZE, COMPONENT.MATERIAL_HALF_SIZE]} color={0x3B82F6} opacity={0.5} />
+      <DebugBox args={[COMPONENT.MATERIAL_HALF_SIZE, COMPONENT.MATERIAL_HALF_SIZE, COMPONENT.MATERIAL_HALF_SIZE]} color="#3b82f6" opacity={0.5} />
       <group visible={!COLLIDERS_ONLY}>
         <mesh
           geometry={geometries.material}

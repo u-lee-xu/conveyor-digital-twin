@@ -3,7 +3,7 @@ import { StatusPanel } from '../components/panels';
 
 export function ManualModePanel({ isMobile }: { isMobile?: boolean }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <ControlPanel isMobile={isMobile} />
       <StatusPanel />
     </div>
