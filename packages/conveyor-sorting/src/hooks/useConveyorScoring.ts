@@ -218,7 +218,6 @@ export function useConveyorScoring() {
   const mode             = useDeviceStore(s => s.mode);
   const isScoringRunning = useDeviceStore(s => s.isScoringRunning);
   const setScoringRunning= useDeviceStore(s => s.setScoringRunning);
-  const setScoringComplete= useDeviceStore(s => s.setScoringComplete);
   const markScoringItem  = useDeviceStore(s => s.markScoringItem);
   const markItemsSkipped = useDeviceStore(s => s.markItemsSkipped);
   const resetScore       = useDeviceStore(s => s.resetScore);
@@ -229,6 +228,7 @@ export function useConveyorScoring() {
   const timeoutsRef   = useRef<number[]>([]);
   const processingRef = useRef(false);
   const moduleFailedRef = useRef<number>(-1);
+  const abortRef      = useRef(false);
 
   const clearAllTimeouts = useCallback(() => {
     timeoutsRef.current.forEach(clearTimeout);
@@ -386,18 +386,21 @@ export function useConveyorScoring() {
     for (let i = 0; i < retries; i++) {
       try {
         const result = await globalModbus.writeSignal(addr, value);
+        if (abortRef.current) return false;
         if (result.success) return true;
         console.warn(`[评分] 写入信号 地址${addr} 值${value} 失败(${i + 1}/${retries}):`, result.error);
       } catch (e) {
         console.warn(`[评分] 写入信号 地址${addr} 值${value} 异常(${i + 1}/${retries}):`, e);
       }
       if (i < retries - 1) await new Promise<void>(r => { safeTimeout(r, 500); });
+      if (abortRef.current) return false;
     }
     return false;
   };
 
   const sendPulse = async (addr: number, duration = 800): Promise<boolean> => {
     const ok = await writeCoilWithRetry(addr, true);
+    if (abortRef.current) return false;
     if (!ok) {
       console.error(`[评分] 发送脉冲信号 地址${addr}失败: 写入true重试耗尽`);
       return false;
@@ -405,6 +408,7 @@ export function useConveyorScoring() {
     await new Promise<void>(r => {
       safeTimeout(r, duration);
     });
+    if (abortRef.current) return false;
     await writeCoilWithRetry(addr, false);
     return true;
   };
@@ -419,6 +423,7 @@ export function useConveyorScoring() {
 
   useEffect(() => {
     if (!isScoringRunning) {
+      abortRef.current = true;
       stepRef.current = 'IDLE';
       processingRef.current = false;
       moduleFailedRef.current = -1;
@@ -430,6 +435,7 @@ export function useConveyorScoring() {
 
     resetScore();
     clearTrace();
+    abortRef.current = false;
     stepRef.current = 'M1_CHECK_CONNECTION';
     moduleFailedRef.current = -1;
     setScoringPrompt('⏳ 正在验证Modbus连接...');
@@ -458,6 +464,10 @@ export function useConveyorScoring() {
 
   async function processStep() {
     if (useDeviceStore.getState().scoringComplete) return;
+    if (stepRef.current === 'FINISHED') {
+      setScoringRunning(false);
+      return;
+    }
     const step = stepRef.current;
     const now = Date.now();
 
@@ -482,6 +492,7 @@ export function useConveyorScoring() {
       case 'M1_CHECK_CONNECTION': {
         try {
           const result = await globalModbus.readAllControlSignals();
+          if (abortRef.current) return;
           if (result.success) {
             console.log('[评分] PLC连接验证成功');
             stepRef.current = 'M1_INITIALIZE';
@@ -501,8 +512,11 @@ export function useConveyorScoring() {
 
       case 'M1_INITIALIZE': {
         const ok1 = await writeCoilWithRetry(A.FEED_CTRL, true);
+        if (abortRef.current) return;
         const ok2 = await writeCoilWithRetry(A.SORT1_CTRL, true);
+        if (abortRef.current) return;
         const ok3 = await writeCoilWithRetry(A.SORT2_CTRL, true);
+        if (abortRef.current) return;
         if (!ok1 || !ok2 || !ok3) {
           console.error('[评分] 初始化气缸伸出状态部分失败:', { ok1, ok2, ok3 });
           setScoringPrompt('❌ 气缸初始化写入失败，请检查PLC连接后重试');
@@ -519,15 +533,19 @@ export function useConveyorScoring() {
         stepRef.current = 'M1_SEND_RESET';
         timerRef.current = now;
         await new Promise<void>(r => { safeTimeout(r, 600); });
+        if (abortRef.current) return;
         await updateCoils();
+        if (abortRef.current) return;
         setScoringPrompt('⏳ 模块1/4：发送复位信号...');
         break;
       }
 
       case 'M1_SEND_RESET': {
         await updateCoils();
+        if (abortRef.current) return;
         captureStepEntry();
         const ok = await sendPulse(A.RESET);
+        if (abortRef.current) return;
         if (ok) {
           pass('m1_btn', '【复位测试】复位按钮检测', 2);
         } else {
@@ -594,6 +612,7 @@ export function useConveyorScoring() {
             stepRef.current = 'M1_WAIT_CONVEYOR_STOP';
             timerRef.current = now;
             await updateCoils();
+            if (abortRef.current) return;
             captureStepEntry();
             setScoringPrompt('⏳ 模块1/4：等待传送带定时停止...');
           }
@@ -604,6 +623,7 @@ export function useConveyorScoring() {
           stepRef.current = 'M1_WAIT_CONVEYOR_STOP';
           timerRef.current = now;
           await updateCoils();
+          if (abortRef.current) return;
           captureStepEntry();
           setScoringPrompt('⏳ 模块1/4：等待传送带定时停止...');
         }
@@ -631,8 +651,10 @@ export function useConveyorScoring() {
 
       case 'M2_SEND_START': {
         await updateCoils();
+        if (abortRef.current) return;
         captureStepEntry();
         const ok = await sendPulse(A.START);
+        if (abortRef.current) return;
         if (ok) {
           pass('m2_btn', '【上料流程】启动按钮检测', 2);
         } else {
@@ -738,6 +760,7 @@ export function useConveyorScoring() {
 
       case 'M3_INJECT_BLACK': {
         await updateCoils();
+        if (abortRef.current) return;
         useDeviceStore.setState(s => ({
           material: { ...s.material, visible: true, color: 'black', position: [-0.3, 1.06, 0] }
         }));
@@ -840,8 +863,10 @@ export function useConveyorScoring() {
 
       case 'M4_SEND_START': {
         await updateCoils();
+        if (abortRef.current) return;
         captureStepEntry();
         const ok = await sendPulse(A.START);
+        if (abortRef.current) return;
         if (ok) {
           pass('m4_btn', '【蓝色分拣】启动按钮检测（第二轮）', 1);
         } else {
@@ -897,6 +922,7 @@ export function useConveyorScoring() {
 
       case 'M4_INJECT_BLUE': {
         await updateCoils();
+        if (abortRef.current) return;
         useDeviceStore.setState(s => ({
           material: { ...s.material, visible: true, color: 'blue', position: [-0.3, 1.06, 0] }
         }));
@@ -988,17 +1014,7 @@ export function useConveyorScoring() {
         break;
       }
 
-      case 'FINISHED': {
-        const st = useDeviceStore.getState().scoringStatus;
-        const allItems = SCORING_MODULES.flatMap(m => m.subModules.flatMap(sm => sm.items));
-        const pendingItems = allItems.filter(i => !st[i.id] || st[i.id] === 'pending');
-        if (pendingItems.length > 0) {
-          markItemsSkipped(pendingItems.map(i => ({ itemId: i.id, label: i.name, points: i.points })));
-        }
-        setScoringComplete(true);
-        setScoringPrompt('🏁 评分结束');
-        break;
-      }
+      // 'FINISHED' 已在 processStep 顶部早退处理（setScoringRunning(false) + return），无需 case
     }
   }
 

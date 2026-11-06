@@ -190,7 +190,7 @@ export const useRobotStore = create<RobotStoreState>((set) => ({
     const currentStatus = s.scoringStatus[itemId];
     if (currentStatus && currentStatus !== 'pending') return s;
 
-    const logId = Math.random().toString(36).substr(2, 9);
+    const logId = Math.random().toString(36).slice(2, 11);
     const now = Date.now();
 
     const newLogEntry: ScoringLogEntry = {
@@ -225,7 +225,7 @@ export const useRobotStore = create<RobotStoreState>((set) => ({
 
       newStatus[item.itemId] = 'skipped';
       newLog.push({
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).slice(2, 11),
         itemId: item.itemId,
         label: item.label,
         status: 'skipped',
@@ -243,7 +243,7 @@ export const useRobotStore = create<RobotStoreState>((set) => ({
   addPassedItem: (message, points = 0) => set((s) => {
     const isDuplicate = s.passedItems.some(item => item.message === message);
     if (isDuplicate) return s;
-    const id = Math.random().toString(36).substr(2, 9);
+    const id = Math.random().toString(36).slice(2, 11);
     const now = Date.now();
     return {
       score: Math.min(100, s.score + points),

@@ -13,6 +13,7 @@ export function ConveyorDeviceEffects() {
       spawnMaterial: () => { useDeviceStore.getState().spawnMaterial(); },
       clearMaterial: () => { useDeviceStore.getState().clearMaterial(); },
     };
+    return () => { delete (window as unknown as { __DEBUG__?: unknown }).__DEBUG__; };
   }, []);
 
   return null;

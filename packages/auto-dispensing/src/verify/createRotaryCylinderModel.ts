@@ -22,6 +22,8 @@ export type ProceduralModelRuntime = {
   destructionGroups: Record<string, THREE.Object3D[]>;
 };
 
+/** 独立验证脚本读取的 JSON 材质规格，字段形状随参考数据变化，保留宽松索引类型 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SculptMaterialSpec = Record<string, any>;
 
 function hashString(value: string): number {

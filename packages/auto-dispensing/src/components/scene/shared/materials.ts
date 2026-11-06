@@ -1,123 +1,170 @@
 import * as THREE from 'three';
+import { VISUAL } from '../../../scenes/auto-dispensing/constants';
 
-/** 配药场景共享材质 —— 风格与传送分拣场景（conveyor-sorting）保持一致：
- *  金属灰系（darkMetal/亮银）+ 特征色（滑台金/料斗黄/药仓彩/柜蓝）+ 发光灯 */
+/**
+ * 配药场景共享材质：颜色一律取自 constants.ts 的 VISUAL（单一来源），
+ * 这里只负责金属度 / 粗糙度等表面质感参数。
+ *
+ * 配色结构：深中性背景 → 铝银灰结构件 → 石墨蓝灰柜体 → 浅灰门板，
+ * 彩色只留给功能件（琥珀滑台/料斗、砖橙取药仓、四药仓标识色）与安全色灯。
+ */
 export const materials = {
-  /** 底架/支撑柱（传送分拣 darkMetal 同系） */
+  /** 底架 / 铝型材 / 托架横梁：从近黑改为铝银灰，让结构从背景里浮出来 */
   base: new THREE.MeshStandardMaterial({
-    color: 0x475569,
-    metalness: 0.65,
-    roughness: 0.35,
-  }),
-
-  /** 深色结构件（同步轮/垫脚/面板） */
-  darkMetal: new THREE.MeshStandardMaterial({
-    color: 0x1f2937,
-    metalness: 0.55,
+    color: VISUAL.BASE_COLOR,
+    metalness: 0.5,
     roughness: 0.45,
   }),
 
-  /** 亮银金属（导轨/推杆） */
+  /** 深色结构件（垫脚 / 推板 / 灯杆）：石墨灰，不再纯黑 */
+  darkMetal: new THREE.MeshStandardMaterial({
+    color: VISUAL.STRUCT_COLOR,
+    metalness: 0.45,
+    roughness: 0.55,
+  }),
+
+  /** 亮银金属（导轨 / 推杆 / 落料斜槽） */
   brightSilver: new THREE.MeshStandardMaterial({
-    color: 0xe2e8f0,
-    metalness: 0.9,
-    roughness: 0.15,
-  }),
-
-  /** 亮银高光（螺旋牙/铰链） */
-  endCap: new THREE.MeshStandardMaterial({
-    color: 0xd4d4d4,
+    color: VISUAL.SILVER_COLOR,
     metalness: 0.85,
-    roughness: 0.2,
+    roughness: 0.18,
   }),
 
-  /** 轴/滚珠（主轴） */
+  /**
+   * 铝挤型 T 槽 / 台面螺纹孔的暗槽（避免组件里再写死颜色）。
+   * 这是专用「贴面薄片」材质：polygonOffset 让它在深度测试里稳定压过宿主面，
+   * 作为 SURFACE_GAP 几何错开之外的渲染层兜底，防止远机位 z-fighting 闪烁。
+   */
+  profileSlot: new THREE.MeshStandardMaterial({
+    color: VISUAL.PROFILE_SLOT_COLOR,
+    metalness: 0.4,
+    roughness: 0.6,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  }),
+
+  /** 贴面亮银薄片（沉孔环 / 刻度环 / 按钮高光）：同样带 polygonOffset 兜底 */
+  decal: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENDCAP_COLOR,
+    metalness: 0.8,
+    roughness: 0.25,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  }),
+
+  /** 贴面暗色薄片（暗孔 / 刻线 / 铭牌蚀刻） */
+  decalDark: new THREE.MeshStandardMaterial({
+    color: VISUAL.MAGSWITCH_COLOR,
+    metalness: 0.35,
+    roughness: 0.6,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  }),
+
+  /** 亮银高光（螺旋牙 / 仓口包边 / 端盖） */
+  endCap: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENDCAP_COLOR,
+    metalness: 0.8,
+    roughness: 0.25,
+  }),
+
+  /** 轴 / 滚珠（主轴） */
   axle: new THREE.MeshStandardMaterial({
-    color: 0x94a3b8,
-    metalness: 0.7,
-    roughness: 0.35,
+    color: VISUAL.AXIS_COLOR,
+    metalness: 0.65,
+    roughness: 0.38,
   }),
 
-  /** 气缸缸体 */
+  /** 气缸缸体（铝银，与结构件拉开一档） */
   cylinderBody: new THREE.MeshStandardMaterial({
-    color: 0x64748B,
-    metalness: 0.7,
-    roughness: 0.35,
+    color: VISUAL.CYL_BODY_COLOR,
+    metalness: 0.6,
+    roughness: 0.4,
   }),
 
   /** 气缸推杆 */
   cylinderRod: new THREE.MeshStandardMaterial({
-    color: 0xf0f0f0,
-    metalness: 0.95,
-    roughness: 0.05,
+    color: VISUAL.CYL_ROD_COLOR,
+    metalness: 0.9,
+    roughness: 0.08,
   }),
 
-  /** 黄铜件（气管接头/节流阀） */
+  /** 黄铜件（气管接头 / 节流阀），比旧暗棕更亮 */
   brass: new THREE.MeshStandardMaterial({
-    color: 0xb45309,
-    metalness: 0.85,
-    roughness: 0.3,
+    color: VISUAL.BRASS_COLOR,
+    metalness: 0.75,
+    roughness: 0.35,
   }),
 
-  /** 磁性开关（纯黑） */
+  /** 磁性开关（近黑塑料） */
   magSwitch: new THREE.MeshStandardMaterial({
-    color: 0x111827,
-    metalness: 0.5,
-    roughness: 0.5,
+    color: VISUAL.MAGSWITCH_COLOR,
+    metalness: 0.35,
+    roughness: 0.6,
   }),
 
   /** 旋转气缸输出法兰（琥珀色，旋转输出位） */
   flange: new THREE.MeshStandardMaterial({
-    color: 0xeab308,
+    color: VISUAL.FLANGE_COLOR,
     metalness: 0.35,
-    roughness: 0.35,
+    roughness: 0.4,
   }),
 
-  /** 导套/螺母 */
+  /** 导套 / 螺母 / 轴承座（银灰与石墨之间的一档） */
   sleeve: new THREE.MeshStandardMaterial({
-    color: 0x334155,
-    metalness: 0.6,
-    roughness: 0.35,
+    color: VISUAL.SLEEVE_COLOR,
+    metalness: 0.5,
+    roughness: 0.42,
   }),
 
-  /** 滑台（特征金） */
+  /** 滑台（深琥珀） */
   slider: new THREE.MeshStandardMaterial({
-    color: 0xf59e0b,
+    color: VISUAL.SLIDER_COLOR,
     metalness: 0.25,
-    roughness: 0.45,
-  }),
-
-  /** 料斗（特征黄） */
-  hopper: new THREE.MeshStandardMaterial({
-    color: 0xfbbf24,
-    metalness: 0.25,
-    roughness: 0.45,
-  }),
-
-  /** 取药仓（特征橙） */
-  bin: new THREE.MeshStandardMaterial({
-    color: 0xf97316,
-    metalness: 0.25,
-    roughness: 0.45,
-  }),
-
-  /** 控制柜柜体 */
-  cabinet: new THREE.MeshStandardMaterial({
-    color: 0x1e3a5f,
-    metalness: 0.4,
     roughness: 0.5,
   }),
 
-  /** 灯塔/指示灯 灭态 */
-  lampDark: new THREE.MeshStandardMaterial({
-    color: 0x334155,
-    emissive: 0x000000,
-    emissiveIntensity: 0,
-    roughness: 0.7,
-    metalness: 0.3,
+  /** 料斗（亮琥珀，与滑台同色族不同明度） */
+  hopper: new THREE.MeshStandardMaterial({
+    color: VISUAL.HOPPER_COLOR,
+    metalness: 0.25,
+    roughness: 0.5,
   }),
 
-  /** 指示灯 亮态（发射光，与 conveyor ledActive 同参数） */
+  /** 取药仓（砖橙红，与琥珀拉开） */
+  bin: new THREE.MeshStandardMaterial({
+    color: VISUAL.BIN_COLOR,
+    metalness: 0.2,
+    roughness: 0.55,
+  }),
+
+  /** 控制柜柜体（石墨蓝灰，与背景分离、比门板深） */
+  cabinet: new THREE.MeshStandardMaterial({
+    color: VISUAL.CABINET_COLOR,
+    metalness: 0.35,
+    roughness: 0.55,
+  }),
+
+  /** 柜门面板（RAL7035 浅灰，托住彩色按钮与指示灯） */
+  panel: new THREE.MeshStandardMaterial({
+    color: VISUAL.PANEL_COLOR,
+    metalness: 0.15,
+    roughness: 0.7,
+  }),
+
+  /** 灯塔 / 指示灯 灭态（暗玻璃而非纯灰球） */
+  lampDark: new THREE.MeshStandardMaterial({
+    color: VISUAL.LAMP_DARK,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    roughness: 0.35,
+    metalness: 0.15,
+  }),
+
+  /** 指示灯 亮态（发射光） */
   lampActive: (color: number) => new THREE.MeshStandardMaterial({
     color,
     emissive: color,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRobotStore } from '../useRobotStore';
 
 /** 演示步骤 */
@@ -37,6 +37,10 @@ interface DemoSimState {
 
 export function useDemoSim() {
   const [state, setState] = useState<DemoSimState>({ running: false, paused: false, step: 'IDLE' });
+  const stepRef = useRef<DemoStep>('IDLE');
+
+  // Keep stepRef in sync with state.step so interval reads latest value
+  useEffect(() => { stepRef.current = state.step; }, [state.step]);
 
   // 推进器：按当前步骤等待气缸到位后进入下一步
   useEffect(() => {
@@ -45,8 +49,9 @@ export function useDemoSim() {
     const timer = setInterval(() => {
       const s = useRobotStore.getState();
       const pos = s.cylinders;
+      const currentStep = stepRef.current;
 
-      switch (state.step) {
+      switch (currentStep) {
         case 'LOWER':
           if (pos.lift.position >= AT_POS) {
             s.setCylinder('clamp', false);   // 夹紧（clamp: 0=夹紧, 1=张开）
@@ -117,7 +122,7 @@ export function useDemoSim() {
     }, 100);
 
     return () => clearInterval(timer);
-  }, [state.running, state.paused, state.step]);
+  }, [state.running, state.paused]);
 
   const start = () => {
     const s = useRobotStore.getState();

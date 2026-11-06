@@ -11,6 +11,8 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const isMobile = useMobile();
   const [showHelp, setShowHelp] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  /** 桌面端左侧操作面板可收起，露出完整 3D 视口（宽屏设备整机观察用） */
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const { mode, setMode } = device.useModeState();
   const onModeChangeRef = useRef(device.onModeChange);
   onModeChangeRef.current = device.onModeChange;
@@ -22,11 +24,11 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
     onModeChangeRef.current?.(mode);
   }, [mode]);
 
+  const onCleanupRef = useRef(device.onCleanup);
+  onCleanupRef.current = device.onCleanup;
   useEffect(() => {
-    return () => {
-      device.onCleanup?.();
-    };
-  }, [device]);
+    return () => { onCleanupRef.current?.(); };
+  }, [device.id]);
 
   // 边缘部署：进入设备工作区时向广播服务上报激活设备（观众端自动跟随）；离开时上报 null（观众等待）
   useEffect(() => {
@@ -43,7 +45,10 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
       // 主控离开工作区：通知广播清空激活设备（观众端黑屏等待）
       try {
         const bye = new WebSocket(`ws://${host}:8082`);
-        bye.onopen = () => bye.send(JSON.stringify({ type: 'set-device', deviceId: null }));
+        bye.onopen = () => {
+          bye.send(JSON.stringify({ type: 'set-device', deviceId: null }));
+          bye.close();
+        };
         bye.onerror = () => bye.close();
       } catch {
         // 非边缘环境无广播服务，静默
@@ -66,16 +71,39 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
 
       {Effects && <Effects />}
 
-      {!isMobile && (
+      {!isMobile && panelCollapsed && (
+        <button
+          type="button"
+          onClick={() => setPanelCollapsed(false)}
+          title="展开左侧操作面板"
+          className="absolute top-4 left-4 z-20 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 text-slate-200 text-xs shadow-xl hover:text-white transition-colors"
+        >
+          <span>▶</span>
+          <span>展开面板</span>
+        </button>
+      )}
+
+      {!isMobile && !panelCollapsed && (
         <div className="absolute top-4 left-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
           <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-3 mb-6 shadow-xl">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors btn-active"
-            >
-              <span>←</span>
-              <span>返回设备选择</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onBack}
+                className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors btn-active"
+              >
+                <span>←</span>
+                <span>返回设备选择</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPanelCollapsed(true)}
+                title="收起面板，露出完整 3D 视口"
+                className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-slate-700/60 transition-colors"
+              >
+                <span>◀</span>
+                <span>收起面板</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-xl">
@@ -175,7 +203,7 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
               </div>
               <ModeSelector currentMode={mode} onModeChange={setMode} modes={device.modes} />
               <div className="mt-4">
-                <ModePanel isMobile={true} />
+                {ModePanel && <ModePanel isMobile={true} />}
               </div>
             </div>
           )}

@@ -127,6 +127,8 @@ class Broadcaster {
       port: dev.port,
       rack: dev.rack || 0,
       slot: dev.slot || 1,
+      // 场景自带变量表时下发给网关（缺省沿用网关内置表，兼容已有设备）
+      ...(dev.variables ? { variables: dev.variables } : {}),
     });
     this.connected = res.success;
     console.log(`[broadcast] 设备 ${this.deviceId} PLC连接 ${res.success ? '成功' : '失败'}: ${res.error || ''}`);

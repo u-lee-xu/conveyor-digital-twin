@@ -30,7 +30,10 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
     const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
     try {
       const ws = new WebSocket(`ws://${host}:8082`);
-      ws.onopen = () => ws.send(JSON.stringify({ type: 'set-device', deviceId }));
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'set-device', deviceId }));
+        ws.close();
+      };
       ws.onerror = () => ws.close();
     } catch {
       // 非边缘环境无广播服务，静默
@@ -40,8 +43,10 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
     let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
 
     const connect = () => {
+      if (closed) return;
       const ws = new WebSocket(`ws://${host}:8082`);
       wsRef.current = ws;
       setLink('connecting');
@@ -52,7 +57,11 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
           if (msg.type !== 'snapshot') return;
           setSnapshot(msg);
           const device = msg.deviceId ? devices.find((d) => d.id === msg.deviceId) : undefined;
-          device?.applyBroadcast?.(msg.vars ?? {});
+          try {
+            device?.applyBroadcast?.(msg.vars ?? {});
+          } catch (e) {
+            console.warn('applyBroadcast error:', e);
+          }
         } catch {
           // 忽略非法消息
         }
@@ -60,7 +69,7 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
       ws.onclose = () => {
         if (closed) return;
         setLink('offline');
-        setTimeout(connect, 3000);
+        reconnectTimer = setTimeout(connect, 3000);
       };
       ws.onerror = () => ws.close();
     };
@@ -68,6 +77,7 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
     connect();
     return () => {
       closed = true;
+      clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };
   }, []);
@@ -106,7 +116,7 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
           </button>
         </div>
       ) : (
-        <Scene SceneContent={activeDevice.SceneContent} cameraPosition={activeDevice.cameraPosition} />
+        <Scene key={activeDeviceId} SceneContent={activeDevice.SceneContent} cameraPosition={activeDevice.cameraPosition} />
       )}
 
       {/* 顶部：返回入口 + 设备选择条（默认跟随主控，可自选） */}

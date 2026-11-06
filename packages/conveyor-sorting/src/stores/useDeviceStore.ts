@@ -302,11 +302,9 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   stopRecording: () => set({ isRecording: false }),
   addTraceEntry: (coils: boolean[]) => set((state) => {
     if (!state.isRecording && !state.isScoringRunning) return state;
-    const newTrace = [...state.recordedTrace, { timestamp: Date.now(), coils }];
-    if (newTrace.length > 3000) newTrace.splice(0, newTrace.length - 3000);
-    return {
-      recordedTrace: newTrace,
-    };
+    const next = [...state.recordedTrace, { timestamp: Date.now(), coils }];
+    const trimmed = next.length > 3000 ? next.slice(next.length - 3000) : next;
+    return { recordedTrace: trimmed };
   }),
   clearTrace: () => set({ recordedTrace: [] }),
 

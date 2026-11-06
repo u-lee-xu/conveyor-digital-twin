@@ -202,7 +202,6 @@ export function useRobotScoring() {
   const setScoringComplete = useRobotStore((s) => s.setScoringComplete);
   const markScoringItem = useRobotStore((s) => s.markScoringItem);
   const markItemsSkipped = useRobotStore((s) => s.markItemsSkipped);
-  const resetScore = useRobotStore((s) => s.resetScore);
   const setScoringPrompt = useRobotStore((s) => s.setScoringPrompt);
 
   const stepRef = useRef<Step>('IDLE');
@@ -210,6 +209,7 @@ export function useRobotScoring() {
   const timeoutsRef = useRef<number[]>([]);
   const processingRef = useRef(false);
   const moduleFailedRef = useRef(-1);
+  const abortRef = useRef(false);
 
   /** 上一轮 IO 帧（缩回判定/边沿检测用） */
   const prevSignalsRef = useRef<Record<string, boolean> | null>(null);
@@ -317,6 +317,7 @@ export function useRobotScoring() {
   /** 自复位按钮脉冲：置位 → 保持 → 复位 */
   const sendPulse = async (name: string, duration = 800): Promise<boolean> => {
     const ok = await writeVarWithRetry(name, true);
+    if (abortRef.current) return false;
     if (!ok) {
       console.error(`[评分] 发送脉冲信号 ${name} 失败: 写入true重试耗尽`);
       return false;
@@ -324,6 +325,7 @@ export function useRobotScoring() {
     await new Promise<void>(r => {
       safeTimeout(r, duration);
     });
+    if (abortRef.current) return false;
     await writeVarWithRetry(name, false);
     return true;
   };
@@ -384,6 +386,7 @@ export function useRobotScoring() {
 
   useEffect(() => {
     if (mode !== 'scoring') {
+      abortRef.current = true;
       setScoringRunning(false);
       stepRef.current = 'IDLE';
       clearAllTimeouts();
@@ -392,21 +395,25 @@ export function useRobotScoring() {
 
   useEffect(() => {
     if (!isScoringRunning) {
+      abortRef.current = true;
       stepRef.current = 'IDLE';
       processingRef.current = false;
       moduleFailedRef.current = -1;
       prevSignalsRef.current = null;
       clearAllTimeouts();
-      setScoringPrompt('');
+      useRobotStore.getState().setScoringPrompt('');
       return;
     }
 
-    resetScore();
+    if (useRobotStore.getState().scoringComplete) return;
+
+    abortRef.current = false;
+    useRobotStore.getState().resetScore();
     useRobotStore.getState().resetAll();
     stepRef.current = 'M1_CHECK_ORIGIN';
     timerRef.current = Date.now();
     moduleFailedRef.current = -1;
-    setScoringPrompt('⏳ 正在验证连接...');
+    useRobotStore.getState().setScoringPrompt('⏳ 正在验证连接...');
 
     const tick = async () => {
       if (processingRef.current) return;
@@ -420,9 +427,8 @@ export function useRobotScoring() {
 
     const scoringInterval = plcService.protocol === 's7' ? 800 : 300;
     const processInterval = setInterval(tick, scoringInterval);
-    return () => { clearInterval(processInterval); clearAllTimeouts(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isScoringRunning, resetScore]);
+    return () => { abortRef.current = true; clearInterval(processInterval); clearAllTimeouts(); };
+  }, [isScoringRunning, clearAllTimeouts]);
 
   const getModuleIndex = (step: Step): number => {
     if (step.startsWith('M1')) return 0;
@@ -464,11 +470,13 @@ export function useRobotScoring() {
     const now = Date.now();
 
     const signals = await readVarsOnce();
+    if (abortRef.current) return;
     if (!signals) return;
     if (step !== 'M2_SEND_START' && step !== 'M4_SEND_STOP'
       && step !== 'M4_SEND_ESTOP' && step !== 'M4_SEND_RESTART') {
       await syncIO(signals);
     }
+    if (abortRef.current) return;
     prevSignalsRef.current = signals;
 
     if (moduleFailedRef.current >= 0) {
@@ -529,6 +537,7 @@ export function useRobotScoring() {
 
       case 'M2_SEND_START': {
         const ok = await sendPulse('BUTTON_START');
+        if (abortRef.current) return;
         if (ok) {
           pass('m2_btn', '【取料流程】启动按钮检测', 2);
         } else {
@@ -746,6 +755,7 @@ export function useRobotScoring() {
 
       case 'M4_SEND_STOP': {
         const ok = await sendPulse('BUTTON_STOP');
+        if (abortRef.current) return;
         if (ok) {
           pass('m4_btn', '【停止/急停】停止按钮检测', 2);
         } else {
@@ -786,6 +796,7 @@ export function useRobotScoring() {
 
       case 'M4_SEND_ESTOP': {
         const ok = await sendPulse('BUTTON_ESTOP');
+        if (abortRef.current) return;
         if (ok) {
           pass('m4_estop_btn', '【停止/急停】急停按钮检测', 3);
         } else {
@@ -826,6 +837,7 @@ export function useRobotScoring() {
 
       case 'M4_SEND_RESTART': {
         const ok = await sendPulse('BUTTON_START');
+        if (abortRef.current) return;
         if (ok) {
           pass('m4_restart_btn', '【停止/急停】复位后启动按钮检测', 3);
         } else {

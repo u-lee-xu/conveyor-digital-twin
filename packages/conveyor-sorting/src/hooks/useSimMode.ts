@@ -203,9 +203,10 @@ export const useSimMode = () => {
       }
     };
 
-    const loop = () => {
+    const loop = async () => {
       if (stopped) return;
-      poll();
+      try { await poll(); } finally { /* poll manages its own polling flag */ }
+      if (stopped) return;
       const pollInterval = globalModbus.getProtocol() === 's7' ? 300 : 100;
       timeoutId = setTimeout(loop, pollInterval);
     };

@@ -6,8 +6,7 @@ import { VISUAL, COMPONENT } from '../constants';
 const COLLIDERS_ONLY = false;
 
 export function PhysicsSensor({ name, position }: { name: string; position: [number, number, number] }) {
-  const sensors = useDeviceStore((s) => s.sensors);
-  const active = sensors[name as keyof typeof sensors];
+  const active = useDeviceStore((s) => s.sensors[name as keyof typeof s.sensors]);
 
   const labelMaterial = useMemo(() => {
     if (name === 'color') return materials.sensorLabelColor;

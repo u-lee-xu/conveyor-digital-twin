@@ -26,17 +26,27 @@ const COAL_ADDRESSES = {
 const DISPENSING_ADDRESSES = {
   BUTTON_START: 0, BUTTON_STOP: 1, BUTTON_RESET: 2, BUTTON_ESTOP: 3, BUTTON_CONFIRM: 4,
   S_LIMIT_START: 10, S_LIMIT_END: 11,
-  S_MAG_A_EMPTY: 12, S_MAG_B_EMPTY: 13, S_MAG_C_EMPTY: 14,
-  S_BIN_HAS_DRUG: 15,
+  S_MAG_A_EMPTY: 12, S_MAG_B_EMPTY: 13, S_MAG_C_EMPTY: 14, S_MAG_D_EMPTY: 15,
+  S_BIN_HAS_DRUG: 16,
   MSC_A_BACK: 20, MSC_A_FRONT: 21,
   MSC_B_BACK: 22, MSC_B_FRONT: 23,
   MSC_C_BACK: 24, MSC_C_FRONT: 25,
-  MSC_TILT_HOLD: 26, MSC_TILT_DUMP: 27,
+  MSC_D_BACK: 26, MSC_D_FRONT: 27,
+  MSC_TILT_HOLD: 28, MSC_TILT_DUMP: 29,
   MOTOR_FWD: 30, MOTOR_REV: 31,
-  CYL_SEND_A: 32, CYL_SEND_B: 33, CYL_SEND_C: 34, CYL_TILT: 35,
-  LAMP_GREEN: 36, LAMP_YELLOW: 37, LAMP_RED: 38,
-  ENCODER_BIT0: 40, ENCODER_BIT1: 41, ENCODER_BIT2: 42, ENCODER_BIT3: 43,
-  ENCODER_BIT4: 44, ENCODER_BIT5: 45, ENCODER_BIT6: 46, ENCODER_BIT7: 47,
+  CYL_SEND_A: 32, CYL_SEND_B: 33, CYL_SEND_C: 34, CYL_SEND_D: 35, CYL_TILT: 36,
+  LAMP_GREEN: 38, LAMP_YELLOW: 39, LAMP_RED: 40,
+  ENCODER_BIT0: 42, ENCODER_BIT1: 43, ENCODER_BIT2: 44, ENCODER_BIT3: 45,
+  ENCODER_BIT4: 46, ENCODER_BIT5: 47, ENCODER_BIT6: 48, ENCODER_BIT7: 49,
+};
+
+/**
+ * 自动配药数据寄存器（Modbus 保持寄存器 HR / 三菱 D / S7 MW）。
+ * ENCODER_PULSES = 增量式编码器脉冲计数，随滑台前进 +、后退 -，回原点归零。
+ * 与前端 MODBUS_HOLDING_REGISTERS 互为单一来源。
+ */
+const DISPENSING_REGISTERS = {
+  ENCODER_PULSES: 120,
 };
 
 /** 对照前端 constants.ts 做一致性检查（text 正则解析，仅数字型线圈映射） */
@@ -79,7 +89,9 @@ if (require.main === module && process.argv.includes('--check')) {
     '../packages/coal-sorting/src/scenes/coal-sorting/constants.ts', 'MODBUS_READ_VARS') && ok;
   ok = checkSceneAgainstConstants('dispensing', DISPENSING_ADDRESSES,
     '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts', 'MODBUS_READ_VARS') && ok;
+  ok = checkSceneAgainstConstants('dispensing-reg', DISPENSING_REGISTERS,
+    '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts', 'MODBUS_HOLDING_REGISTERS') && ok;
   process.exit(ok ? 0 : 1);
 }
 
-module.exports = { COAL_ADDRESSES, DISPENSING_ADDRESSES };
+module.exports = { COAL_ADDRESSES, DISPENSING_ADDRESSES, DISPENSING_REGISTERS };

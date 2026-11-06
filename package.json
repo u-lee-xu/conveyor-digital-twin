@@ -16,6 +16,7 @@
     "build:conveyor": "npm run build -w @digital-twin/conveyor-sorting",
     "build:coal": "npm run build -w @digital-twin/coal-sorting",
     "build:platform": "npm run build -w @digital-twin/platform",
+    "electron:build:win:platform": "npm run electron:build:win -w @digital-twin/platform",
     "electron:build:win:conveyor": "npm run electron:build:win -w @digital-twin/conveyor-sorting",
     "electron:build:win:coal": "npm run electron:build:win -w @digital-twin/coal-sorting",
     "websocket:start": "cd websocket-server && npm start",

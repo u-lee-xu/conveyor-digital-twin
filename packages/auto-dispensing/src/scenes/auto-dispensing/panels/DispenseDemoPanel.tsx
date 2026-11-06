@@ -1,5 +1,7 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
-import { RECIPE_LIMIT, MAGAZINE_LABELS, SLIDER_MIN_X, PULSES_PER_M, type MagazineId } from '../constants';
+import {
+  RECIPE_LIMIT, MAG_CAPACITY, MAGAZINE_LABELS, MODBUS_HOLDING_REGISTERS, type MagazineId,
+} from '../constants';
 
 /**
  * 演示模式面板：配方设定（0~9 份/仓）+ 启动/停止/复位/急停 + 取药确认
@@ -14,11 +16,13 @@ export function DispenseDemoPanel() {
   const autoCycle = useDispensingStore((s) => s.autoCycle);
   const sliderX = useDispensingStore((s) => s.sliderX);
   const magStock = useDispensingStore((s) => s.magStock);
+  const refillAll = useDispensingStore((s) => s.refillAll);
   const hopperPills = useDispensingStore((s) => s.hopperPills);
   const sensors = useDispensingStore((s) => s.sensors);
+  const encoderPulses = useDispensingStore((s) => s.encoderPulses);
+  const encoderDir = useDispensingStore((s) => s.encoderDir);
 
-  const mags: MagazineId[] = ['A', 'B', 'C'];
-  const encoder = Math.round((sliderX - SLIDER_MIN_X) * PULSES_PER_M);
+  const mags: MagazineId[] = ['A', 'B', 'C', 'D'];
   const running = autoPhase !== 'idle';
 
   const phaseLabel: Record<string, string> = {
@@ -55,8 +59,20 @@ export function DispenseDemoPanel() {
             </div>
           ))}
         </div>
-        <div className="mt-1.5 text-[0.55rem] text-slate-500">
-          配方 = A×{recipe.A} + B×{recipe.B} + C×{recipe.C}（启动后锁定）
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <span className="text-[0.55rem] text-slate-500">
+            配方 = A×{recipe.A} + B×{recipe.B} + C×{recipe.C} + D×{recipe.D}（启动后锁定）
+          </span>
+          <button
+            className="btn btn-xs btn-outline touch-manipulation shrink-0"
+            style={{ fontSize: '0.62rem' }}
+            onClick={() => refillAll()}
+          >
+            ⊕ 补满四仓（{MAG_CAPACITY}）
+          </button>
+        </div>
+        <div className="mt-1 text-[0.55rem] text-slate-500">
+          空仓时流程会自动闪烁红灯并补满；也可在此手动加药。
         </div>
       </div>
 
@@ -114,11 +130,12 @@ export function DispenseDemoPanel() {
           <span className={`badge ${running ? 'badge-green' : 'badge-slate'}`}>{phaseLabel[autoPhase]}</span>
           <span className="badge badge-blue">轮次 {autoCycle}</span>
           <span className="badge badge-slate">位置 {sliderX.toFixed(2)}m</span>
-          <span className="badge badge-slate">编码器 {encoder}</span>
+          <span className="badge badge-slate">HR{MODBUS_HOLDING_REGISTERS.ENCODER_PULSES} {encoderPulses} 脉冲</span>
+          <span className="badge badge-slate">{encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className={`badge ${sensors.limitStart ? 'badge-green' : 'badge-slate'}`}>起点限位</span>
-          <span className={`badge ${sensors.limitEnd ? 'badge-green' : 'badge-slate'}`}>终点限位</span>
+          <span className={`badge ${sensors.limitStart ? 'badge-green' : 'badge-slate'}`}>原点传感器</span>
+          <span className={`badge ${sensors.limitEnd ? 'badge-green' : 'badge-slate'}`}>终点传感器</span>
           <span className={`badge ${sensors.binHasDrug ? 'badge-yellow' : 'badge-slate'}`}>取药仓有药</span>
           <span className="badge badge-slate">料斗 {hopperPills}</span>
         </div>

@@ -5,26 +5,31 @@
  * 用途：无/未接 PLC 环境下端到端验证自动配药场景"仿真模式"链路
  *   （前端连接面板 → websocket-server 网关 → 本虚拟 PLC → 输出回读驱动 3D）
  *
- * 地址与 packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts 一致（线圈 0-47）：
+ * 地址与 packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts 一致（线圈 0-49）：
  *   0-4   启动/停止/复位/急停/取药确认 —— DT 写入（孪生按钮）
- *   10-15 限位/空仓/取药仓有药          —— DT 写入（孪生模型反馈）
- *   20-27 送药缸×3 前后 + 翻转缸双位磁性开关 —— DT 写入（孪生反馈）
+ *   10-16 限位/空仓/取药仓有药          —— DT 写入（生模型反馈）
+ *   20-29 送药缸×4 前后 + 翻转缸双位磁性开关 —— DT 写入（生反馈）
  *   30-31 电机正/反转                   —— 本程序驱动
- *   32-35 送药缸 A/B/C、翻转缸          —— 本程序驱动
- *   36-38 灯塔 绿/黄/红                 —— 本程序驱动
- *   40-47 编码器位置（8 位二进制，0.01m=1 脉冲）—— DT 写入（孪生编码器反馈）
+ *   32-36 送药缸 A/B/C/D、翻转缸          —— 本程序驱动
+ *   38-40 灯塔 绿/黄/红                 —— 本程序驱动
+ *   42-49 编码器位置（8 位二进制，0.01m=1 脉冲）—— DT 写入（孪生编码器反馈）
+ *   HR120 数据寄存器 ENCODER_PULSES —— 增量式编码器脉冲计数，与 42-49 是同一计数器的两种寻址视图
  *
- * 程序逻辑（参考演示流程，固定配方默认 A2/B1/C1，HTTP /preset 可改）：
+ * 位置闭环：孪生按滑块位移增减寄存器并写 8 位线圈 → 本程序读寄存器得到 curPos
+ *   → 输出电机正/反转 → 孪生滑块移动 → 寄存器继续增减。回到原点传感器时寄存器归零（Z 相）。
+ *   若 1.5s 内没有 DT 反馈（单独运行虚拟PLC、未连前端），自动退回内部积分以便独立演示。
+ *
+ * 程序逻辑（参考演示流程，固定配方默认 A2/B1/C1/D1，HTTP /preset 可改）：
  *   - 启动(0)上升沿 → 按配方逐仓（移动→伸缸→缩缸×份数）→ 终点翻转倒药 → 回起点 → 黄灯等取药
  *   - 取药确认(4)上升沿 → 下一轮
  *   - 停止(1)暂停；急停(3)→全停+红灯，松开复位解除；复位(2)→回起源+清状态
  *
  * 运行：node mock-dispensing-server.js [端口]（默认 1505）
- * 状态：http://127.0.0.1:5085/status | 配方：/preset?A=2&B=1&C=1 | 复位：/reset
+ * 状态：http://127.0.0.1:5085/status | 配方：/preset?A=2&B=1&C=1&D=1 | 复位：/reset
  */
 const ModbusRTU = require('modbus-serial');
 const http = require('http');
-const { DISPENSING_ADDRESSES } = require('./mock-addresses');
+const { DISPENSING_ADDRESSES, DISPENSING_REGISTERS } = require('./mock-addresses');
 
 const PORT = parseInt(process.argv[2] || '1505', 10);
 const HTTP_PORT = 5085;
@@ -35,29 +40,62 @@ const POS_TOL = 4;            // 到位容差（脉冲）
 
 const coils = new Array(64).fill(false);
 const A = DISPENSING_ADDRESSES;
+const R = DISPENSING_REGISTERS;
 
 // 编码器脉冲换算：0.01m = 1 脉冲（与前端 ENCODER_BIT 约定一致）
 const PULSES_PER_M = 100;
-const MAGA_PULSE = Math.round(0.68 * PULSES_PER_M);
-const MAGB_PULSE = Math.round(1.10 * PULSES_PER_M);
-const MAGC_PULSE = Math.round(1.52 * PULSES_PER_M);
+const MAGA_PULSE = Math.round(0.55 * PULSES_PER_M);
+const MAGB_PULSE = Math.round(0.95 * PULSES_PER_M);
+const MAGC_PULSE = Math.round(1.35 * PULSES_PER_M);
+const MAGD_PULSE = Math.round(1.75 * PULSES_PER_M);
 const END_PULSE = Math.round(1.95 * PULSES_PER_M);
 const START_PULSE = Math.round(0.25 * PULSES_PER_M);
 
-let recipe = { A: 2, B: 1, C: 1 };
+let recipe = { A: 2, B: 1, C: 1, D: 1 };
 let mode = 'idle';            // idle | running | stopped
 let curPos = START_PULSE;     // 当前位置（脉冲，从编码器反馈积分）
-let step = 'toA';             // toA | doseA | toB | doseB | toC | doseC | toEnd | tilt | back | waitConfirm
+let step = 'toA';             // toA | doseA | toB | doseB | toC | doseC | toD | doseD | toEnd | tilt | back | waitConfirm
 let stepDeadline = 0;
 let remain = 0;               // 当前仓剩余份数
 let cyc = 0;                  // 轮次
 let prevStart = false, prevStop = false, prevReset = false, prevEStop = false, prevConfirm = false;
 
+// 编码器反馈闭环：1.5s 内有「孪生写入编码器」活动就认为 DT 在线，位置一律以寄存器为准。
+// 这里用写入活动而非数值变化判定：孪生停在药仓配药时寄存器会连续数秒不变，
+// 若按变化判定会误判离线、回退内部积分，导致位置漂移。
+let lastEncoderWriteAt = 0;
+let encoderFromDT = false;
+const ENCODER_FEEDBACK_TIMEOUT = 1500;
+
+function markEncoderFeedback() {
+  lastEncoderWriteAt = Date.now();
+  // 立即刷新在线标志，让 /status 不必等下一个 100ms 扫描周期才反映 DT 已接入
+  encoderFromDT = true;
+}
+
+function syncEncoderFeedback() {
+  encoderFromDT = lastEncoderWriteAt > 0 && Date.now() - lastEncoderWriteAt < ENCODER_FEEDBACK_TIMEOUT;
+  if (encoderFromDT) {
+    // curPos 是 X×100；寄存器是「距原点的脉冲」，故要加上原点绝对脉冲
+    curPos = START_PULSE + readEncoderReg();
+  }
+}
+
+/** 8 位线圈镜像 ↔ 数据寄存器：同一个增量计数器值的两种寻址视图 */
 function readEncoder() {
   let v = 0;
   for (let i = 0; i < 8; i++) if (coils[A['ENCODER_BIT' + i]]) v |= (1 << i);
   return v;
 }
+
+function writeEncoder(v) {
+  const n = Math.min(255, Math.max(0, Math.round(v)));
+  for (let i = 0; i < 8; i++) coils[A['ENCODER_BIT' + i]] = ((n >> i) & 1) === 1;
+  return n;
+}
+
+/** HR120 数据寄存器读数（脉冲，原点=0）：由孪生写入的编码器线圈镜像还原 */
+function readEncoderReg() { return readEncoder(); }
 
 function setLamps(green, yellow, red) {
   coils[A.LAMP_GREEN] = green;
@@ -70,19 +108,21 @@ function motorFwd() { coils[A.MOTOR_FWD] = true; coils[A.MOTOR_REV] = false; }
 function motorRev() { coils[A.MOTOR_REV] = true; coils[A.MOTOR_FWD] = false; }
 function cyOff() {
   coils[A.CYL_SEND_A] = false; coils[A.CYL_SEND_B] = false;
-  coils[A.CYL_SEND_C] = false; coils[A.CYL_TILT] = false;
+  coils[A.CYL_SEND_C] = false; coils[A.CYL_SEND_D] = false;
+  coils[A.CYL_TILT] = false;
 }
 function moveToward(target) {
   const d = target - curPos;
   if (Math.abs(d) <= POS_TOL) { motorOff(); return true; }
   if (d > 0) motorFwd(); else motorRev();
-  // 虚拟 PLC 以 0.32 m/s 积分位置
-  curPos += (d > 0 ? 1 : -1) * Math.round(0.32 * PULSES_PER_M * 0.1);
+  // 有孪生编码器反馈时位置由寄存器决定；仅独立运行（无 DT）才按 0.32 m/s 自积分
+  if (!encoderFromDT) curPos += (d > 0 ? 1 : -1) * Math.round(0.32 * PULSES_PER_M * 0.1);
   return false;
 }
 
 function scan() {
   const now = Date.now();
+  syncEncoderFeedback();
   const start = coils[A.BUTTON_START];
   const stop = coils[A.BUTTON_STOP];
   const reset = coils[A.BUTTON_RESET];
@@ -166,12 +206,27 @@ function scan() {
       if (moveToward(MAGC_PULSE)) { step = 'doseC'; remain = recipe.C; }
       break;
     case 'doseC': {
-      if (remain <= 0) { step = 'toEnd'; break; }
+      if (remain <= 0) { step = 'toD'; remain = recipe.D; break; }
       if (!coils[A.CYL_SEND_C] && now >= stepDeadline) {
         coils[A.CYL_SEND_C] = true;
         stepDeadline = now + CYL_HOLD_MS;
       } else if (coils[A.CYL_SEND_C] && now >= stepDeadline) {
         coils[A.CYL_SEND_C] = false;
+        stepDeadline = now + CYL_OFF_MS;
+        remain--;
+      }
+      break;
+    }
+    case 'toD':
+      if (moveToward(MAGD_PULSE)) { step = 'doseD'; remain = recipe.D; }
+      break;
+    case 'doseD': {
+      if (remain <= 0) { step = 'toEnd'; break; }
+      if (!coils[A.CYL_SEND_D] && now >= stepDeadline) {
+        coils[A.CYL_SEND_D] = true;
+        stepDeadline = now + CYL_HOLD_MS;
+      } else if (coils[A.CYL_SEND_D] && now >= stepDeadline) {
+        coils[A.CYL_SEND_D] = false;
         stepDeadline = now + CYL_OFF_MS;
         remain--;
       }
@@ -214,10 +269,17 @@ setInterval(scan, 100);
 
 const vector = {
   getCoil: (addr) => !!coils[addr],
-  setCoil: (addr, value) => { coils[addr] = !!value; },
+  setCoil: (addr, value) => {
+    coils[addr] = !!value;
+    // 孪生每 300ms 都会把 ENCODER_BIT0-7 写一遍（即使值没变），据此判定 DT 在线
+    if (addr >= A.ENCODER_BIT0 && addr <= A.ENCODER_BIT7) markEncoderFeedback();
+  },
   getDiscreteInput: () => false,
-  getHoldingRegister: () => 0,
-  setRegister: () => {},
+  // HR120：读写增量式编码器数据寄存器，自动同步 8 位线圈镜像
+  getHoldingRegister: (addr) => (addr === R.ENCODER_PULSES ? readEncoderReg() : 0),
+  setRegister: (addr, value) => {
+    if (addr === R.ENCODER_PULSES) { writeEncoder(value); markEncoderFeedback(); }
+  },
 };
 
 const serverTCP = new ModbusRTU.ServerTCP(vector, {
@@ -241,21 +303,38 @@ const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/status') {
     const status = {};
     for (const [name, addr] of Object.entries(A)) status[name] = { addr, value: !!coils[addr] };
-    res.end(JSON.stringify({ success: true, program: { mode, step, remain, cyc, encoder: readEncoder() }, coils: status }));
+    res.end(JSON.stringify({
+      success: true,
+      program: {
+        mode, step, remain, cyc,
+        encoder: readEncoder(),
+        position: curPos,                       // X×100，用于核对寄存器闭环
+        feedback: encoderFromDT ? 'twin' : 'internal',
+      },
+      register: {
+        addr: R.ENCODER_PULSES, name: 'ENCODER_PULSES', value: readEncoderReg(),
+        source: encoderFromDT ? 'twin' : 'internal',
+        feedbackAgeMs: lastEncoderWriteAt ? Date.now() - lastEncoderWriteAt : null,
+      },
+      coils: status,
+    }));
   } else if (url.pathname === '/preset') {
     const a = parseInt(url.searchParams.get('A') || '', 10);
     const b = parseInt(url.searchParams.get('B') || '', 10);
     const c = parseInt(url.searchParams.get('C') || '', 10);
+    const d = parseInt(url.searchParams.get('D') || '', 10);
     recipe = {
       A: Number.isInteger(a) && a >= 0 && a <= 9 ? a : recipe.A,
       B: Number.isInteger(b) && b >= 0 && b <= 9 ? b : recipe.B,
       C: Number.isInteger(c) && c >= 0 && c <= 9 ? c : recipe.C,
+      D: Number.isInteger(d) && d >= 0 && d <= 9 ? d : recipe.D,
     };
     res.end(JSON.stringify({ success: true, recipe }));
   } else if (url.pathname === '/reset') {
     coils.fill(false);
     mode = 'idle'; step = 'toA'; remain = 0; cyc = 0;
     curPos = START_PULSE;
+    lastEncoderWriteAt = 0; encoderFromDT = false;
     prevStart = prevStop = prevReset = prevEStop = prevConfirm = false;
     res.end(JSON.stringify({ success: true }));
   } else {

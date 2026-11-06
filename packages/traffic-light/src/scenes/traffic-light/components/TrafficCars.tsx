@@ -127,6 +127,7 @@ export function TrafficCars() {
   const carsRef = useRef<Car[]>([]);
   const [cars, setCars] = useState<Car[]>([]);
   const spawnTimer = useRef(1.5);
+  const speedStateRef = useRef(new Map<number, number>());
 
   useFrame((_, delta) => {
     const cars = carsRef.current;
@@ -145,7 +146,8 @@ export function TrafficCars() {
     const lamps = useTrafficStore.getState().lamps;
     // 按位置从出口到入口排序，前车先结算（跟随判定依赖前车结果）
     const order = [...cars].sort((a, b) => b.pos - a.pos);
-    const speedState = new Map<number, number>();
+    const speedState = speedStateRef.current;
+    speedState.clear();
 
     for (const c of order) {
       let sp = c.speed;

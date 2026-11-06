@@ -22,13 +22,17 @@
     "paths": {
       "@digital-twin/shared": ["../shared/src"],
       "@digital-twin/shared/*": ["../shared/src/*"],
+      "@digital-twin/platform": ["../platform/src"],
+      "@digital-twin/platform/*": ["../platform/src/*"],
       "@digital-twin/conveyor-sorting": ["../conveyor-sorting/src"],
       "@digital-twin/conveyor-sorting/*": ["../conveyor-sorting/src/*"],
       "@digital-twin/pneumatic-robot": ["../pneumatic-robot/src"],
       "@digital-twin/pneumatic-robot/*": ["../pneumatic-robot/src/*"],
       "@digital-twin/traffic-light": ["../traffic-light/src"],
-      "@digital-twin/traffic-light/*": ["../traffic-light/src/*"]
+      "@digital-twin/traffic-light/*": ["../traffic-light/src/*"],
+      "@digital-twin/auto-dispensing": ["../auto-dispensing/src"],
+      "@digital-twin/auto-dispensing/*": ["../auto-dispensing/src/*"]
     }
   },
-  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src"]
+  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src", "../auto-dispensing/src"]
 }
