@@ -30,6 +30,7 @@ import {
   hopperSideFaceInPivot, hopperCenterInPivot, discBodyInPivot, hopperEccentricity,
 } from './scenes/auto-dispensing/rotaryPivot';
 import { expandHopperStock } from './scenes/auto-dispensing/hopperContents';
+import { HOPPER_PILL_SEAT_GAP } from './scenes/auto-dispensing/hopperPanels';
 
 /**
  * 与 __assembly_check.test.ts 保持同一套源码收集方式：用 Vite 的 ?raw，
@@ -226,9 +227,10 @@ describe('取药料斗放大后的比例与装药容量', () => {
     const outerZ = ((HOPPER_PILL_ROWS - 1) / 2) * HOPPER_PILL_PITCH_Z + PILL_R;
     expect(outerX).toBeLessThanOrEqual(HOPPER_INNER_W / 2);
     expect(outerZ).toBeLessThanOrEqual(HOPPER_INNER_D / 2);
-    const bottomY = -HOPPER.H / 2 + HOPPER.T + PILL_H / 2;
+    const bottomY = -HOPPER.H / 2 + HOPPER.T + HOPPER_PILL_SEAT_GAP + PILL_H / 2;
     const topY = bottomY + (HOPPER_PILL_LAYERS - 1) * PILL_STACK_STEP + PILL_H / 2;
     expect(topY).toBeLessThanOrEqual(HOPPER.H / 2);
+    expect(HOPPER_PILL_SEAT_GAP).toBeGreaterThan(0); // 药片底盖不与底板顶面精确共面
   });
 
   it('斗内可视化用推导容量与来源仓着色，不再写死「最多 4 粒」', () => {

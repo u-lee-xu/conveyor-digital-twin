@@ -21,6 +21,7 @@ import {
   MAGAZINE_X, CYL_FEED_STROKE, FEED_CYL_TIME, CHUTE_RAIL,
   type Vec3, type MagazineId,
 } from './constants';
+import { hopperWallPanels } from './hopperPanels';
 
 const S = SCENE_SCALE;
 
@@ -138,18 +139,13 @@ export interface HopperColliderPart { center: Vec3; half: Vec3 }
  * 斜槽末端高于斗口 0.022m，药片从 -Z 壁上方飞入，不会撞在壁顶。
  */
 export function hopperColliderParts(): HopperColliderPart[] {
-  const { W, H, D, T } = HOPPER;
-  const halfW = W / 2 * S;
-  const halfH = H / 2 * S;
-  const halfD = D / 2 * S;
-  const t = T * S;
-  return [
-    { center: [0, -halfH + t / 2, 0], half: [halfW, t / 2, halfD] },
-    { center: [-(halfW - t / 2), 0, 0], half: [t / 2, halfH, halfD] },
-    { center: [halfW - t / 2, 0, 0], half: [t / 2, halfH, halfD] },
-    { center: [0, 0, -(halfD - t / 2)], half: [halfW - t, halfH, t / 2] },
-    { center: [0, 0, halfD - t / 2], half: [halfW - t, halfH, t / 2] },
-  ];
+  // 与可见板件严格同源：直接缩放 hopperWallPanels() 的榫接尺寸表。
+  // 旧版这里另写了一套「四壁满高 H」的尺寸，导致视觉斗壁与碰撞体差 T/2，
+  // 也让底板中心 / ±Z 壁宽度出现两套口径。
+  return hopperWallPanels().map((p) => ({
+    center: [p.center[0] * S, p.center[1] * S, p.center[2] * S],
+    half: [p.size[0] * S / 2, p.size[1] * S / 2, p.size[2] * S / 2],
+  }));
 }
 
 /**
