@@ -17,13 +17,19 @@ import {
   HOPPER, HOPPER_CENTER_Y, HOPPER_CENTER_Z, HOPPER_LOCAL_Y, HOPPER_LOCAL_Z,
   HOPPER_OPEN_Y, PILL_LAND_Y, CHUTE_RAMP_END_Y, CHUTE_RAMP_END_Z,
   DUMP_MOUTH_X, DUMP_MOUTH_Y, DUMP_MOUTH_Z,
-  SLIDER_TOP_Y, SURFACE_GAP, ASSEMBLY,
+  HOPPER_PIVOT_BASE_H, HOPPER_FOOT_GAP, SLIDER_SIZE,
+  PILL_R, PILL_H, PILL_STACK_STEP, MAG_TUBE_OUTER_R, MAG_CAPACITY,
+  HOPPER_INNER_W, HOPPER_INNER_D, HOPPER_INNER_H,
+  HOPPER_PILL_COLS, HOPPER_PILL_ROWS, HOPPER_PILL_LAYERS, HOPPER_PILL_CAPACITY,
+  HOPPER_PILL_PITCH_X, HOPPER_PILL_PITCH_Z,
+  SLIDER_TOP_Y, SURFACE_GAP, ASSEMBLY, VISUAL,
 } from './scenes/auto-dispensing/constants';
 import {
   PIVOT_LOCAL, HOPPER_SIDE_FACE_LOCAL, HOPPER_AXIAL_OFFSET, DISC_BODY_OFFSET,
   rotaryAngleRad, rotateAboutPivot, pivotInBody,
   hopperSideFaceInPivot, hopperCenterInPivot, discBodyInPivot, hopperEccentricity,
 } from './scenes/auto-dispensing/rotaryPivot';
+import { expandHopperStock } from './scenes/auto-dispensing/hopperContents';
 
 /**
  * 与 __assembly_check.test.ts 保持同一套源码收集方式：用 Vite 的 ?raw，
@@ -35,12 +41,14 @@ const raw = import.meta.glob<string>(
     './scenes/auto-dispensing/components/SliderHopper.tsx',
     './scenes/auto-dispensing/components/Hopper.tsx',
     './scenes/auto-dispensing/rotaryPivot.ts',
+    './scenes/auto-dispensing/hopperContents.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 );
 const sliderSource = raw['./scenes/auto-dispensing/components/SliderHopper.tsx'];
 const hopperSource = raw['./scenes/auto-dispensing/components/Hopper.tsx'];
 const pivotSource = raw['./scenes/auto-dispensing/rotaryPivot.ts'];
+const contentsSource = raw['./scenes/auto-dispensing/hopperContents.ts'];
 
 const ANGLES = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
 const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -150,16 +158,28 @@ describe('源码级约束：单一旋转 group、料斗零额外偏移', () => {
   });
 });
 
-describe('既有功能与对外接口零漂移', () => {
-  it('接药 / 落斗 / 斜槽 / 倒药的世界坐标保持原值', () => {
+describe('接口名与共同旋转基准零漂移；派生量随放大后的几何自洽', () => {
+  it('共同基准高度冻结，接药 / 斜槽 / 落斗 / 倒药坐标随斗高斗深同步让位', () => {
     expect(SLIDER_TOP_Y).toBe(1.1);
+    // 冻结项：放大料斗不改变盘心/斗心高度，同轴基准不漂移
     expect(HOPPER_CENTER_Y).toBeCloseTo(1.1785, 9);
-    expect(HOPPER_CENTER_Z).toBeCloseTo(0.182, 9);
-    expect(HOPPER_OPEN_Y).toBeCloseTo(1.206, 9);
-    expect(PILL_LAND_Y).toBeCloseTo(1.194, 9);
-    expect(CHUTE_RAMP_END_Y).toBeCloseTo(1.228, 9);
-    expect(CHUTE_RAMP_END_Z).toBeCloseTo(0.158, 9);
-    expect(DUMP_MOUTH_Z).toBeCloseTo(0.182, 9);
+    expect(ROTARY_PIVOT_Y).toBeCloseTo(1.1785, 9);
+    expect(ROTARY_PIVOT_LOCAL.Y).toBeCloseTo(0.0785, 9);
+    expect(HOPPER_PIVOT_BASE_H).toBe(0.055); // 冻结的旧斗高，不得随放大改动
+    expect(ROTARY_PIVOT_LOCAL.Y).not.toBe(
+      SLIDER_SIZE[1] / 2 + HOPPER_FOOT_GAP + HOPPER.H / 2,
+    );
+    // 派生项：斗高 +0.020 ⇒ 斗口 / 落点 / 斜槽末端各上移 ΔH/2；斗深 +0.032 ⇒ Z 前移 ΔD/2
+    expect(HOPPER_CENTER_Z).toBeCloseTo(0.198, 9);
+    expect(HOPPER_OPEN_Y).toBeCloseTo(1.216, 9);
+    expect(PILL_LAND_Y).toBeCloseTo(1.204, 9);
+    expect(CHUTE_RAMP_END_Y).toBeCloseTo(1.238, 9);
+    expect(CHUTE_RAMP_END_Z).toBeCloseTo(0.158, 9); // 由基准 Z 决定，与斗深无关
+    expect(DUMP_MOUTH_Z).toBeCloseTo(0.198, 9);
+    // 斜槽末端必须仍高于斗口且在斗口 Z 范围内，否则药片会撞斗壁
+    expect(CHUTE_RAMP_END_Y).toBeGreaterThan(HOPPER_OPEN_Y);
+    expect(CHUTE_RAMP_END_Z).toBeGreaterThan(HOPPER_CENTER_Z - HOPPER.D / 2);
+    expect(CHUTE_RAMP_END_Z).toBeLessThan(HOPPER_CENTER_Z + HOPPER.D / 2);
   });
 
   it('倒药起点仍由同心几何推导，且落在翻转后的斗口上', () => {
@@ -176,5 +196,84 @@ describe('既有功能与对外接口零漂移', () => {
     expect(PIVOT_LOCAL[1]).toBe(0);
     expect(HOPPER_SIDE_FACE_LOCAL[0]).toBe(0);
     expect(HOPPER_SIDE_FACE_LOCAL[1]).toBe(0);
+  });
+});
+
+describe('取药料斗放大后的比例与装药容量', () => {
+  it('不再是「挂在气缸上的小方块」：斗宽 > 1.5 倍料筒外径，且略大于圆盘直径', () => {
+    expect(HOPPER.W / (2 * MAG_TUBE_OUTER_R)).toBeGreaterThan(1.5);
+    expect(HOPPER.W).toBeGreaterThan(2 * ROTARY_DISC.R);
+    expect(HOPPER.W / ROTARY_BODY.W).toBeGreaterThan(0.9);
+    expect(HOPPER_INNER_D - 2 * PILL_R).toBeGreaterThan(0.025); // Z 向净余量 > 25mm（单边 > 12mm）
+  });
+
+  it('内腔能装下多个药品：2 列 × 2 排 × 4 层 = 16 粒，装得下整仓 10 粒', () => {
+    expect(HOPPER_INNER_W).toBeCloseTo(0.088, 9);
+    expect(HOPPER_INNER_D).toBeCloseTo(0.082, 9);
+    expect(HOPPER_INNER_H).toBeCloseTo(0.070, 9);
+    expect(HOPPER_PILL_COLS).toBe(2);
+    expect(HOPPER_PILL_ROWS).toBe(2); // 顶层能同时露出 2×2 共 4 粒
+    expect(HOPPER_PILL_LAYERS).toBe(4);
+    expect(HOPPER_PILL_CAPACITY).toBe(16);
+    expect(HOPPER_PILL_CAPACITY).toBeGreaterThanOrEqual(MAG_CAPACITY);
+    expect(HOPPER_PILL_CAPACITY).toBeGreaterThanOrEqual(5); // 默认配方 A2+B1+C1+D1
+  });
+
+  it('逐粒排布不贴壁、不越出斗口', () => {
+    expect(HOPPER_PILL_PITCH_X).toBeGreaterThanOrEqual(2 * PILL_R);
+    expect(HOPPER_PILL_PITCH_Z).toBeGreaterThanOrEqual(2 * PILL_R);
+    const outerX = ((HOPPER_PILL_COLS - 1) / 2) * HOPPER_PILL_PITCH_X + PILL_R;
+    const outerZ = ((HOPPER_PILL_ROWS - 1) / 2) * HOPPER_PILL_PITCH_Z + PILL_R;
+    expect(outerX).toBeLessThanOrEqual(HOPPER_INNER_W / 2);
+    expect(outerZ).toBeLessThanOrEqual(HOPPER_INNER_D / 2);
+    const bottomY = -HOPPER.H / 2 + HOPPER.T + PILL_H / 2;
+    const topY = bottomY + (HOPPER_PILL_LAYERS - 1) * PILL_STACK_STEP + PILL_H / 2;
+    expect(topY).toBeLessThanOrEqual(HOPPER.H / 2);
+  });
+
+  it('斗内可视化用推导容量与来源仓着色，不再写死「最多 4 粒」', () => {
+    expect(hopperSource).toContain('HOPPER_PILL_CAPACITY');
+    expect(hopperSource).toContain('hopperStock');
+    expect(hopperSource).toContain('VISUAL.PILL_COLOR[byMag[i]]');
+    expect(hopperSource).not.toMatch(/Math\.max\(hopperPills, 0\), 4\)/);
+  });
+});
+
+describe('多种药品在俯视可见的顶层同时可辨（轮转交错展开）', () => {
+  const perLayer = HOPPER_PILL_COLS * HOPPER_PILL_ROWS;
+
+  it('默认一轮 A2+B1+C1+D1：底层 2×2 就凑齐 4 个仓', () => {
+    const seq = expandHopperStock({ A: 2, B: 1, C: 1, D: 1 });
+    expect(seq).toHaveLength(5);
+    expect(seq.slice(0, perLayer)).toEqual(['A', 'B', 'C', 'D']);
+    expect(new Set(seq.slice(0, perLayer).map((m) => VISUAL.PILL_COLOR[m])).size).toBe(4);
+    expect(seq[perLayer]).toBe('A');
+  });
+
+  it('灌满 16 粒：每一层（含顶层）都是四仓各一粒，不再整层同色', () => {
+    const seq = expandHopperStock({ A: 4, B: 4, C: 4, D: 4 });
+    expect(seq).toHaveLength(HOPPER_PILL_CAPACITY);
+    for (let i = 0; i < seq.length; i += perLayer) {
+      expect(new Set(seq.slice(i, i + perLayer)).size).toBe(4);
+    }
+    const topLayer = seq.slice(-perLayer);
+    expect(new Set(topLayer.map((m) => VISUAL.PILL_COLOR[m])).size).toBe(4);
+  });
+
+  it('来源计数守恒，旧式「只写计数」调用仍有 A 色兜底', () => {
+    const stock = { A: 3, B: 0, C: 2, D: 1 };
+    const seq = expandHopperStock(stock);
+    expect(seq).toHaveLength(6);
+    (['A', 'B', 'C', 'D'] as const).forEach((m) => {
+      expect(seq.filter((x) => x === m).length).toBe(stock[m]);
+    });
+    expect(expandHopperStock({ A: 0, B: 0, C: 0, D: 0 }, 3)).toEqual(['A', 'A', 'A']);
+    expect(expandHopperStock({ A: -1, B: 2, C: 0, D: 0 })).toEqual(['B', 'B']);
+  });
+
+  it('源码级：渲染走轮转纯函数，禁止退回按仓分组展开', () => {
+    expect(hopperSource).toContain('expandHopperStock(hopperStock');
+    expect(contentsSource).toContain('for (const m of HOPPER_MAG_IDS)');
+    expect(hopperSource).not.toContain('MAG_IDS.forEach');
   });
 });

@@ -173,32 +173,63 @@ export const MAG_TUBE_TOP_Y = CHUTE_Y + MAG_TUBE_H;
 // 料斗几何中心只在旋转轴方向让位 HOPPER.D/2；绕 Z 旋转时 XY 偏心恒为 0、
 // Z 也不变，因此全程不产生附加平移（见 rotaryPivot.ts 的纯函数证明）。
 //
-// 为保持接药 / 斜槽 / 落斗 / 倒药等既有功能坐标零漂移，以「料斗世界中心」为主基准
-// 反推气缸位姿：HOPPER_CENTER_Y / HOPPER_CENTER_Z 及下游常量数值全部保持不变，
-// 改变的是气缸主体相对滑块的抬高量（盘端面中心上移到斗侧面中心）。
+// 以「共同基准相对滑块的高度」为主基准反推气缸位姿，并用 HOPPER_PIVOT_BASE_H
+// 冻结旧装配链的斗高：放大料斗后盘心 / 斗心高度仍为 1.1785，XY 同轴性不变。
+// 接药 / 斜槽 / 落斗 / 倒药的接口名保持既有不变，数值全部由几何自动推导：
+// 斗高变高 ⇒ 斗口、落点、斜槽末端各上移 ΔH/2；斗深变深 ⇒ 斗心 Z 前移 ΔD/2。
+// 这样既不会被旧尺寸锁死，也不会出现「斗变大但落点还插在斗壁里」的错位。
 // ------------------------------------------------------------
 
 /** 气缸主体尺寸（侧立后，X 宽 × Y 高 × Z 厚） */
 export const ROTARY_BODY = { W: 0.100, H: 0.070, D: 0.024 } as const;
-/** 输出法兰盘（盘面朝 +Z，轴线沿 Z；盘径 ≈ 主体宽度的 78%，与参考件一致） */
-export const ROTARY_DISC = { R: 0.039, TH: 0.008 } as const;
+/** 输出法兰盘（盘面朝 +Z，轴线沿 Z）；盘径略小于放大后的斗宽，形成「斗包住盘」的观感 */
+export const ROTARY_DISC = { R: 0.046, TH: 0.008 } as const;
 /** 气缸贴滑块 +Z 侧面的安装间隙（旧装配链尺寸，用于复现既有料斗基准） */
 export const ROTARY_MOUNT_GAP = 0.004;
 /** 料斗与法兰盘之间连接法兰的可见厚度（沿 Z；不再参与中心定位） */
 export const HOPPER_BRACKET_TH = 0.006;
-/** 取药料斗外形尺寸（X 宽 × Y 高 × Z 深）；开口朝 +Y，内腔可容纳 φ0.04 药片 */
-export const HOPPER = { W: 0.072, H: 0.055, D: 0.060, T: 0.005 } as const;
+/**
+ * 取药料斗外形尺寸（X 宽 × Y 高 × Z 深）；开口朝 +Y。
+ * 按参考实物比例放大到约 1.35 倍：斗宽 W=0.098 已超过料筒外径 0.060 的 1.6 倍，
+ * 也略大于圆盘直径 0.092，不再是「挂在气缸上的小方块」。
+ * 斗深 D=0.092 是特意再放宽的一档：内腔 0.082 足够按药片真实 φ0.040 排 2 排，
+ * 顶层可同时露出 2×2 共 4 粒，装药容量 2 列 × 2 排 × 4 层 = 16 粒（> 单仓 10 粒）。
+ */
+export const HOPPER = { W: 0.098, H: 0.075, D: 0.092, T: 0.005 } as const;
 /** 料斗底部托板的可见厚度（不再参与中心定位） */
 export const HOPPER_FOOT_GAP = 0.006;
+/**
+ * 冻结的「旧装配链斗高」：只用于反推共同旋转基准相对滑块底面的高度。
+ * 放大料斗时**不得**改这个值，否则 HOPPER_CENTER_Y / ROTARY_PIVOT_Y 会漂移，
+ * 接药 / 斜槽 / 落斗 / 倒药的一整套世界坐标都会跟着变。
+ * 斗高变化时料斗绕固定基准对称长高，斗口与斗底各自让开 ΔH/2，同轴性不受影响。
+ */
+export const HOPPER_PIVOT_BASE_H = 0.055;
+
+// ---- 斗内药片容量：由内腔与药片尺寸推导，不再写死「最多显示 4 粒」 ----
+export const HOPPER_INNER_W = HOPPER.W - 2 * HOPPER.T;
+export const HOPPER_INNER_D = HOPPER.D - 2 * HOPPER.T;
+export const HOPPER_INNER_H = HOPPER.H - HOPPER.T;
+/** 平放药片（φ2·PILL_R）在内腔里能排几列 / 几排 / 几层 */
+export const HOPPER_PILL_COLS = Math.floor(HOPPER_INNER_W / (2 * PILL_R));
+export const HOPPER_PILL_ROWS = Math.floor(HOPPER_INNER_D / (2 * PILL_R));
+export const HOPPER_PILL_LAYERS =
+  Math.floor((HOPPER_INNER_H - PILL_H) / PILL_STACK_STEP) + 1;
+/** 斗内几何容量，同时也是斗内可视化最多显示的粒数 */
+export const HOPPER_PILL_CAPACITY =
+  HOPPER_PILL_COLS * HOPPER_PILL_ROWS * HOPPER_PILL_LAYERS;
+/** 逐粒排布节距，全部由内腔尺寸推导，药片不会贴壁或越出斗口 */
+export const HOPPER_PILL_PITCH_X = HOPPER_INNER_W / HOPPER_PILL_COLS;
+export const HOPPER_PILL_PITCH_Z = HOPPER_INNER_D / HOPPER_PILL_ROWS;
 
 /**
  * 共同旋转基准相对「滑块组原点」的位置（沿用既有装配链长度，数值不变）。
- * Y = 滑块半高 + 底部间隙 + 斗半高（即斗中心高度）；
+ * Y = 滑块半高 + 底部间隙 + 冻结的旧斗半高（= 斗中心高度 1.1785，放大料斗也不漂移）；
  * Z = 滑块半深 + 主体半厚 + 安装间隙 + 主体半厚 + 盘半厚 + 盘半厚 + 法兰厚
  *     （即料斗 -Z 侧面外表面所在平面）。
  */
 export const ROTARY_PIVOT_LOCAL = {
-  Y: SLIDER_SIZE[1] / 2 + HOPPER_FOOT_GAP + HOPPER.H / 2,
+  Y: SLIDER_SIZE[1] / 2 + HOPPER_FOOT_GAP + HOPPER_PIVOT_BASE_H / 2,
   Z: SLIDER_SIZE[2] / 2 + ROTARY_BODY.D / 2 + ROTARY_MOUNT_GAP
     + ROTARY_BODY.D / 2 + ROTARY_DISC.TH / 2
     + ROTARY_DISC.TH / 2 + HOPPER_BRACKET_TH,
