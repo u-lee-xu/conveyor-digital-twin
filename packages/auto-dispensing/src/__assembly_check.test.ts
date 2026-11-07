@@ -555,7 +555,7 @@ describe('滚珠丝杆传动比例：几何 / 运动学 / 控制语义', () => {
     expect(PULSES_PER_M).toBe(100);
     expect(ENCODER_PULSES_MAX).toBe(170);
     expect(PULSES_PER_M * (SLIDER_MAX_X - SLIDER_MIN_X)).toBe(ENCODER_PULSES_MAX);
-    // 每转仅 2 个「直线脉冲」，证明 HR120 不能当电机编码器读
+    // 每转仅 2 个「直线脉冲」，证明 32 位 DINT 位置寄存器不能当电机轴编码器读
     expect(PULSES_PER_M * K.LEAD).toBeCloseTo(2, 6);
   });
 

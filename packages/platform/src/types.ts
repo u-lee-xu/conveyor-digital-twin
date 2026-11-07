@@ -58,8 +58,9 @@ export interface DeviceDefinition {
   /** 工作区退出时的设备侧清理（断开连接等） */
   onCleanup?: () => void;
   /**
-   * 观众只读镜像：把广播快照（PLC 变量名→布尔）应用到设备自己的 store，驱动 3D 场景。
+   * 观众只读镜像：把广播快照应用到设备自己的 store，驱动 3D 场景。
+   * 变量值可以是布尔输出线圈，也可以是 32 位 DINT 数值寄存器；
    * 观众端/边缘广播服务不感知设备内部实现，由设备包自包含。
    */
-  applyBroadcast?: (vars: Record<string, boolean>) => void;
+  applyBroadcast?: (vars: Record<string, boolean | number>) => void;
 }

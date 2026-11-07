@@ -3,6 +3,8 @@ import {
   MODBUS_DISPLAY_VARS,
   S7_DISPLAY_VARS,
   MITSUBISHI_DISPLAY_VARS,
+  ENCODER_DINT,
+  ENCODER_REG_LABEL,
 } from './constants';
 
 interface SignalRow {
@@ -66,7 +68,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
     { text: '在「PLC 连接」区域选择协议，填写连接参数，点击连接按钮' },
     { text: '在 PLC 编程软件/仿真器中运行控制程序（或直接操作输出线圈）' },
     { text: '3D 场景中的滑台、气缸、料斗、灯塔会实时响应 PLC 的输出信号' },
-    { text: '原点/终点传感器、磁性开关、空仓等信号实时写回 PLC 输入；位置由数据寄存器 HR120（增量式编码器脉冲）反馈，8 位线圈是它的位镜像' },
+    { text: '原点/终点传感器、磁性开关、空仓等信号实时写回 PLC 输入；位置由一个 32 位 DINT 数据寄存器反馈，不占用任何输入点或线圈' },
     { text: '演示模式内置参考流程，无需 PLC 即可观察完整配药过程' },
   ],
   requirements: [
@@ -76,7 +78,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
     '空仓：空仓传感器置位。演示模式红灯闪烁 1.2s 后自动补满该仓并继续取药；手动/仿真模式不会自愈，需点「⊕ 补满四仓」人工加药。',
     '药仓容量每仓 10 粒；推空后伸缸不再出药。「复位」只回起点清状态，不补药，补药是独立操作。',
     '停止=暂停（位置保持），复位=回起点清状态，急停=立即全停+红灯。',
-    '位置反馈：原点/终点各一个接近开关；数据寄存器 HR120 是增量式编码器脉冲计数（0.01m/脉冲），前进 +、后退 -，回原点传感器时归零。',
+    `位置反馈：原点/终点各一个接近开关；${ENCODER_REG_LABEL} 组成 32 位有符号 DINT（0.01m/脉冲），前进 +、后退 -，回原点传感器时归零，不占输入点。`,
   ],
   notes: [
     {
@@ -85,21 +87,22 @@ export const buildDispensingHelpContent = (): HelpContent => ({
       color: 'blue',
       description: '三种协议连接方式',
       details: [
-        '• ModbusTCP：标准 Modbus TCP 协议，线圈地址 0~49（含编码器 8 位镜像），保持寄存器 HR120 存增量式编码器脉冲',
-        '• Siemens S7：S7-1200/S7-1500/S7-300/S7-400，M 区地址 M0.0~M32.0',
-        '• 三菱 MX Component：FX 系列，GX Simulator 2 直连，X0~X37、Y0~Y8（八进制编号）',
+        '• ModbusTCP：线圈 0~40 只放布尔 IO；位置寄存器 HR120（低 16 位）+ HR121（高 16 位）组成 32 位 DINT，FC03 读 / FC10 一次原子写',
+        '• Siemens S7：S7-1200/1500/300/400，布尔 IO 在 M0.0~M31.1；位置取 M 区 MD120（网关地址 MDI120），按 32 位 DINT 读写',
+        '• 三菱 MX Component：FX 系列经 GX Simulator 2 直连，布尔 IO 用 X0~X31 / Y0~Y11（八进制）；位置只取 D120 低字 + D121 高字，默认不接高速计数器',
       ],
     },
     {
       icon: '📐',
       name: '原点/终点传感器与位置寄存器',
       color: 'green',
-      description: '增量式编码器反馈',
+      description: '32 位 DINT 位置反馈',
       details: [
         '原点、终点各装一个接近开关，滑台进入 ±5mm 窗口即触发（离开用 ±15mm，滞回防抖）。3D 机架上可见开关本体与状态 LED。',
-        '数据寄存器 HR120 / MW120 / D120 存脉冲计数：0.01m = 1 脉冲，行程 0~170；滑台前进递增、后退递减，不是绝对坐标直写。',
+        `${ENCODER_REG_LABEL} 组成 32 位有符号 DINT：0.01m = 1 脉冲，教学量程 0~170；滑台前进递增、后退递减，不是绝对坐标直写。`,
         '增量式编码器没有绝对零点：只有回到原点传感器（Z 相）才把寄存器校准归零。',
-        '8 位线圈 ENCODER_BIT0-7 是该寄存器的位镜像；虚拟 PLC 读寄存器得到位置，再输出电机正/反转，形成闭环。',
+        '真实设备侧：编码器 A/B 相两条线接 X0/X1、由高速计数器 C0 计数，PLC 程序把 C0 当前值映射/缩放到该 DINT 寄存器；数字孪生不绑定物理输入点，也不模拟高速脉冲。',
+        '网关为数值变量单开 read-words / write-words 通道：Modbus 用 FC10 一次写两个字，S7 写 MDI120，三菱写 D120/D121；不会像逐位线圈那样出现撕裂值。',
       ],
     },
     {
@@ -151,17 +154,17 @@ export const buildDispensingHelpContent = (): HelpContent => ({
         title: '输出信号（PLC → 孪生）',
         icon: '📤',
         rows: toRows(OUTPUT_SIGNALS),
-        hint: '按钮、传感器与编码器由孪生实时写入；输出信号由 PLC 程序控制。三菱 FX 系列 X/Y 为八进制编号。ModbusTCP 使用线圈（Coil）地址从 0 开始编号。',
+        hint: '按钮与传感器是布尔量，由孪生实时写入；位置是数值量，走 32 位 DINT 数据寄存器，不占输入点。三菱 X/Y 为八进制编号，Modbus 线圈地址从 0 开始。',
       },
       {
         title: '数据寄存器（孪生 → PLC）',
         icon: '📐',
         rows: [{
-          name: '增量式编码器脉冲计数',
-          addressCells: ['HR120', 'MW120', 'D120'],
-          description: '原点=0，前进 +、后退 -，回原点传感器（Z 相）归零；0.01m/脉冲，量程 0~170。8 位线圈 ENCODER_BIT0-7 为其位镜像。',
+          name: '增量式编码器当前值（DINT32）',
+          addressCells: [ENCODER_DINT.MODBUS_LABEL, ENCODER_DINT.S7_LABEL, ENCODER_DINT.MITSUBISHI_LABEL],
+          description: '32 位有符号整数，低字在前。原点=0，前进 +、后退 -，回原点传感器（Z 相）归零；0.01m/脉冲，教学量程 0~170。不占用线圈或 X 输入点。',
         }],
-        hint: '保持寄存器是数值量，线圈表只放布尔量；虚拟 PLC 以该寄存器作为位置反馈，独立运行时自动退回内部积分。',
+        hint: 'A/B 相接线与高速计数器 C0 由 PLC 程序负责；三菱侧默认不使用高速计数器，只取 D 寄存器。虚拟 PLC 以该 DINT 作为位置闭环真值，独立运行时自动退回内部积分。',
       },
     ],
   },

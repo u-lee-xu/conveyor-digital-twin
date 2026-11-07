@@ -1024,8 +1024,8 @@ export const VISUAL = {
 // 与 websocket-server/mock-addresses.js 的 DISPENSING_* 组保持一致（node mock-addresses.js --check 校验）
 // 约定：地址 0-9  物理按钮输入
 //       地址 10-29 传感器/磁性开关输入
-//       地址 30-39 电机/气缸/灯塔输出（可写）
-//       寄存器 100+ 编码器位置
+//       地址 30-40 电机/气缸/灯塔输出（可写）
+//       位置只走 32 位 DINT 数据寄存器（ENCODER_DINT），不占任何线圈 / 输入点
 
 export const MODBUS_READ_VARS = {
   // —— 输入：按钮（0-4）——
@@ -1066,15 +1066,6 @@ export const MODBUS_READ_VARS = {
   LAMP_GREEN: 38,
   LAMP_YELLOW: 39,
   LAMP_RED: 40,
-  // —— 编码器位置（8 位二进制，孪生→PLC 输入，0.01m=1 脉冲）——
-  ENCODER_BIT0: 42,
-  ENCODER_BIT1: 43,
-  ENCODER_BIT2: 44,
-  ENCODER_BIT3: 45,
-  ENCODER_BIT4: 46,
-  ENCODER_BIT5: 47,
-  ENCODER_BIT6: 48,
-  ENCODER_BIT7: 49,
 } as const;
 
 export type DispensingVarName = keyof typeof MODBUS_READ_VARS;
@@ -1083,10 +1074,32 @@ export type DispensingVarName = keyof typeof MODBUS_READ_VARS;
  * 保持寄存器（数据寄存器）地址表 —— 与 websocket-server/mock-addresses.js 的
  * DISPENSING_REGISTERS 互为单一来源，由 `node mock-addresses.js --check` 校验。
  * 线圈表 MODBUS_READ_VARS 只放布尔量；数值型寄存器另立一块，避免地址语义混淆。
+ * ENCODER_PULSES 是 32 位 DINT 的起始寄存器（低字），高字在 +1。
  */
 export const MODBUS_HOLDING_REGISTERS = {
-  /** 增量式编码器脉冲计数（原点=0，前进 +、后退 -，回原点传感器时归零） */
+  /** 增量式编码器脉冲计数（32 位 DINT 起始地址；原点=0，前进 +、后退 -，回原点归零） */
   ENCODER_PULSES: 120,
+} as const;
+
+/**
+ * 位置数据寄存器：一个 32 位有符号 DINT，三协议统一口径。
+ * 与 websocket-server/mock-addresses.js 的 DISPENSING_WORDS 互为单一来源。
+ * 物理 A/B 相接 X0/X1、高速计数器 C0 的映射由 PLC 程序负责，孪生不绑定输入点；
+ * 三菱侧默认不接高速计数器，只取 D 寄存器数值；S7 同理取 MD120 的 DINT。
+ */
+export const ENCODER_DINT = {
+  TYPE: 'DINT32',
+  WORD_ORDER: 'low-first',
+  WORDS: 2,
+  /** Modbus 保持寄存器：HR120 低 16 位 / HR121 高 16 位，FC03 读、FC10 一次原子写 */
+  MODBUS_ADDRESS: 120,
+  MODBUS_LABEL: 'HR120 · HR121',
+  /** nodes7 的 M 区 32 位 DINT 地址；用户在博图里看到的是 MD120 */
+  S7_ADDRESS: 'MDI120',
+  S7_LABEL: 'MD120',
+  /** 三菱 D 寄存器：D120 低 16 位 / D121 高 16 位 */
+  MITSUBISHI_ADDRESS: 'D120',
+  MITSUBISHI_LABEL: 'D120 · D121',
 } as const;
 
 // ----- S7（M 区） -----
@@ -1118,14 +1131,6 @@ export const S7_VARS = {
   LAMP_GREEN: 'M30.7',
   LAMP_YELLOW: 'M31.0',
   LAMP_RED: 'M31.1',
-  ENCODER_BIT0: 'M31.2',
-  ENCODER_BIT1: 'M31.3',
-  ENCODER_BIT2: 'M31.4',
-  ENCODER_BIT3: 'M31.5',
-  ENCODER_BIT4: 'M31.6',
-  ENCODER_BIT5: 'M31.7',
-  ENCODER_BIT6: 'M32.0',
-  ENCODER_BIT7: 'M32.1',
 } as const;
 
 // ----- 三菱（X/Y） -----
@@ -1147,8 +1152,6 @@ export const MITSUBISHI_READ_VARS = {
   MSC_C_BACK: 'X24', MSC_C_FRONT: 'X25',
   MSC_D_BACK: 'X26', MSC_D_FRONT: 'X27',
   MSC_TILT_HOLD: 'X30', MSC_TILT_DUMP: 'X31',
-  ENCODER_BIT0: 'X40', ENCODER_BIT1: 'X41', ENCODER_BIT2: 'X42', ENCODER_BIT3: 'X43',
-  ENCODER_BIT4: 'X44', ENCODER_BIT5: 'X45', ENCODER_BIT6: 'X46', ENCODER_BIT7: 'X47',
 } as const;
 export const MITSUBISHI_WRITE_VARS = {
   MOTOR_FWD: 'Y0',
@@ -1176,20 +1179,24 @@ export const MITSUBISHI_DISPLAY_VARS = { ...MITSUBISHI_READ_VARS, ...MITSUBISHI_
 
 export const RECIPE_LIMIT = 9; // 每仓 0~9 份
 
-/** 编码器脉冲换算：0.01m = 1 脉冲（与 mock PLC 一致） */
+/**
+ * 编码器脉冲换算：0.01m = 1 脉冲（与 mock PLC 一致）。
+ * 这是孪生输出的「标尺脉冲」教学口径；真实编码器 A/B 相 → C0 的脉冲当量
+ * 与 32 位 DINT 缩放由 PLC 程序负责，孪生只提供等效计数器当前值。
+ */
 export const PULSES_PER_M = 100;
 
 // ============================================================
-// 位置反馈：原点/终点接近开关 + 增量式编码器数据寄存器
+// 位置反馈：原点/终点接近开关 + 32 位 DINT 位置寄存器
 // ============================================================
 
 /** 传感器触发窗口（m）：进入 ON 与离开 OFF 用不同阈值做滞回，避免边界抖动闪烁 */
 export const LIMIT_ENTER_TOL = 0.005;
 export const LIMIT_EXIT_TOL = 0.015;
-/** 行程最大脉冲：原点寄存器 = 0，终点寄存器 = 该值（170，落在 8 位镜像范围内） */
+/** 行程最大脉冲：原点 = 0，终点 = 该值（170）；32 位 DINT 为真机原始计数值留足余量 */
 export const ENCODER_PULSES_MAX = Math.round((SLIDER_MAX_X - SLIDER_MIN_X) * PULSES_PER_M);
-/** 增量式编码器数据寄存器在各协议中的显示地址 */
-export const ENCODER_REG_LABEL = 'HR120 · MW120 · D120';
+/** 32 位 DINT 位置寄存器在各协议中的显示地址 */
+export const ENCODER_REG_LABEL = 'HR120·HR121 / MD120 / D120·D121';
 
 /**
  * 原点 / 终点接近开关（局部坐标，装在机架部件上）。
@@ -1226,11 +1233,5 @@ export const SENSOR_WORLD = {
   ORIGIN: [ASSEMBLY.frame.position[0] + SENSOR.ORIGIN_X, SENSOR.Y, SENSOR.Z] as Vec3,
   END: [ASSEMBLY.frame.position[0] + SENSOR.END_X, SENSOR.Y, SENSOR.Z] as Vec3,
 } as const;
-
-/** 由寄存器脉冲值派生 8 位线圈镜像（ENCODER_BIT0..7），保证寄存器是唯一真值 */
-export function encoderMirrorBits(pulses: number): boolean[] {
-  const p = Math.min(255, Math.max(0, Math.round(pulses)));
-  return Array.from({ length: 8 }, (_, i) => ((p >> i) & 1) === 1);
-}
 
 export const MAGAZINE_LABELS: Record<MagazineId, string> = { A: 'A 药', B: 'B 药', C: 'C 药', D: 'D 药' };

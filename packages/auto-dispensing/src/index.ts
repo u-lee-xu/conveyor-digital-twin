@@ -39,18 +39,19 @@ function stopAndDisconnect() {
 
 /**
  * 观众只读镜像：把 8082 广播快照写回设备 store。
- * 观众端不挂载 effects（无演示循环），8 位编码器线圈还原成增量式寄存器脉冲数，
- * 由 setEncoderPulses 同源对齐滑块位置、寄存器读数与两个位置传感器；
- * 其余执行器/灯塔按 PLC 输出变量直接置位。
+ * 观众端不挂载 effects（无演示循环）；位置直接取广播里的 32 位 DINT 数值
+ * ENCODER_PULSES，由 setEncoderPulses 同源对齐滑块位置、寄存器读数与两个位置传感器；
+ * 不再从 8 位线圈重建，也不占用任何输入点。其余执行器/灯塔按 PLC 输出变量直接置位。
  */
-function applyBroadcast(v: Record<string, boolean>) {
+function applyBroadcast(v: Record<string, boolean | number>) {
   const s = useDispensingStore.getState();
 
-  let pulses = 0;
-  for (let i = 0; i < 8; i += 1) {
-    if (v[`ENCODER_BIT${i}`]) pulses |= 1 << i;
+  // 快照缺少位置字段时（例如 read-words 读取失败）保留上一次位置，
+  // 不能把 undefined/NaN 当作 0 写回，否则观众端滑台会被误拉回原点。
+  const encoderValue = v['ENCODER_PULSES'];
+  if (typeof encoderValue === 'number' && Number.isFinite(encoderValue)) {
+    s.setEncoderPulses(encoderValue);
   }
-  s.setEncoderPulses(pulses);
   s.setMotor(!!v['MOTOR_FWD'], !!v['MOTOR_REV']);
 
   (['A', 'B', 'C', 'D'] as MagazineId[]).forEach((mag) => {

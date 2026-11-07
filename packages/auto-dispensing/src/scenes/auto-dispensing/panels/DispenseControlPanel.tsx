@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  SLIDER_MIN_X, SLIDER_MAX_X, MODBUS_HOLDING_REGISTERS, MAG_CAPACITY, MANUAL_JOG,
+  SLIDER_MIN_X, SLIDER_MAX_X, MAG_CAPACITY, MANUAL_JOG,
   type MagazineId,
 } from '../constants';
 import {
-  MANUAL_OUTPUT_POINTS, MANUAL_IO_SUMMARY, outputPointLevel,
+  MANUAL_OUTPUT_POINTS, MANUAL_IO_SUMMARY, ENCODER_REGISTER_INFO, outputPointLevel,
   type IoPoint, type OutputSnapshot,
 } from '../manualIo';
 import { DispenseStatusPanel } from './DispenseStatusPanel';
@@ -24,7 +24,7 @@ import { DispenseStatusPanel } from './DispenseStatusPanel';
  *
  * 点动改造：前进/后退原来「按住 = 0.32m/s 连续走」，轻点一次就走几十毫米，
  * 料斗很难对准药仓斜槽。现在单击只发一个 MANUAL_JOG.STEP 离散脉冲（10mm /
- * 1 个 HR120 脉冲），长按超过 HOLD_MS 才转连续点动；Y0/Y1 线圈置位语义保留。
+ * 1 个 32 位 DINT 位置脉冲），长按超过 HOLD_MS 才转连续点动；Y0/Y1 线圈置位语义保留。
  */
 type JogDir = 1 | -1;
 interface JogState {
@@ -142,8 +142,8 @@ export function DispenseControlPanel() {
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1">
           <span className="badge badge-blue">X {sliderX.toFixed(3)} m</span>
-          <span className="badge badge-blue">
-            HR{MODBUS_HOLDING_REGISTERS.ENCODER_PULSES} {encoderPulses}
+          <span className="badge badge-blue" title={ENCODER_REGISTER_INFO.address}>
+            {ENCODER_REGISTER_INFO.type} {encoderPulses}
           </span>
           <span className="badge badge-slate">
             {encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}

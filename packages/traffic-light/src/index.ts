@@ -50,7 +50,7 @@ export const trafficLightDevice: DeviceDefinition = {
   },
   onCleanup: disconnectIfNeeded,
   /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useTrafficStore 灯状态 */
-  applyBroadcast: (v: Record<string, boolean>) => {
+  applyBroadcast: (v: Record<string, boolean | number>) => {
     useTrafficStore.getState().setLamps({
       ew_green: !!v['LIGHT_EW_GREEN'],
       ew_yellow: !!v['LIGHT_EW_YELLOW'],

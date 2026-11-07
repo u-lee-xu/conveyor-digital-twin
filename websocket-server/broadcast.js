@@ -129,6 +129,8 @@ class Broadcaster {
       slot: dev.slot || 1,
       // 场景自带变量表时下发给网关（缺省沿用网关内置表，兼容已有设备）
       ...(dev.variables ? { variables: dev.variables } : {}),
+      // 32 位 DINT 数值变量表：与布尔变量表分开发，旧设备不给就是空表
+      ...(dev.words ? { wordVariables: dev.words } : {}),
     });
     this.connected = res.success;
     console.log(`[broadcast] 设备 ${this.deviceId} PLC连接 ${res.success ? '成功' : '失败'}: ${res.error || ''}`);
@@ -145,10 +147,17 @@ class Broadcaster {
       try {
         const dev = this.device;
         const varsRes = await bridgeRequest(this.bridge, { type: 'read-vars', names: dev.vars });
+        // 位置等 32 位 DINT 数值走独立通道；旧设备没有 wordVars 时直接给空表
+        const wordsRes = (dev.wordVars && dev.wordVars.length)
+          ? await bridgeRequest(this.bridge, { type: 'read-words', names: dev.wordVars })
+          : { success: true, values: {} };
         const statusRes = await bridgeRequest(this.bridge, { type: 'get-status' });
         this.broadcastSnapshot({
-          vars: varsRes.success ? (varsRes.values || {}) : {},
-          error: varsRes.success ? undefined : varsRes.error,
+          vars: {
+            ...(varsRes.success ? (varsRes.values || {}) : {}),
+            ...(wordsRes.success ? (wordsRes.values || {}) : {}),
+          },
+          error: !varsRes.success ? varsRes.error : (wordsRes.success ? undefined : wordsRes.error),
           protocol: statusRes.protocol || dev.protocol,
         });
       } catch (err) {

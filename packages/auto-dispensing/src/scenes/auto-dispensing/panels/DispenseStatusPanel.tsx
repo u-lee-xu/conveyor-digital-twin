@@ -1,6 +1,6 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY, IO_GROUP_TITLES,
+  MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY, IO_GROUP_TITLES, ENCODER_REGISTER_INFO,
   inputPointLevel, type IoPoint, type IoGroup,
 } from '../manualIo';
 
@@ -8,8 +8,9 @@ import {
  * 输入点（X）传感器状态。
  *
  * 紧凑化改造：地址不再只放在 title 里靠鼠标悬停，而是每点都可见；
- * 按组排成三列 LED 网格，30 个输入点压进一屏，不再需要为看传感器状态
+ * 按组排成三列 LED 网格，22 个输入点压进一屏，不再需要为看传感器状态
  * 一路滚动。电平由 manualIo.inputPointLevel() 纯函数读取，与地址表同源。
+ * 位置改由单独的 32 位 DINT 数值行显示，不再拆成 8 个「编码器位」输入点。
  */
 function InputLed({ point, on }: { point: IoPoint; on: boolean }) {
   return (
@@ -58,8 +59,12 @@ export function DispenseStatusPanel() {
           </div>
         </div>
       ))}
-      {/* 手动模式不跑自动流程，流程状态恒 idle / 轮次 0，不再占位；只留料斗与取药仓计数 */}
+      {/* 位置寄存器是数值不是输入点；料斗/取药仓计数顺带一行显示 */}
       <div className="mt-1 flex flex-wrap items-center gap-1">
+        <span className="badge badge-blue" title={ENCODER_REGISTER_INFO.address}>
+          {ENCODER_REGISTER_INFO.type} {encoderPulses}
+        </span>
+        <span className="badge badge-slate">{ENCODER_REGISTER_INFO.address}</span>
         <span className="badge badge-slate">料斗 {hopperPills}</span>
         <span className="badge badge-slate">仓内 {binCount}</span>
       </div>

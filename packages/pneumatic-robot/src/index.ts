@@ -50,7 +50,7 @@ export const pneumaticDevice: DeviceDefinition = {
   },
   onCleanup: disconnectIfNeeded,
   /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useRobotStore（单电控跟随 + 指示灯） */
-  applyBroadcast: (v: Record<string, boolean>) => {
+  applyBroadcast: (v: Record<string, boolean | number>) => {
     const store = useRobotStore.getState();
     store.setCylinder('forward', !!v['SOLENOID_FORWARD_EXTEND']);
     store.setCylinder('lift', !!v['SOLENOID_LIFT_EXTEND']);

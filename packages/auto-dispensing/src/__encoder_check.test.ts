@@ -3,28 +3,37 @@
  *
  * 语义约定：
  *   - 两个接近开关在行程两端（进入 ±5mm 触发、离开 ±15mm 才复位，滞回防抖）；
- *   - 数据寄存器 HR120 是**增量式**计数器：只按每次位移的脉冲增量累加，
- *     前进 +、后退 -，绝不直接写绝对坐标；
+ *   - 位置数据寄存器是**32 位有符号 DINT**，也是**增量式**计数器：只按每次位移的
+ *     脉冲增量累加，前进 +、后退 -，绝不直接写绝对坐标；
  *   - 增量式编码器没有绝对零点，只有回到原点传感器（Z 相）才校准归零；
- *   - 8 位线圈 ENCODER_BIT0-7 只是该寄存器的位镜像，不是第二套真值。
+ *   - 位置不占任何线圈 / 输入点；A/B 相接 X0/X1 与高速计数器 C0 由 PLC 程序负责。
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useDispensingStore } from './stores/useDispensingStore';
 import {
   SLIDER_MIN_X, SLIDER_MAX_X, PULSES_PER_M, ENCODER_PULSES_MAX,
-  LIMIT_ENTER_TOL, LIMIT_EXIT_TOL, MODBUS_HOLDING_REGISTERS,
-  encoderMirrorBits,
+  LIMIT_ENTER_TOL, LIMIT_EXIT_TOL, MODBUS_HOLDING_REGISTERS, ENCODER_DINT,
 } from './scenes/auto-dispensing/constants';
+import {
+  splitDint32, joinDint32, DINT_TEST_VECTORS,
+} from './scenes/auto-dispensing/encoderDint';
 
 const s = () => useDispensingStore.getState();
 
 beforeEach(() => { s().resetAll(); });
 
 describe('位置反馈：传感器与寄存器地址', () => {
-  it('寄存器地址、行程上限与 8 位镜像容量闭合', () => {
+  it('寄存器地址、行程上限与 32 位 DINT 口径闭合', () => {
     expect(MODBUS_HOLDING_REGISTERS.ENCODER_PULSES).toBe(120);
+    expect(ENCODER_DINT.MODBUS_ADDRESS).toBe(MODBUS_HOLDING_REGISTERS.ENCODER_PULSES);
+    expect(ENCODER_DINT.TYPE).toBe('DINT32');
+    expect(ENCODER_DINT.WORDS).toBe(2);
+    expect(ENCODER_DINT.WORD_ORDER).toBe('low-first');
+    expect(ENCODER_DINT.S7_ADDRESS).toBe('MDI120');
+    expect(ENCODER_DINT.MITSUBISHI_ADDRESS).toBe('D120');
     expect(ENCODER_PULSES_MAX).toBe(Math.round((SLIDER_MAX_X - SLIDER_MIN_X) * PULSES_PER_M));
-    expect(ENCODER_PULSES_MAX).toBeLessThanOrEqual(255); // 8 位线圈镜像放得下
+    // 32 位 DINT 可容纳真实高速计数器原始值，不再受 8 位镜像的 255 限制
+    expect(ENCODER_PULSES_MAX).toBeLessThan(2 ** 31);
     expect(LIMIT_ENTER_TOL).toBeLessThan(LIMIT_EXIT_TOL);
   });
 
@@ -104,14 +113,17 @@ describe('两个位置传感器', () => {
 });
 
 describe('寄存器是唯一真值', () => {
-  it('8 位线圈镜像严格等于寄存器低 8 位', () => {
+  it('一个 32 位 DINT 值拆成两个字后能无损合并（含负数与边界）', () => {
+    DINT_TEST_VECTORS.forEach(({ value, words }) => {
+      expect(splitDint32(value)).toEqual(words);
+      expect(joinDint32(words[0], words[1])).toBe(value);
+    });
+  });
+
+  it('教学量程内寄存器值同源对齐滑块与两个传感器', () => {
     [0, 1, 55, 170, ENCODER_PULSES_MAX].forEach((p) => {
       s().setEncoderPulses(p);
-      const bits = encoderMirrorBits(s().encoderPulses);
-      let decoded = 0;
-      bits.forEach((b, i) => { if (b) decoded |= 1 << i; });
-      expect(bits).toHaveLength(8);
-      expect(decoded).toBe(p);
+      expect(s().encoderPulses).toBe(p);
       expect(s().sliderX).toBeCloseTo(SLIDER_MIN_X + p / PULSES_PER_M, 6);
     });
   });
