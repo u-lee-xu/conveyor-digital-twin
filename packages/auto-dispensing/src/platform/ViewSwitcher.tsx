@@ -3,7 +3,7 @@ import { useAppStore } from '../stores/useAppStore';
 import { VIEW_PRESETS, PART_STAGES } from '../scenes/auto-dispensing/constants';
 
 /** 界面上可见的机位按钮（current 是旧机位对照，不占正式入口） */
-const VIEW_BUTTONS = ['overview', 'origin', 'top', 'drive', 'feed', 'dump'];
+const VIEW_BUTTONS = ['overview', 'origin', 'top', 'drive', 'feed', 'dump', 'shaftEnd'];
 
 const card: CSSProperties = {
   background: 'rgba(15,23,42,0.86)', border: '1px solid #475569', borderRadius: 10,

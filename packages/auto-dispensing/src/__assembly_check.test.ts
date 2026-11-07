@@ -24,6 +24,7 @@ import {
   COLLECT_BIN_X, BIN_BASE_Y, BIN_TOP_Y, DUMP_LAND_Y,
   CABINET_POSITION, CABINET_SIZE, CABINET_PANEL, CABINET_BUTTONS, CABINET_LAMPS,
   CABINET_LAMP_Y, CABINET_SELECTOR, VISUAL, FRAME_DETAIL, DRIVE_STATIONS, SLIDER_DETAIL,
+  SHAFT_END_ENCODER, ENCODER_STATIONS, MODBUS_READ_VARS, MODBUS_HOLDING_REGISTERS,
   VIEW_PRESETS, MIRROR_VIEW_SHIFT, MIRROR_LOCAL_VIEW_SHIFT,
   SCREW_DETAIL, AXIS_R, PULSES_PER_M, ENCODER_PULSES_PER_REV, ENCODER_PULSES_MAX,
   LIGHT_TOWER_X, LIGHT_POLE_H, LIGHT_POLE_Y, LIGHT_DOME_R, LIGHT_DOME_STEP,
@@ -398,7 +399,7 @@ describe('控制柜面板：按钮盒几何与配色层次', () => {
 
 // ============================================================
 // 丝杆滑台拟真：新增的都是表面细节，用尺寸/位置关系把「零漂移」量化，
-// 保证伺服电机、四滑块、滚珠螺母、拖链槽不会偷偷改掉装配接口或碰撞体。
+// 保证正反转电机、四滑块、滚珠螺母、拖链槽不会偷偷改掉装配接口或碰撞体。
 // ============================================================
 const F = FRAME_DETAIL;
 const S = SLIDER_DETAIL;
@@ -414,14 +415,14 @@ describe('滚珠丝杆直线模组：拟真细节与装配接口零漂移', () =
     expect(F.RAIL_GROOVE_W).toBeGreaterThan(0);
   });
 
-  it('伺服电机与梅花联轴器在固定端轴承座外侧，且不侵入灯塔/控制柜', () => {
+  it('正反转电机与梅花联轴器在固定端轴承座外侧，且不侵入灯塔/控制柜', () => {
     const bearingHalf = 0.08 / 2; // BearingHousing 的筒体长度
     expect(F.COUPLING_X + F.COUPLING_LEN / 2).toBeLessThan(-bearingHalf);
     expect(F.COUPLING_X - F.COUPLING_LEN / 2)
       .toBeGreaterThan(F.MOTOR_FLANGE_X + F.MOTOR_FLANGE_T / 2);
     expect(F.MOTOR_X0).toBeLessThan(F.MOTOR_FLANGE_X);
     expect(F.COUPLING_JAW_R).toBeGreaterThan(F.COUPLING_R);
-    expect(F.MOTOR_MIN_X).toBeCloseTo(F.MOTOR_X0 - F.MOTOR_BODY_LEN - F.ENCODER_LEN, 6);
+    expect(F.MOTOR_MIN_X).toBeCloseTo(F.MOTOR_X0 - F.MOTOR_BODY_LEN - F.MOTOR_FAN_LEN, 6);
     // 联轴器必须填满「电机法兰 ↔ 轴承座」整段间隙，近景里才不会被电机本体挡住
     expect(F.COUPLING_LEN).toBeGreaterThan(0.04);
     expect(F.COUPLING_X + F.COUPLING_LEN / 2).toBeCloseTo(-bearingHalf - 0.004, 6);
@@ -550,21 +551,28 @@ describe('输出法兰盘不再穿进料斗（近景穿模防回退）', () => {
 });
 
 // ============================================================
-// 2026-11-07 驱动端重写：按真实滚珠丝杆直线模组的安装链与外观建模。
+// 2026-11-08 设备口径修正：普通正反转电机 + 轴末端独立增量编码器。
+// 需求原文「增量式编码器，安装于轴末端」「终点限位 + 翻转位 + 编码器同侧」。
+// 上一轮误按伺服电机建模（尾部集成编码器 + LREAL velocity 语义），本组断言
+// 同时锁住「编码器在 +X 末端」与「控制信号只有布尔正反转」两条防回退约束。
 // ============================================================
-describe('驱动端真实安装链：编码器 / 电机 / 支架 / 联轴器 / 方形支撑单元', () => {
+describe('驱动端口径：普通正反转电机 + 轴末端独立增量编码器', () => {
   const F = FRAME_DETAIL;
   const ST = DRIVE_STATIONS;
+  const E = SHAFT_END_ENCODER;
+  const ES = ENCODER_STATIONS;
   const frame = componentSources['./scenes/auto-dispensing/components/MachineFrame.tsx'];
 
-  it('轴向站位首尾相接：编码器 ↔ 机身 ↔ 法兰 ↔ 罩 ↔ 支撑单元无空隙', () => {
-    expect(ST.ENCODER_MAX).toBeCloseTo(ST.BODY_MIN, 9);
+  it('电机侧轴向站位首尾相接：风扇罩 ↔ 机身 ↔ 法兰 ↔ 罩 ↔ 支撑单元无空隙', () => {
+    expect(ST.FAN_MAX).toBeCloseTo(ST.BODY_MIN, 9);
     expect(ST.BODY_MAX).toBeCloseTo(ST.FLANGE_MIN, 9);
     expect(ST.FLANGE_MAX).toBeCloseTo(ST.GUARD_MIN, 9);
     expect(ST.GUARD_MAX).toBeCloseTo(ST.SUPPORT_MIN, 9);
     expect(ST.SUPPORT_MIN).toBeLessThan(ST.SUPPORT_MAX);
     expect(ST.COUPLING_MIN).toBeGreaterThan(ST.GUARD_MIN);
     expect(ST.COUPLING_MAX).toBeLessThan(ST.GUARD_MAX);
+    expect(ST).not.toHaveProperty('ENCODER_MIN');
+    expect(ST).not.toHaveProperty('ENCODER_MAX');
   });
 
   it('三段式梅花联轴器：两铝毂 + 中间六瓣弹性体，互不重叠且填满总长', () => {
@@ -601,30 +609,74 @@ describe('驱动端真实安装链：编码器 / 电机 / 支架 / 联轴器 / �
     expect(frame).toContain('SUPPORT_RING_R');
   });
 
-  it('编码器是电机尾部集成后罩：与机身同轴相接，线缆径向外伸不越出 MOTOR_MIN_X', () => {
-    expect(F.ENCODER_LEN).toBeGreaterThan(0);
-    expect(ST.ENCODER_MIN).toBeCloseTo(F.MOTOR_MIN_X, 9);
-    expect(F.ENCODER_CONN_Z).toBeGreaterThan(F.ENCODER_R);
-    expect(frame).toContain('ENCODER_CONN_Z');
-    expect(frame).toContain('materials.encoderCap');
+  it('增量编码器独立装在 +X 丝杆末端，不在电机侧', () => {
+    expect(E.BEARING_FACE_X).toBeGreaterThan(FRAME_LEN);
+    expect(ES.SHAFT_MIN).toBeGreaterThan(FRAME_LEN);
+    expect(ES.BODY_MIN).toBeGreaterThan(ES.SHAFT_MAX);
+    expect(ES.BODY_MAX).toBeGreaterThan(ES.BODY_MIN);
+    expect(ES.CABLE_MAX).toBeLessThan(FRAME_LEN + FRAME.BASE_PAD / 2);
+    expect(ST.FAN_MIN).toBeLessThan(0);
+    expect(frame).toContain('ShaftEndEncoder');
+    expect(frame).toContain('EncoderRotatingParts');
+    expect(frame).not.toContain('materials.encoderCap');
   });
 
-  it('散热筋与机身同色系，不再是「黑底 + 亮银异色条纹」斑马外观', () => {
+  it('编码器安装链首尾相接，本体静止、轴与弹性联轴器随丝杆转', () => {
+    expect(ES.SHAFT_MAX).toBeCloseTo(ES.COUPLING_MIN, 9);
+    expect(ES.COUPLING_MAX).toBeCloseTo(ES.FLANGE_MIN, 9);
+    expect(ES.FLANGE_MAX).toBeCloseTo(ES.BODY_MIN, 9);
+    expect(E.FLANGE_R).toBeGreaterThan(E.BODY_R);
+    expect(E.SPIDER_R).toBeGreaterThan(E.COUPLING_R);
+    const rotIdx = frame.indexOf('<EncoderRotatingParts />');
+    const rotGroupEnd = frame.indexOf('</group>', rotIdx);
+    expect(rotIdx).toBeGreaterThan(-1);
+    expect(rotGroupEnd).toBeGreaterThan(rotIdx);
+    expect(frame.indexOf('<ShaftEndEncoder />')).toBeGreaterThan(rotGroupEnd);
+  });
+
+  it('普通异步电机外形：风扇罩 / 接线盒 / 底脚 / 环向散热筋，无伺服后罩与止口', () => {
+    expect(F.MOTOR_FAN_LEN).toBeGreaterThan(0);
+    expect(F.FAN_VENT_N).toBeGreaterThanOrEqual(6);
+    expect(F.TERMINAL_BOX_W).toBeGreaterThan(0);
+    expect(F).not.toHaveProperty('MOTOR_PILOT_R');
+    expect(F).not.toHaveProperty('ENCODER_LEN');
+    expect(frame).toContain('materials.motorFan');
+    expect(frame).toContain('materials.terminalBox');
+    expect(frame).toContain('motor-foot-');
+    expect(frame).not.toContain('torusGeometry args={[D.MOTOR_PILOT_R');
+    expect(frame).not.toContain('function ServoMotor');
+  });
+
+  it('控制信号只有两个布尔正/反转输出点，无 LREAL velocity 速度给定', () => {
+    expect(MODBUS_READ_VARS.MOTOR_FWD).toBe(30);
+    expect(MODBUS_READ_VARS.MOTOR_REV).toBe(31);
+    const motorKeys = Object.keys(MODBUS_READ_VARS)
+      .filter((k) => /MOTOR|SERVO|VELOCITY|SPEED/i.test(k)).sort();
+    expect(motorKeys).toEqual(['MOTOR_FWD', 'MOTOR_REV']);
+    // 数值寄存器只有位置 DINT；伺服方案必然多出一个 LReal 速度字
+    expect(Object.keys(MODBUS_HOLDING_REGISTERS)).toEqual(['ENCODER_PULSES']);
+  });
+
+  it('散热筋与机身同色系，新增材质颜色仍只来自 VISUAL 单一来源', () => {
     expect(VISUAL.MOTOR_BODY_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
     expect(VISUAL.MOTOR_RIB_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
     expect(VISUAL.MOTOR_BODY_COLOR).not.toBe(VISUAL.MOTOR_RIB_COLOR);
     expect(VISUAL.COUPLING_SPIDER_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.ENCODER_BODY_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
     expect(frame).toContain('materials.motorBody');
     expect(frame).toContain('materials.motorRib');
     expect(frame).not.toContain('fin-');
-  });
-
-  it('新增驱动端材质颜色仍只来自 VISUAL 单一来源', () => {
-    ['motorBody:', 'motorRib:', 'encoderCap:', 'couplingSpider:'].forEach((key) => {
+    ['motorBody:', 'motorRib:', 'motorFan:', 'terminalBox:', 'encoderBody:', 'couplingSpider:'].forEach((key) => {
       const i = materialsSource.indexOf(key);
       expect(i, `${key} 缺失`).toBeGreaterThan(-1);
       expect(materialsSource.slice(i, i + 220)).toContain('VISUAL.');
     });
+  });
+
+  it('轴末端特写机位已接入工具栏与镜像取景', () => {
+    expect(VIEW_PRESETS.shaftEnd).toBeTruthy();
+    expect(switcherSource).toContain("'shaftEnd'");
+    expect(viewGoalsSource).toContain("'shaftEnd'");
   });
 
   it('旧版裸露光轴 / 独立黑编码器 / 皮带轮 / 单机身 ServoMotor 已删除', () => {
@@ -640,7 +692,7 @@ describe('驱动端特写机位：拟真零件的验收视角', () => {
     const d = VIEW_PRESETS.drive;
     expect(d).toBeTruthy();
     expect(d.fov).toBeLessThan(VIEW_PRESETS.overview.fov);
-    expect(d.camera[0]).toBeLessThan(0);       // 站在伺服电机外侧
+    expect(d.camera[0]).toBeLessThan(0);       // 站在正反转电机外侧
     expect(d.camera[2]).toBeGreaterThan(0);    // 从观察者一侧看，联轴器不被电机挡住
     expect(d.camera[1]).toBeGreaterThan(d.target[1]);
   });
@@ -651,12 +703,13 @@ describe('驱动端特写机位：拟真零件的验收视角', () => {
     expect(viewGoalsSource).toContain("'drive'");
   });
 
-  it('机架展台仍把外伸的伺服电机与末端端盖完整收进画面', () => {
+  it('机架展台仍把外伸的正反转电机与轴末端编码器完整收进画面', () => {
     // 用较保守的 1.4 宽高比估算水平半视野，保证窄窗口下也不裁切
     const halfW = (stageExtent('frame').height * 1.4) / 2;
     const midX = PART_STAGES.frame.target[0];
     expect(midX - halfW).toBeLessThan(F.MOTOR_MIN_X);
     expect(midX + halfW).toBeGreaterThan(FRAME_LEN + FRAME.BASE_PAD / 2);
+    expect(midX + halfW).toBeGreaterThan(ENCODER_STATIONS.CABLE_MAX);
   });
 });
 
@@ -692,7 +745,7 @@ describe('滚珠丝杆传动比例：几何 / 运动学 / 控制语义', () => {
     expect(triangles).toBeLessThan(oldTriangles * 1.5);
   });
 
-  it('滑台速度 / 导程 = 丝杆转速，落在伺服常用区间', () => {
+  it('滑台速度 / 导程 = 丝杆转速，落在减速电机常用区间', () => {
     expect(screwRpm).toBeGreaterThan(300);
     expect(screwRpm).toBeLessThan(3000);
     // 每走一个导程正好转一圈，运动学联动只由 LEAD 决定
@@ -703,7 +756,7 @@ describe('滚珠丝杆传动比例：几何 / 运动学 / 控制语义', () => {
     expect(ENCODER_PULSES_PER_REV).toBe(1024);
     expect(PULSES_PER_M).toBe(ENCODER_PULSES_PER_REV / K.LEAD);
     expect(PULSES_PER_M * (SLIDER_MAX_X - SLIDER_MIN_X)).toBeCloseTo(ENCODER_PULSES_MAX, 6);
-    // 每转正好 1024 个脉冲，证明口径来自「电机轴编码器 × 导程」而非拍脑袋的直线标尺
+    // 每转正好 1024 个脉冲，证明口径来自「轴末端编码器测丝杆转角 × 导程」而非直线标尺
     expect(PULSES_PER_M * K.LEAD).toBeCloseTo(ENCODER_PULSES_PER_REV, 6);
     // 87040 > 65535：单字 16 位寄存器会溢出，必须由两个 16 位字组成 32 位 DINT
     expect(ENCODER_PULSES_MAX).toBeGreaterThan(0xffff);
