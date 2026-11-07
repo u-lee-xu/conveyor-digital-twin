@@ -1,6 +1,7 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  RECIPE_LIMIT, MAG_CAPACITY, MAGAZINE_LABELS, MODBUS_HOLDING_REGISTERS, type MagazineId,
+  RECIPE_LIMIT, MAG_CAPACITY, MAGAZINE_LABELS, ENCODER_DINT, ENCODER_REG_LABEL,
+  type MagazineId,
 } from '../constants';
 
 /**
@@ -130,7 +131,9 @@ export function DispenseDemoPanel() {
           <span className={`badge ${running ? 'badge-green' : 'badge-slate'}`}>{phaseLabel[autoPhase]}</span>
           <span className="badge badge-blue">轮次 {autoCycle}</span>
           <span className="badge badge-slate">位置 {sliderX.toFixed(2)}m</span>
-          <span className="badge badge-slate">HR{MODBUS_HOLDING_REGISTERS.ENCODER_PULSES} {encoderPulses} 脉冲</span>
+          <span className="badge badge-slate" title={ENCODER_REG_LABEL}>
+            {ENCODER_DINT.TYPE} {encoderPulses} 脉冲
+          </span>
           <span className="badge badge-slate">{encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

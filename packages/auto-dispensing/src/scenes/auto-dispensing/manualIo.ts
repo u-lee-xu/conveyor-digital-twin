@@ -5,15 +5,19 @@
  * 传感器与主令按钮则是只读输入点（X）。这里把两套点位的地址、名称、分组
  * 与电平读取集中定义，面板组件只消费本表，禁止在 JSX 里回填 'Y2' / 'Coil 32'
  * 这类地址字符串 —— 地址真值仍是 constants.ts 的三张协议地址表。
+ *
+ * 位置不列入输入点表：它只走一个 32 位 DINT 数据寄存器（ENCODER_DINT），
+ * 物理 A/B 相 X0/X1 与高速计数器由 PLC 程序处理，面板单独显示寄存器数值。
  */
 import {
   MODBUS_READ_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS,
+  ENCODER_DINT, ENCODER_REG_LABEL,
   type MagazineId,
 } from './constants';
 
 export type IoGroup =
   | 'motor' | 'cylinder' | 'tilt' | 'lamp'
-  | 'button' | 'limit' | 'magazine' | 'bin' | 'reed' | 'encoder';
+  | 'button' | 'limit' | 'magazine' | 'bin' | 'reed';
 
 export interface IoPoint {
   /** constants.ts 地址表里的键，输出/输入两组共用同一命名 */
@@ -59,7 +63,7 @@ const OUTPUT_GROUPS: Record<OutputKey, IoGroup> = {
   LAMP_GREEN: 'lamp', LAMP_YELLOW: 'lamp', LAMP_RED: 'lamp',
 };
 
-/** 输入点顺序 = 地址表顺序：主令 → 限位 → 空仓 → 取药仓 → 磁性开关 → 编码器位镜像 */
+/** 输入点顺序 = 地址表顺序：主令 → 限位 → 空仓 → 取药仓 → 磁性开关（位置寄存器不占输入点） */
 const INPUT_KEYS = Object.keys(MITSUBISHI_READ_VARS) as readonly InputKey[];
 
 const INPUT_LABELS: Record<InputKey, string> = {
@@ -74,10 +78,6 @@ const INPUT_LABELS: Record<InputKey, string> = {
   MSC_C_BACK: 'C 缸后', MSC_C_FRONT: 'C 缸前',
   MSC_D_BACK: 'D 缸后', MSC_D_FRONT: 'D 缸前',
   MSC_TILT_HOLD: '盛药位', MSC_TILT_DUMP: '翻转位',
-  ENCODER_BIT0: 'D0', ENCODER_BIT1: 'D1',
-  ENCODER_BIT2: 'D2', ENCODER_BIT3: 'D3',
-  ENCODER_BIT4: 'D4', ENCODER_BIT5: 'D5',
-  ENCODER_BIT6: 'D6', ENCODER_BIT7: 'D7',
 };
 
 function inputGroup(key: InputKey): IoGroup {
@@ -85,7 +85,6 @@ function inputGroup(key: InputKey): IoGroup {
   if (key.startsWith('S_LIMIT_')) return 'limit';
   if (key.startsWith('S_MAG_')) return 'magazine';
   if (key === 'S_BIN_HAS_DRUG') return 'bin';
-  if (key.startsWith('ENCODER_BIT')) return 'encoder';
   return 'reed';
 }
 
@@ -106,7 +105,7 @@ export const MANUAL_OUTPUT_POINTS: readonly IoPoint[] = OUTPUT_KEYS.map((key) =>
   ),
 );
 
-/** 只读输入点：传感器 / 主令 / 编码器位镜像 */
+/** 只读输入点：传感器 / 主令（32 位 DINT 位置寄存器不占输入点） */
 export const MANUAL_INPUT_POINTS: readonly IoPoint[] = INPUT_KEYS.map((key) =>
   makePoint(
     key,
@@ -122,7 +121,7 @@ export const MANUAL_IO_SUMMARY = {
   inputs: MANUAL_INPUT_POINTS.length,
 } as const;
 
-/** 面板分组标题：输入点按组给出短标题，避免 30 个点连成一片分不清 */
+/** 面板分组标题：输入点按组给出短标题，避免点位连成一片分不清 */
 export const IO_GROUP_TITLES: Record<IoGroup, string> = {
   motor: '电机',
   cylinder: '送药缸',
@@ -133,8 +132,18 @@ export const IO_GROUP_TITLES: Record<IoGroup, string> = {
   magazine: '空仓',
   bin: '取药仓',
   reed: '磁性开关',
-  encoder: '编码器位',
 };
+
+/** 位置寄存器：单独一行数值显示，不属于任何输入点分组 */
+export const ENCODER_REGISTER_INFO = {
+  key: 'ENCODER_PULSES',
+  label: '位置寄存器',
+  type: ENCODER_DINT.TYPE,
+  address: ENCODER_REG_LABEL,
+  modbus: ENCODER_DINT.MODBUS_LABEL,
+  s7: ENCODER_DINT.S7_LABEL,
+  mitsubishi: ENCODER_DINT.MITSUBISHI_LABEL,
+} as const;
 
 // ============================================================
 // 电平读取（纯函数，便于单测与 CDP 断言，不依赖 React / zustand）
@@ -168,7 +177,7 @@ const BUTTON_FIELD = {
   BUTTON_ESTOP: 'estop', BUTTON_CONFIRM: 'confirm',
 } as const;
 
-/** 读一个输入点的实时电平；编码器位镜像 = HR120 脉冲数的低 8 位 */
+/** 读一个输入点的实时电平；寄存器数值不参与位电平，由面板单独显示 */
 export function inputPointLevel(key: string, s: InputSnapshot): boolean {
   if (key in BUTTON_FIELD) {
     return !!s.buttons[BUTTON_FIELD[key as keyof typeof BUTTON_FIELD]];
@@ -187,10 +196,6 @@ export function inputPointLevel(key: string, s: InputSnapshot): boolean {
   if (key.startsWith('MSC_')) {
     const mag = key[4] as MagazineId;
     return key.endsWith('_BACK') ? s.sensors.mscBack[mag] : s.sensors.mscFront[mag];
-  }
-  if (key.startsWith('ENCODER_BIT')) {
-    const bit = Number(key.slice('ENCODER_BIT'.length));
-    return ((s.encoderPulses >> bit) & 1) === 1;
   }
   return false;
 }
@@ -212,7 +217,3 @@ export function outputPointLevel(key: string, s: OutputSnapshot): boolean {
   return false;
 }
 
-/** 编码器 8 位位镜像：与 ENCODER_BIT0..7 输入点逐位对应 */
-export function encoderBits(pulses: number): boolean[] {
-  return Array.from({ length: 8 }, (_, bit) => ((pulses >> bit) & 1) === 1);
-}

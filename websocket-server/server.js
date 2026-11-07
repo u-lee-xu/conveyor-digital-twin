@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
+const { clampDint32, splitDint32, joinDint32, toSigned16, toUnsigned16 } = require('./dint32');
 
 // 获取桌面路径，用于输出延迟测试报告
 function getDesktopPath() {
@@ -113,6 +114,8 @@ class SimpleModbusTCP {
     this.receiveBuffer = Buffer.alloc(0);
     // 变量名 → 线圈地址 映射（connect 消息下发，缺省气动机械手）
     this.variables = {};
+    // 32 位 DINT 数值变量表（connect 消息下发，缺省为空；不与布尔线圈混用）
+    this.wordVariables = {};
     // 延迟统计
     this.latencyStats = {
       read: [], // 读延迟
@@ -194,7 +197,15 @@ class SimpleModbusTCP {
                     }
                   }
                   pendingRequest.resolve({ success: true, values: values.slice(0, pendingRequest.length) });
-                } else if (functionCode === 0x05 || functionCode === 0x0F) {
+                } else if (functionCode === 0x03) {
+                  // 读保持寄存器响应：字节数 + N 个大端 16 位字
+                  const byteCount = packet.readUInt8(8);
+                  const registers = [];
+                  for (let i = 0; i + 1 < byteCount && registers.length < pendingRequest.length; i += 2) {
+                    registers.push(packet.readUInt16BE(9 + i));
+                  }
+                  pendingRequest.resolve({ success: true, registers });
+                } else if (functionCode === 0x05 || functionCode === 0x06 || functionCode === 0x0F || functionCode === 0x10) {
                   pendingRequest.resolve({ success: true });
                 } else if (functionCode >= 0x80) {
                   const errorCode = packet.readUInt8(8);
@@ -411,6 +422,106 @@ class SimpleModbusTCP {
     });
   }
 
+  /** FC03：读保持寄存器，供 32 位 DINT 变量取低/高字 */
+  async readHoldingRegisters(address, length) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    return new Promise((resolve) => {
+      try {
+        this.transactionId = (this.transactionId + 1) % 65536;
+        const tid = this.transactionId;
+        const buffer = Buffer.alloc(12);
+        buffer.writeUInt16BE(tid, 0);
+        buffer.writeUInt16BE(0, 2);
+        buffer.writeUInt16BE(6, 4);
+        buffer.writeUInt8(1, 6);
+        buffer.writeUInt8(0x03, 7);
+        buffer.writeUInt16BE(address, 8);
+        buffer.writeUInt16BE(length, 10);
+
+        const timeout = setTimeout(() => {
+          this.pendingRequests.delete(tid);
+          resolve({ success: false, error: '读保持寄存器超时' });
+        }, 2000);
+
+        this.pendingRequests.set(tid, { resolve, timeout, address, length, type: 'read', startTime: Date.now() });
+        this.client.write(buffer);
+      } catch (e) { resolve({ success: false, error: e.message }); }
+    });
+  }
+
+  /** FC10：一帧写多个保持寄存器，保证 32 位 DINT 的两个字原子更新 */
+  async writeRegisters(address, values) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    return new Promise((resolve) => {
+      try {
+        this.transactionId = (this.transactionId + 1) % 65536;
+        const tid = this.transactionId;
+        const count = values.length;
+        const byteCount = count * 2;
+        const buffer = Buffer.alloc(13 + byteCount);
+        buffer.writeUInt16BE(tid, 0);
+        buffer.writeUInt16BE(0, 2);
+        buffer.writeUInt16BE(7 + byteCount, 4);
+        buffer.writeUInt8(1, 6);
+        buffer.writeUInt8(0x10, 7);
+        buffer.writeUInt16BE(address, 8);
+        buffer.writeUInt16BE(count, 10);
+        buffer.writeUInt8(byteCount, 12);
+        for (let i = 0; i < count; i++) {
+          buffer.writeUInt16BE(toUnsigned16(values[i]), 13 + i * 2);
+        }
+
+        const timeout = setTimeout(() => {
+          this.pendingRequests.delete(tid);
+          resolve({ success: false, error: '写保持寄存器超时' });
+        }, 2000);
+
+        this.pendingRequests.set(tid, { resolve, timeout, address, length: count, type: 'write', startTime: Date.now() });
+        this.client.write(buffer);
+      } catch (e) { resolve({ success: false, error: e.message }); }
+    });
+  }
+
+  /** 读 32 位 DINT 数值变量：HR120 低字 + HR121 高字，低字在前 */
+  async readWords(varNames) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    try {
+      const values = {};
+      for (const name of varNames) {
+        const spec = (this.wordVariables || {})[name];
+        const m = spec && spec.modbus;
+        if (!m) return { success: false, error: `未知数值变量: ${name}` };
+        const result = await this.readHoldingRegisters(m.address, m.words);
+        if (!result.success) return result;
+        const low = result.registers[0] || 0;
+        const high = result.registers[1] || 0;
+        values[name] = joinDint32(low, high);
+      }
+      return { success: true, values };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  /** 写 32 位 DINT 数值变量：FC10 一次写两个字，PLC 不会读到撕裂值 */
+  async writeWords(varNames, values) {
+    if (!this.connected) return { success: false, error: 'Modbus未连接' };
+    try {
+      for (let i = 0; i < varNames.length; i++) {
+        const name = varNames[i];
+        const spec = (this.wordVariables || {})[name];
+        const m = spec && spec.modbus;
+        if (!m) return { success: false, error: `未知数值变量: ${name}` };
+        const words = splitDint32(clampDint32(values[i]));
+        const result = await this.writeRegisters(m.address, words);
+        if (!result.success) return result;
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
   /** 批量读取变量（按 connect 下发的变量名→线圈地址映射） */
   async readVars(varNames) {
     if (!this.connected) return { success: false, error: 'Modbus未连接' };
@@ -471,6 +582,8 @@ class SimpleS7Client {
     this.nodes7 = null;
     this.connected = false;
     this.variables = {};
+    // 32 位 DINT 数值变量表（connect 消息下发；S7 用 MDI 地址原生读写）
+    this.wordVariables = {};
     this.connecting = false;
     this.itemsRegistered = false;
     this._opQueue = [];
@@ -687,10 +800,13 @@ class SimpleS7Client {
               }
 
               this.nodes7.setTranslationCB((tag) => {
-                return this.variables[tag] || tag;
+                const word = this.wordVariables[tag];
+                return this.variables[tag] || (word && word.s7 && word.s7.address) || tag;
               });
 
-              const allVarNames = Object.keys(this.variables);
+              // 布尔变量与 32 位 DINT 数值变量一起注册进轮询列表；
+              // readVars 只取布尔，readWords 只取数值，互不串味。
+              const allVarNames = [...Object.keys(this.variables), ...Object.keys(this.wordVariables)];
               if (allVarNames.length > 0) {
                 this.nodes7.addItems(allVarNames);
                 this.itemsRegistered = true;
@@ -749,7 +865,8 @@ class SimpleS7Client {
     return { success: true };
   }
 
-  async readVars(varNames) {
+  /** raw=true 时保留数值原值（供 32 位 DINT 变量读取），默认仍是布尔通道 */
+  async readVars(varNames, raw = false) {
     if (!this.connected || !this.nodes7) {
       return { success: false, error: 'S7未连接' };
     }
@@ -790,7 +907,7 @@ class SimpleS7Client {
                 let trueCount = 0;
                 for (const name of varNames) {
                   if (values && values[name] !== undefined && values[name] !== null) {
-                    filtered[name] = !!values[name];
+                    filtered[name] = raw ? (Number(values[name]) || 0) : !!values[name];
                     if (filtered[name]) trueCount++;
                   } else {
                     filtered[name] = false;
@@ -812,6 +929,16 @@ class SimpleS7Client {
         return { success: false, error: e.message };
       });
     });
+  }
+
+  /** 读 32 位 DINT：MDI120 是 nodes7 原生 32 位整数，无需拆字 */
+  async readWords(varNames) {
+    return this.readVars(varNames, true);
+  }
+
+  /** 写 32 位 DINT：writeVars 原样把数值交给 nodes7.writeItems */
+  async writeWords(varNames, values) {
+    return this.writeVars(varNames, values.map((v) => clampDint32(v)));
   }
 
   async writeVar(varName, value) {
@@ -929,6 +1056,8 @@ class MitsubishiMX {
   constructor() {
     this.connected = false;
     this.variables = {};
+    // 32 位 DINT 数值变量表（connect 消息下发；三菱侧只取 D 寄存器，不接高速计数器）
+    this.wordVariables = {};
     this._station = 0;
     this._ps = null;
     this._psExe = '';
@@ -1056,6 +1185,16 @@ class MitsubishiMX {
       `          catch { $o[$d] = -1 }`,
       `        }`,
       `        Write-Host ($o | ConvertTo-Json -Compress)`,
+      `      }`,
+      `      'read-words' {`,
+      `        $items = @()`,
+      `        foreach ($d in $cmd.devices) {`,
+      `          try {`,
+      `            $v = 0; $rc = $p.GetDevice($d, [ref]$v)`,
+      `            $items += @{ ok = ($rc -eq 0); value = [int]$v }`,
+      `          } catch { $items += @{ ok = $false; value = 0 } }`,
+      `        }`,
+      `        Write-Host (@{ items = $items } | ConvertTo-Json -Compress -Depth 5)`,
       `      }`,
       `      'write' {`,
       `        $r = $p.SetDevice($cmd.device, $cmd.value)`,
@@ -1358,15 +1497,87 @@ class MitsubishiMX {
       return { success: false, error: e.message };
     } finally { this._unlock(); }
   }
+
+  /** 数值变量 → 两个连续 D 寄存器（D120 低字 / D121 高字） */
+  _wordDevices(name) {
+    const spec = (this.wordVariables || {})[name];
+    const m = spec && spec.mitsubishi;
+    if (!m) return null;
+    const base = parseInt(String(m.address).replace(/^D/i, ''), 10);
+    if (!Number.isFinite(base)) return null;
+    return [`D${base}`, `D${base + 1}`];
+  }
+
+  /** 读 32 位 DINT：只取 D 寄存器数值，不占用 X 输入点、不接高速计数器 */
+  async readWords(varNames) {
+    if (!this.connected || !this._ps) {
+      return { success: false, error: '三菱MX未连接' };
+    }
+    await this._lock();
+    try {
+      const devices = [];
+      const specs = [];
+      for (const name of varNames) {
+        const pair = this._wordDevices(name);
+        if (!pair) return { success: false, error: `未知数值变量: ${name}` };
+        specs.push({ name, offset: devices.length });
+        devices.push(...pair);
+      }
+      const raw = await this._sendCommand({ type: 'read-words', devices });
+      const items = Array.isArray(raw.items) ? raw.items : (raw.items ? [raw.items] : []);
+      if (items.length < devices.length) {
+        return { success: false, error: 'D 寄存器读数不完整' };
+      }
+      const values = {};
+      for (const s of specs) {
+        const lo = items[s.offset];
+        const hi = items[s.offset + 1];
+        if (!lo || !hi || !lo.ok || !hi.ok) {
+          return { success: false, error: `读 D 寄存器失败 (offset=${s.offset})` };
+        }
+        values[s.name] = joinDint32(toUnsigned16(lo.value), toUnsigned16(hi.value));
+      }
+      return { success: true, values };
+    } catch (e) {
+      console.error('[三菱MX] 数值读取失败:', e.message);
+      return { success: false, error: e.message };
+    } finally { this._unlock(); }
+  }
+
+  /** 写 32 位 DINT：一次 write-batch 连写两个字，字值按有符号 short 传递 */
+  async writeWords(varNames, values) {
+    if (!this.connected || !this._ps) {
+      return { success: false, error: '三菱MX未连接' };
+    }
+    await this._lock();
+    try {
+      const devices = [];
+      const words = [];
+      for (let i = 0; i < varNames.length; i++) {
+        const pair = this._wordDevices(varNames[i]);
+        if (!pair) return { success: false, error: `未知数值变量: ${varNames[i]}` };
+        const [low, high] = splitDint32(clampDint32(values[i]));
+        devices.push(...pair);
+        words.push(toSigned16(low), toSigned16(high));
+      }
+      const result = await this._sendCommand({ type: 'write-batch', devices, values: words });
+      if (result.ok) return { success: true };
+      return { success: false, error: result.err || 'D 寄存器写入失败' };
+    } catch (e) {
+      console.error('[三菱MX] 数值写入失败:', e.message);
+      return { success: false, error: e.message };
+    } finally { this._unlock(); }
+  }
 }
 
-const wss = new WebSocket.Server({ port: 8081 });
+const WS_PORT = parseInt(process.env.WS_PORT || '8081', 10);
+const wss = new WebSocket.Server({ port: WS_PORT });
 const modbusClient = new SimpleModbusTCP();
 const s7Client = new SimpleS7Client();
 const mitsubishiClient = new MitsubishiMX();
 let currentProtocol = null;
 
-console.log('WebSocket服务器启动在端口 8081');
+console.log('WebSocket服务器启动在端口 ' + WS_PORT);
 console.log('支持协议: Modbus TCP, Siemens S7 (ISO over TCP), 三菱 MX Component (via PowerShell)');
 
 async function gracefulShutdown() {
@@ -1408,6 +1619,7 @@ wss.on('connection', (ws) => {
           currentProtocol = parsedData.protocol || 'modbus';
           if (currentProtocol === 's7') {
             s7Client.variables = parsedData.variables || S7_VARIABLES;
+            s7Client.wordVariables = parsedData.wordVariables || {};
             result = await s7Client.connect(
               parsedData.host,
               parsedData.port,
@@ -1416,9 +1628,11 @@ wss.on('connection', (ws) => {
             );
           } else if (currentProtocol === 'mitsubishi') {
             mitsubishiClient.variables = parsedData.variables || MITSUBISHI_VARIABLES;
+            mitsubishiClient.wordVariables = parsedData.wordVariables || {};
             result = await mitsubishiClient.connect(parsedData.host, parsedData.port ?? 0);
           } else {
             modbusClient.variables = parsedData.variables || PNEUMATIC_MODBUS_VARS;
+            modbusClient.wordVariables = parsedData.wordVariables || {};
             result = await modbusClient.connect(parsedData.host, parsedData.port || 502);
           }
           break;
@@ -1491,6 +1705,26 @@ wss.on('connection', (ws) => {
             result = await modbusClient.readVars(parsedData.names);
           } else {
             result = await s7Client.readVars(parsedData.names);
+          }
+          break;
+
+        case 'read-words':
+          if (currentProtocol === 'mitsubishi') {
+            result = await mitsubishiClient.readWords(parsedData.names);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.readWords(parsedData.names);
+          } else {
+            result = await s7Client.readWords(parsedData.names);
+          }
+          break;
+
+        case 'write-words':
+          if (currentProtocol === 'mitsubishi') {
+            result = await mitsubishiClient.writeWords(parsedData.names, parsedData.values);
+          } else if (currentProtocol === 'modbus') {
+            result = await modbusClient.writeWords(parsedData.names, parsedData.values);
+          } else {
+            result = await s7Client.writeWords(parsedData.names, parsedData.values);
           }
           break;
 

@@ -5,18 +5,19 @@
  * 用途：无/未接 PLC 环境下端到端验证自动配药场景"仿真模式"链路
  *   （前端连接面板 → websocket-server 网关 → 本虚拟 PLC → 输出回读驱动 3D）
  *
- * 地址与 packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts 一致（线圈 0-49）：
+ * 地址与 packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts 一致（线圈 0-40）：
  *   0-4   启动/停止/复位/急停/取药确认 —— DT 写入（孪生按钮）
  *   10-16 限位/空仓/取药仓有药          —— DT 写入（生模型反馈）
  *   20-29 送药缸×4 前后 + 翻转缸双位磁性开关 —— DT 写入（生反馈）
  *   30-31 电机正/反转                   —— 本程序驱动
  *   32-36 送药缸 A/B/C/D、翻转缸          —— 本程序驱动
  *   38-40 灯塔 绿/黄/红                 —— 本程序驱动
- *   42-49 编码器位置（8 位二进制，0.01m=1 脉冲）—— DT 写入（孪生编码器反馈）
- *   HR120 数据寄存器 ENCODER_PULSES —— 增量式编码器脉冲计数，与 42-49 是同一计数器的两种寻址视图
+ *   HR120/HR121 = 32 位 DINT 位置寄存器 ENCODER_PULSES（低字在前）—— DT 写入，唯一真值
  *
- * 位置闭环：孪生按滑块位移增减寄存器并写 8 位线圈 → 本程序读寄存器得到 curPos
- *   → 输出电机正/反转 → 孪生滑块移动 → 寄存器继续增减。回到原点传感器时寄存器归零（Z 相）。
+ * 位置闭环：孪生按滑块位移增减一个 32 位 DINT → 网关用 FC10 一次写 HR120/HR121
+ *   → 本程序读寄存器得到 curPos → 输出电机正/反转 → 孪生滑块移动 → 数值继续增减。
+ *   回到原点传感器时寄存器归零（Z 相）。不再使用 8 位线圈镜像，也不绑定 X0/X1；
+ *   物理 A/B 相高速计数、C0 当前值映射由真实 PLC 程序负责。
  *   若 1.5s 内没有 DT 反馈（单独运行虚拟PLC、未连前端），自动退回内部积分以便独立演示。
  *
  * 程序逻辑（参考演示流程，固定配方默认 A2/B1/C1/D1，HTTP /preset 可改）：
@@ -30,6 +31,7 @@
 const ModbusRTU = require('modbus-serial');
 const http = require('http');
 const { DISPENSING_ADDRESSES, DISPENSING_REGISTERS } = require('./mock-addresses');
+const { splitDint32, joinDint32, toUnsigned16 } = require('./dint32');
 
 const PORT = parseInt(process.argv[2] || '1505', 10);
 const HTTP_PORT = 5085;
@@ -42,7 +44,7 @@ const coils = new Array(64).fill(false);
 const A = DISPENSING_ADDRESSES;
 const R = DISPENSING_REGISTERS;
 
-// 编码器脉冲换算：0.01m = 1 脉冲（与前端 ENCODER_BIT 约定一致）
+// 编码器脉冲换算：0.01m = 1 脉冲（32 位 DINT 位置寄存器，与前端 PULSES_PER_M 一致）
 const PULSES_PER_M = 100;
 const MAGA_PULSE = Math.round(0.55 * PULSES_PER_M);
 const MAGB_PULSE = Math.round(0.95 * PULSES_PER_M);
@@ -81,21 +83,27 @@ function syncEncoderFeedback() {
   }
 }
 
-/** 8 位线圈镜像 ↔ 数据寄存器：同一个增量计数器值的两种寻址视图 */
-function readEncoder() {
-  let v = 0;
-  for (let i = 0; i < 8; i++) if (coils[A['ENCODER_BIT' + i]]) v |= (1 << i);
-  return v;
+/**
+ * 32 位 DINT 位置寄存器：HR120 低 16 位 / HR121 高 16 位（低字在前）。
+ * 这是位置的唯一真值；线圈表里不再有任何编码器位，也不绑定物理 X0/X1。
+ */
+let encoderWords = [0, 0];
+
+/** 读位置寄存器（脉冲，原点=0）：由两个字合并成有符号 32 位 DINT */
+function readEncoderReg() {
+  return joinDint32(encoderWords[0], encoderWords[1]);
 }
 
-function writeEncoder(v) {
-  const n = Math.min(255, Math.max(0, Math.round(v)));
-  for (let i = 0; i < 8; i++) coils[A['ENCODER_BIT' + i]] = ((n >> i) & 1) === 1;
-  return n;
+/** 独立运行（无孪生）时按 curPos 自积分，也写回同一份 DINT 真值 */
+function writeEncoderReg(pulses) {
+  encoderWords = splitDint32(pulses);
 }
 
-/** HR120 数据寄存器读数（脉冲，原点=0）：由孪生写入的编码器线圈镜像还原 */
-function readEncoderReg() { return readEncoder(); }
+/** FC16 一次写两个字：原子提交，PLC 不会读到只更新了一半的 DINT */
+function writeEncoderWords(words) {
+  encoderWords = [toUnsigned16(words[0]), toUnsigned16(words[1])];
+  markEncoderFeedback();
+}
 
 function setLamps(green, yellow, red) {
   coils[A.LAMP_GREEN] = green;
@@ -115,8 +123,11 @@ function moveToward(target) {
   const d = target - curPos;
   if (Math.abs(d) <= POS_TOL) { motorOff(); return true; }
   if (d > 0) motorFwd(); else motorRev();
-  // 有孪生编码器反馈时位置由寄存器决定；仅独立运行（无 DT）才按 0.32 m/s 自积分
-  if (!encoderFromDT) curPos += (d > 0 ? 1 : -1) * Math.round(0.32 * PULSES_PER_M * 0.1);
+  // 有孪生反馈时位置由 DINT 寄存器决定；仅独立运行（无 DT）才按 0.32 m/s 自积分
+  if (!encoderFromDT) {
+    curPos += (d > 0 ? 1 : -1) * Math.round(0.32 * PULSES_PER_M * 0.1);
+    writeEncoderReg(curPos - START_PULSE);
+  }
   return false;
 }
 
@@ -269,16 +280,26 @@ setInterval(scan, 100);
 
 const vector = {
   getCoil: (addr) => !!coils[addr],
-  setCoil: (addr, value) => {
-    coils[addr] = !!value;
-    // 孪生每 300ms 都会把 ENCODER_BIT0-7 写一遍（即使值没变），据此判定 DT 在线
-    if (addr >= A.ENCODER_BIT0 && addr <= A.ENCODER_BIT7) markEncoderFeedback();
-  },
+  setCoil: (addr, value) => { coils[addr] = !!value; },
   getDiscreteInput: () => false,
-  // HR120：读写增量式编码器数据寄存器，自动同步 8 位线圈镜像
-  getHoldingRegister: (addr) => (addr === R.ENCODER_PULSES ? readEncoderReg() : 0),
+  /** FC03 读 HR120/HR121：逐字返回 32 位 DINT 的低/高 16 位 */
+  getHoldingRegister: (addr) => {
+    const i = addr - R.ENCODER_PULSES;
+    return (i === 0 || i === 1) ? encoderWords[i] : 0;
+  },
+  /** FC06 写单个字（兼容外部单点写入） */
   setRegister: (addr, value) => {
-    if (addr === R.ENCODER_PULSES) { writeEncoder(value); markEncoderFeedback(); }
+    const i = addr - R.ENCODER_PULSES;
+    if (i === 0 || i === 1) {
+      encoderWords[i] = toUnsigned16(value);
+      markEncoderFeedback();
+    }
+  },
+  /** FC16 网关批量写：两个字一次原子提交，避免逐字写入产生撕裂值 */
+  setRegisterArray: (addr, words) => {
+    if (addr === R.ENCODER_PULSES && Array.isArray(words) && words.length >= 2) {
+      writeEncoderWords(words);
+    }
   },
 };
 
@@ -307,12 +328,13 @@ const httpServer = http.createServer((req, res) => {
       success: true,
       program: {
         mode, step, remain, cyc,
-        encoder: readEncoder(),
+        encoder: readEncoderReg(),
         position: curPos,                       // X×100，用于核对寄存器闭环
         feedback: encoderFromDT ? 'twin' : 'internal',
       },
       register: {
         addr: R.ENCODER_PULSES, name: 'ENCODER_PULSES', value: readEncoderReg(),
+        type: 'dint32', words: [...encoderWords],  // HR120 低字 / HR121 高字
         source: encoderFromDT ? 'twin' : 'internal',
         feedbackAgeMs: lastEncoderWriteAt ? Date.now() - lastEncoderWriteAt : null,
       },

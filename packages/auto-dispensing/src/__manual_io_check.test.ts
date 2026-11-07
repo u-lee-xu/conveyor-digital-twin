@@ -3,7 +3,7 @@
  *
  * 手动模式的语义是「面板按键 ≡ 直接置位/复位 PLC 输出线圈」，因此这里要守住三件事：
  *   1. 面板上的地址必须来自 constants.ts 的三张协议地址表，不能在 JSX 里回填 'Y2' / 'C32'；
- *   2. 输入点（X）电平由纯函数读取，编码器位镜像与 HR120 低 8 位严格一致；
+ *   2. 输入点（X）电平由纯函数读取；位置改走 32 位 DINT 数据寄存器，不占任何输入点；
  *   3. UI 紧凑化不能回退：只渲染两张卡、输入点三列、地址可见、手动模式不展示自动流程状态；
  *   4. 滑台点动必须是一次点击 10mm 的离散脉冲，不能退回 rAF 连续速度。
  * 另外把「信号灯塔抬高」也锁进断言，防止后续改常量又让灯头与立杆脱开或被展台裁切。
@@ -17,7 +17,7 @@ import {
 } from './scenes/auto-dispensing/constants';
 import {
   MANUAL_OUTPUT_POINTS, MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY,
-  IO_GROUP_TITLES, inputPointLevel, outputPointLevel, encoderBits,
+  IO_GROUP_TITLES, ENCODER_REGISTER_INFO, inputPointLevel, outputPointLevel,
   type InputSnapshot, type OutputSnapshot,
 } from './scenes/auto-dispensing/manualIo';
 
@@ -94,7 +94,7 @@ describe('手动 I/O 点位表与协议地址表同源', () => {
     });
   });
 
-  it('输入点逐项对应三菱 X 地址与 Modbus 线圈号，且覆盖编码器 8 位镜像', () => {
+  it('输入点逐项对应三菱 X 地址与 Modbus 线圈号，且不含任何编码器位', () => {
     expect(MANUAL_INPUT_POINTS).toHaveLength(Object.keys(MITSUBISHI_READ_VARS).length);
     MANUAL_INPUT_POINTS.forEach((p) => {
       expect(p.addr).toBe(MITSUBISHI_READ_VARS[p.key as keyof typeof MITSUBISHI_READ_VARS]);
@@ -102,8 +102,9 @@ describe('手动 I/O 点位表与协议地址表同源', () => {
       expect(p.label.length).toBeGreaterThan(0);
       expect(IO_GROUP_TITLES[p.group].length).toBeGreaterThan(0);
       expect(p.addr).toMatch(/^X\d+$/);
+      expect(p.key.startsWith('ENCODER_BIT')).toBe(false);
     });
-    expect(MANUAL_INPUT_POINTS.filter((p) => p.group === 'encoder')).toHaveLength(8);
+    expect(Object.keys(IO_GROUP_TITLES)).not.toContain('encoder');
   });
 
   it('输出/输入地址各自不重复，汇总计数与数组长度一致', () => {
@@ -177,18 +178,17 @@ describe('输入点 X 电平读取', () => {
     });
   });
 
-  it('ENCODER_BIT0..7 是 HR120 脉冲数的低 8 位位镜像', () => {
-    [0, 1, 5, 90, 170, 255].forEach((pulses) => {
+  it('位置是 32 位 DINT 数值，输入点电平里不再有位镜像', () => {
+    expect(ENCODER_REGISTER_INFO.type).toBe('DINT32');
+    expect(ENCODER_REGISTER_INFO.address).toContain('HR120');
+    expect(ENCODER_REGISTER_INFO.address).toContain('MD120');
+    expect(ENCODER_REGISTER_INFO.address).toContain('D120');
+    // 旧版 8 位线圈位镜像已彻底移除：任何 ENCODER_BIT 都不是输入点
+    for (let bit = 0; bit < 8; bit += 1) {
       const s = makeInput();
-      s.encoderPulses = pulses;
-      const bits = encoderBits(pulses);
-      expect(bits).toHaveLength(8);
-      for (let bit = 0; bit < 8; bit += 1) {
-        expect(inputPointLevel(`ENCODER_BIT${bit}`, s), `pulses=${pulses} bit=${bit}`).toBe(bits[bit]);
-      }
-    });
-    expect(inputPointLevel('ENCODER_BIT0', (() => { const s = makeInput(); s.encoderPulses = 2; return s; })())).toBe(false);
-    expect(inputPointLevel('ENCODER_BIT1', (() => { const s = makeInput(); s.encoderPulses = 2; return s; })())).toBe(true);
+      s.encoderPulses = 1 << bit;
+      expect(inputPointLevel(`ENCODER_BIT${bit}`, s)).toBe(false);
+    }
   });
 
   it('未知点位返回 false，不会误报为传感器接通', () => {
@@ -298,7 +298,7 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
 // ============================================================
 
 describe('手动点动：单击 10mm 精确步进', () => {
-  it('步长 = 1 个 HR120 脉冲，且远小于料斗半宽与药仓间距', () => {
+  it('步长 = 1 个 32 位 DINT 位置脉冲，且远小于料斗半宽与药仓间距', () => {
     expect(MANUAL_JOG.STEP * PULSES_PER_M).toBeCloseTo(1, 12);
     expect(MANUAL_JOG.STEP).toBeGreaterThan(0);
     expect(MANUAL_JOG.STEP).toBeLessThan(HOPPER.W / 2);

@@ -3,7 +3,7 @@ import { useAppStore } from '../../../stores/useAppStore';
 import { useDispensingStore, type MagazineId } from '../../../stores/useDispensingStore';
 import {
   MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS,
-  ENCODER_REG_LABEL, encoderMirrorBits,
+  ENCODER_REG_LABEL, ENCODER_DINT,
 } from '../constants';
 import type { ProtocolType } from '../../../services/plc-websocket';
 import { plcService } from '../../../services/plc-websocket';
@@ -124,10 +124,9 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         MAG.forEach((mag) => { push(`MSC_${mag}_BACK`, s.sensors.mscBack[mag]); push(`MSC_${mag}_FRONT`, s.sensors.mscFront[mag]); });
         push('MSC_TILT_HOLD', s.sensors.mscTiltHold);
         push('MSC_TILT_DUMP', s.sensors.mscTiltDump);
-        // 8 位线圈只是数据寄存器的位镜像，寄存器才是唯一真值
-        const bits = encoderMirrorBits(s.encoderPulses);
-        for (let i = 0; i < 8; i++) push(`ENCODER_BIT${i}`, bits[i]);
         await plcService.writeVars(writeNames, writeValues);
+        // 位置只走一个 32 位 DINT 数据寄存器：不拆线圈、不占输入点
+        await plcService.writeWord('ENCODER_PULSES', s.encoderPulses);
       } catch (e) {
         console.error('[轮询] 失败:', e instanceof Error ? e.message : String(e));
       } finally {
@@ -258,19 +257,20 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         </div>
       </div>
 
-      {/* ===== 增量式编码器数据寄存器 ===== */}
+      {/* ===== 32 位 DINT 位置数据寄存器 ===== */}
       <div className="card">
-        <div className="section-title !mb-1.5">位置数据寄存器（增量式编码器）</div>
+        <div className="section-title !mb-1.5">位置数据寄存器（32 位 DINT）</div>
         <div className="flex flex-wrap items-center gap-1.5 mb-1">
-          <span className="badge badge-blue">HR120 = {encoderPulses} 脉冲</span>
+          <span className="badge badge-blue">DINT = {encoderPulses} 脉冲</span>
+          <span className="badge badge-slate">{ENCODER_DINT.TYPE} · 低字在前</span>
           <span className="badge badge-slate">0.01 m / 脉冲</span>
           <span className={`badge ${encoderDir > 0 ? 'badge-green' : encoderDir < 0 ? 'badge-yellow' : 'badge-slate'}`}>
             {encoderDir > 0 ? '↑ 前进 +' : encoderDir < 0 ? '↓ 后退 −' : '静止'}
           </span>
         </div>
         <div className="text-[0.55rem] text-slate-500 leading-relaxed">
-          {ENCODER_REG_LABEL} · 随滑台前进递增、后退递减；回到原点传感器（Z 相）自动归零。
-          8 位线圈 ENCODER_BIT0-7 只是该寄存器的位镜像。
+          {ENCODER_REG_LABEL} · 32 位有符号整数，一次原子写；随滑台前进递增、后退递减，回到原点传感器（Z 相）归零。
+          A/B 相接 X0/X1 与高速计数器 C0 由 PLC 程序处理，孪生不占用输入点。
         </div>
       </div>
 
@@ -299,7 +299,6 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
               <IOLed label="D缸前" active={sensors.mscFront.D} addr={getAddr('MSC_D_FRONT')} />
               <IOLed label="翻转盛药位" active={sensors.mscTiltHold} addr={getAddr('MSC_TILT_HOLD')} />
               <IOLed label="翻转倒药位" active={sensors.mscTiltDump} addr={getAddr('MSC_TILT_DUMP')} />
-              <IOLed label={`寄存器 ${encoderPulses}`} active={encoderPulses > 0} addr={`${ENCODER_REG_LABEL} · 8位镜像 ENCODER_BIT0-7`} />
             </div>
           </div>
 

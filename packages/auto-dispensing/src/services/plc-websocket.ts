@@ -40,10 +40,12 @@ type WSMessage = {
 /** 动态解析 WebSocket 桥地址：远程访问取页面 hostname（边缘部署），本机/Electron file:// 回退 localhost */
 const WS_URL = `ws://${typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost'}:8081`;
 
-import { MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS } from '../scenes/auto-dispensing/constants';
+import {
+  MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS, ENCODER_DINT,
+} from '../scenes/auto-dispensing/constants';
 
 /**
- * 自动配药 IO 变量名 → 协议地址映射（随 connect 消息下发网关，
+ * 自动配药布尔 IO 变量名 → 协议地址映射（随 connect 消息下发网关，
  * 网关按此表把变量名翻译为 Modbus 线圈 / S7 M 地址 / 三菱 X/Y 地址）
  */
 
@@ -51,6 +53,21 @@ const CONNECT_VARIABLES = {
   modbus: MODBUS_READ_VARS,
   s7: S7_VARS,
   mitsubishi: { ...MITSUBISHI_READ_VARS, ...MITSUBISHI_WRITE_VARS },
+};
+
+/**
+ * 32 位 DINT 数值变量表：与布尔 IO 表完全分离，随 connect 一并下发网关。
+ * 位置只走数据寄存器，不占任何线圈 / 输入点；增量式编码器 A/B 相接 X0/X1、
+ * 高速计数器 C0 的映射由 PLC 程序负责，三菱侧默认只读 D 寄存器，S7 读 MD120。
+ */
+const CONNECT_WORDS = {
+  ENCODER_PULSES: {
+    type: 'dint32',
+    wordOrder: ENCODER_DINT.WORD_ORDER,
+    modbus: { address: ENCODER_DINT.MODBUS_ADDRESS, words: ENCODER_DINT.WORDS },
+    s7: { address: ENCODER_DINT.S7_ADDRESS, words: 1 },
+    mitsubishi: { address: ENCODER_DINT.MITSUBISHI_ADDRESS, words: ENCODER_DINT.WORDS },
+  },
 };
 
 export class PlcWebSocketService {
@@ -224,6 +241,7 @@ export class PlcWebSocketService {
           type: 'connect', protocol: 's7', host: config.host,
           port: config.port || 102, rack: config.rack || 0, slot: config.slot || 1,
           variables,
+          wordVariables: CONNECT_WORDS,
         });
         if (result.success) { this.recordSuccess(); this.startHeartbeat(); }
         return { success: !!result.success, error: result.error as string | undefined };
@@ -231,6 +249,7 @@ export class PlcWebSocketService {
         const result = await this._sendRaw({
           type: 'connect', protocol: 'mitsubishi', host: config.host, port: config.port ?? 0,
           variables,
+          wordVariables: CONNECT_WORDS,
         });
         if (result.success) { this.recordSuccess(); this.startHeartbeat(); }
         return { success: !!result.success, error: result.error as string | undefined };
@@ -238,6 +257,7 @@ export class PlcWebSocketService {
         const result = await this._sendRaw({
           type: 'connect', protocol: 'modbus', host: config.host, port: config.port || 502,
           variables,
+          wordVariables: CONNECT_WORDS,
         });
         if (result.success) { this.recordSuccess(); this.startHeartbeat(); }
         return { success: !!result.success, error: result.error as string | undefined };
@@ -341,6 +361,35 @@ export class PlcWebSocketService {
   async writeVars(names: string[], values: boolean[]): Promise<PlcResult> {
     try {
       const result = await this._sendRaw({ type: 'write-vars', names, values });
+      this.recordSuccess();
+      return { success: true, error: result.error as string | undefined };
+    } catch (e) {
+      this.recordError();
+      return { success: false, error: (e as Error).message };
+    }
+  }
+
+  /** 读 32 位 DINT 数值变量（位置寄存器专用通道，与布尔 IO 完全分离） */
+  async readWords(names: string[]): Promise<{ success: boolean; values?: Record<string, number>; error?: string }> {
+    try {
+      const result = await this._sendRaw({ type: 'read-words', names });
+      this.recordSuccess();
+      return { success: true, values: result.values as Record<string, number> | undefined };
+    } catch (e) {
+      this.recordError();
+      return { success: false, error: (e as Error).message };
+    }
+  }
+
+  /** 写一个 32 位 DINT 数值变量 */
+  async writeWord(name: string, value: number): Promise<PlcResult> {
+    return this.writeWords([name], [value]);
+  }
+
+  /** 批量写 32 位 DINT 数值变量 */
+  async writeWords(names: string[], values: number[]): Promise<PlcResult> {
+    try {
+      const result = await this._sendRaw({ type: 'write-words', names, values });
       this.recordSuccess();
       return { success: true, error: result.error as string | undefined };
     } catch (e) {
