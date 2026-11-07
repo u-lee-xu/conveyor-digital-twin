@@ -21,8 +21,11 @@ import {
 } from './scenes/conveyor-sorting/cylinderKinematics';
 import { getPushPlateCenterZ, getPushedMaterialZ } from './scenes/conveyor-sorting/components/helpers';
 import {
-  CHUTE_LIFT, CHUTE_PLATE, sortChutePoint, sortSlotX, chuteSurfaceY,
-  isAtChuteEntry, BIN_CENTER_Z, BIN_REST_Y,
+  CHUTE_LIFT, CHUTE_PLATE, CHUTE_ANGLE, CHUTE_NORMAL, CHUTE_TANGENT,
+  CHUTE_QUATERNION, CHUTE_PLATE_ROTATION, chuteCenterAt, sortChutePoint,
+  sortSlotX, chuteSurfaceY, isAtChuteEntry, isChuteEndReached, chuteClearance,
+  slideStartCenter, SLIDE_START_LIFT,
+  BIN_CENTER_Z, BIN_REST_Y, GUIDE_END_Z, CHUTE_END_CENTER_Z,
 } from './scenes/conveyor-sorting/sortChute';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +40,10 @@ const sensorSource = src('scenes/conveyor-sorting/components/PhysicsSensor.tsx')
 const geoSource = src('components/scene/shared/geometries.ts');
 const matSource = src('components/scene/shared/materials.ts');
 const storeSource = src('stores/useDeviceStore.ts');
+const chuteMathSource = src('scenes/conveyor-sorting/sortChute.ts');
+const slideDebugSource = src('scenes/conveyor-sorting/materialSlideDebug.ts');
+const appSource = src('App.tsx');
+const effectsSource = src('platform/ConveyorDeviceEffects.tsx');
 
 describe('推板与工件：同一个行程真值、同一个间隙公式', () => {
   it('共享快照是原地修改，任何组件持有的旧引用都能看到本帧新值', () => {
@@ -137,12 +144,39 @@ describe('分拣槽：推出带面后沿槽滑落入盒，而不是凭空消失'
     expect(CHUTE_PLATE.length).toBeGreaterThan(SORT_CHUTE.ENTRY_Z - SORT_CHUTE.EXIT_Z);
   });
 
-  it('轨迹起点贴槽口、终点落在收集盒内，且全程不高于起点', () => {
+  it('工件沿槽面法线抬升、姿态与槽面同角度，底面必然平行不啃板', () => {
+    expect(CHUTE_PLATE_ROTATION[0]).toBe(-CHUTE_ANGLE);
+    expect(CHUTE_NORMAL[1]).toBeCloseTo(Math.cos(CHUTE_ANGLE), 6);
+    expect(CHUTE_NORMAL[2]).toBeCloseTo(-Math.sin(CHUTE_ANGLE), 6);
+    expect(CHUTE_QUATERNION[0]).toBeCloseTo(Math.sin(-CHUTE_ANGLE / 2), 6);
+    expect(CHUTE_QUATERNION[3]).toBeCloseTo(Math.cos(-CHUTE_ANGLE / 2), 6);
+    // 下坡切线朝向 -Z / -Y，且与法线正交
+    expect(CHUTE_TANGENT[2]).toBeLessThan(0);
+    expect(CHUTE_TANGENT[1]).toBeLessThan(0);
+    expect(CHUTE_TANGENT[1] * CHUTE_NORMAL[1] + CHUTE_TANGENT[2] * CHUTE_NORMAL[2])
+      .toBeCloseTo(0, 6);
+    // 工件中心 - 槽面点 = CHUTE_LIFT * 法线（不再是世界 Y 硬抬）
+    const [, cy, cz] = chuteCenterAt('sorting1', SORT_CHUTE.ENTRY_Z);
+    expect(cy - SORT_CHUTE.ENTRY_Y).toBeCloseTo(CHUTE_LIFT * CHUTE_NORMAL[1], 6);
+    expect(cz - SORT_CHUTE.ENTRY_Z).toBeCloseTo(CHUTE_LIFT * CHUTE_NORMAL[2], 6);
+    // 法线抬升量必须大于旧版「世界 Y 抬升」在斜面下坡角造成的啃板深度
+    const oldLiftY = CHUTE_LIFT;
+    const neededLiftY = COMPONENT.MATERIAL_HALF_SIZE
+      * (Math.cos(CHUTE_ANGLE) + Math.sin(CHUTE_ANGLE)) + SORT_CHUTE.PLATE_T / 2;
+    expect(oldLiftY).toBeLessThan(neededLiftY);
+    // 沿法线抬升后，工件底面离槽面还有 0.006 的净空，不会共面闪烁
+    expect(CHUTE_LIFT - COMPONENT.MATERIAL_HALF_SIZE).toBeCloseTo(0.006, 6);
+    // 槽板中心沿法线下移半板厚，旋转后顶面与 ENTRY_Y / EXIT_Y 精确重合
+    expect(CHUTE_PLATE.center[1] + (SORT_CHUTE.PLATE_T / 2) * CHUTE_NORMAL[1])
+      .toBeCloseTo((SORT_CHUTE.ENTRY_Y + SORT_CHUTE.EXIT_Y) / 2, 6);
+  });
+
+  it('兜底轨迹起点贴槽口、终点落在收集盒内，且全程不高于起点', () => {
     const start = sortChutePoint('sorting1', 0);
     const end = sortChutePoint('sorting1', 1);
     expect(start[0]).toBe(CYLINDERS.sorting1);
-    expect(start[2]).toBe(SORT_CHUTE.ENTRY_Z);
-    expect(start[1]).toBeCloseTo(SORT_CHUTE.ENTRY_Y + CHUTE_LIFT, 6);
+    expect(start[2]).toBeCloseTo(SORT_CHUTE.ENTRY_Z + CHUTE_LIFT * CHUTE_NORMAL[2], 6);
+    expect(start[1]).toBeCloseTo(SORT_CHUTE.ENTRY_Y + CHUTE_LIFT * CHUTE_NORMAL[1], 6);
     expect(end[2]).toBe(BIN_CENTER_Z);
     expect(end[1]).toBe(BIN_REST_Y);
     expect(end[1]).toBeLessThan(start[1]);
@@ -154,12 +188,71 @@ describe('分拣槽：推出带面后沿槽滑落入盒，而不是凭空消失'
       expect(z).toBeLessThanOrEqual(lastZ + 1e-6);
       lastY = y; lastZ = z;
     }
+    expect(isChuteEndReached({ x: 0, y: 0.7, z: CHUTE_END_CENTER_Z })).toBe(true);
+    expect(isChuteEndReached({ x: 0, y: 1.05, z: SORT_CHUTE.ENTRY_Z })).toBe(false);
+  });
+
+  it('法向净空按真实姿态算支撑半径：平放会啃板，跟着斜面转则不啃板', () => {
+    const slopeQ = {
+      x: CHUTE_QUATERNION[0], y: CHUTE_QUATERNION[1],
+      z: CHUTE_QUATERNION[2], w: CHUTE_QUATERNION[3],
+    };
+    for (const z of [SORT_CHUTE.ENTRY_Z, SORT_CHUTE.EXIT_Z]) {
+      const [x, y, cz] = chuteCenterAt('sorting1', z);
+      const pose = { x, y, z: cz };
+      // 姿态与槽面平行：净空恰好等于设计余量
+      expect(chuteClearance(pose, slopeQ)).toBeCloseTo(0.006, 5);
+      // 旧版「方块保持平放」：下坡角会啃进斜面 2cm 以上，正是用户看到的现象
+      expect(chuteClearance(pose)).toBeLessThan(-0.015);
+      // 沿世界 Y 下沉 0.03m 也是啃板
+      expect(chuteClearance({ x, y: y - 0.03, z: cz }, slopeQ)).toBeLessThan(0);
+    }
+  });
+
+  it('滑落真的交给 Rapier dynamic 刚体，而不是脚本平移', () => {
+    expect(materialSource).toContain("setBodyType(0 as const, true)");
+    expect(materialSource).toContain('body.setRotation(SLOPE, true)');
+    // 只锁角自由度：平移仍由重力/摩擦/接触求解，但不会翻滚导致下坡角啃板
+    expect(materialSource).toContain('setEnabledRotations(false, false, false, true)');
+    expect(materialSource).toContain('setEnabledRotations(true, true, true, true)');
+    expect(materialSource).toContain('setAdditionalSolverIterations(8)');
+    expect(materialSource).toContain('CHUTE_TANGENT[1] * SORT_CHUTE.SLIDE_LAUNCH_SPEED');
+    expect(materialSource).toContain("drive = 'physics'");
+    expect(materialSource).toContain('writeMaterialSlideDebug');
+    // 旧版 sliding 分支是脚本平移；现在该分支只释放刚体，不再驱动 kinematic 位移
+    expect(materialSource).not.toContain('sortChutePoint(slotRef.current, t)');
+    expect(chuteSource).toContain('<ChuteColliders />');
+    expect(chuteSource).toContain('CHUTE_PLATE_ROTATION');
+    expect(chuteSource).toContain('friction={SORT_CHUTE.CHUTE_FRICTION}');
+    expect(materialSource).toContain('slideStartCenter(slotRef.current)');
+    // 摩擦必须低于 tan(坡角)，否则物理工件会粘在槽面上
+    const avgFriction = (0.6 + SORT_CHUTE.CHUTE_FRICTION) / 2;
+    expect(Math.tan(CHUTE_ANGLE)).toBeGreaterThan(avgFriction);
+    expect(SORT_CHUTE.SLIDE_MAX_SECONDS).toBeGreaterThan(SORT_CHUTE.SLIDE_SECONDS);
+  });
+
+  it('释放点贴着槽面、槽板碰撞体向下加厚，抑制首帧接触穿透', () => {
+    expect(SLIDE_START_LIFT).toBeLessThan(CHUTE_LIFT);
+    expect(SLIDE_START_LIFT - COMPONENT.MATERIAL_HALF_SIZE)
+      .toBeCloseTo(SORT_CHUTE.SLIDE_START_GAP, 6);
+    const [sx, sy, sz] = slideStartCenter('sorting1');
+    expect(sx).toBe(CYLINDERS.sorting1);
+    expect(chuteClearance({ x: sx, y: sy, z: sz }, {
+      x: CHUTE_QUATERNION[0], y: CHUTE_QUATERNION[1],
+      z: CHUTE_QUATERNION[2], w: CHUTE_QUATERNION[3],
+    })).toBeCloseTo(SORT_CHUTE.SLIDE_START_GAP, 5);
+    expect(SORT_CHUTE.COLLIDER_HALF_T).toBeGreaterThan(SORT_CHUTE.PLATE_T / 2);
+    expect(chuteSource).toContain('COLLIDER_HALF_T');
+    // 加厚后碰撞体顶面仍与可见槽面重合
+    expect(SORT_CHUTE.PLATE_T / 2 - SORT_CHUTE.COLLIDER_HALF_T + SORT_CHUTE.COLLIDER_HALF_T)
+      .toBeCloseTo(SORT_CHUTE.PLATE_T / 2, 8);
   });
 
   it('落盒后计入收集列表、再清理刚体，演示状态机才能继续闭环', () => {
     expect(materialSource).toContain('addSortedItem');
-    expect(materialSource).toContain('sortChutePoint');
     expect(materialSource).toContain('SETTLE_SECONDS');
+    expect(materialSource).toContain('DROP_SECONDS');
+    expect(materialSource).toContain('SLIDE_MAX_SECONDS');
     expect(storeSource).toContain('addSortedItem');
     expect(storeSource).toContain('SORT_CHUTE.MAX_STACK');
     expect(chuteSource).toContain('CollectedBlocks');
@@ -216,5 +309,43 @@ describe('视角与传感器 LED', () => {
     // 大面积背面状态条仍走带自发光的 Standard 材质
     expect(matSource).toContain('sensorPanelGlow');
     expect(sensorSource).toContain('materials.sensorPanelGlow');
+  });
+});
+
+describe('进口引导挡板：把推板送来的工件收进槽道', () => {
+  it('从槽口朝传送带方向延伸并外张成喇叭口', () => {
+    expect(SORT_CHUTE.GUIDE_LEN).toBeGreaterThan(0.2);
+    expect(SORT_CHUTE.GUIDE_FLARE_ANGLE).toBeGreaterThan(0);
+    expect(GUIDE_END_Z).toBeGreaterThan(SORT_CHUTE.ENTRY_Z + SORT_CHUTE.GUIDE_LEN);
+    expect(chuteSource).toContain('<GuideRails />');
+    expect(chuteSource).toContain('GUIDE_FLARE_ANGLE');
+    expect(chuteSource).toContain('guide-col-');
+    expect(chuteMathSource).toContain('GUIDE_END_Z');
+  });
+
+  it('末端不能挡住沿 X 输送的带面工件，槽道要容得下推板', () => {
+    // 带面工件中心 Z≈0、半宽 0.07，引导挡板最靠 +Z 的末端必须还在它前面
+    expect(GUIDE_END_Z).toBeLessThan(-COMPONENT.MATERIAL_HALF_SIZE);
+    // 推板半宽 0.13 要能穿过 HALF_W=0.16 的槽道
+    expect(COMPONENT.CYLINDER_PUSH_PLATE_HALF[0]).toBeLessThan(SORT_CHUTE.HALF_W);
+    expect(SORT_CHUTE.GUIDE_BOTTOM_Y).toBeLessThan(SORT_CHUTE.ENTRY_Y);
+  });
+
+  it('靠槽口一侧盒壁降到工件底面以下，动态工件能越过盒口', () => {
+    const blockBottomAtExit = SORT_CHUTE.EXIT_Y
+      + (CHUTE_LIFT - COMPONENT.MATERIAL_HALF_SIZE) * CHUTE_NORMAL[1];
+    const backWallTop = SORT_CHUTE.BIN_FLOOR_Y + SORT_CHUTE.BIN_BACK_WALL_H;
+    expect(backWallTop).toBeLessThan(blockBottomAtExit);
+    expect(SORT_CHUTE.BIN_BACK_WALL_H).toBeLessThan(SORT_CHUTE.BIN_WALL_H);
+    expect(chuteSource).toContain('BIN_BACK_WALL_H');
+  });
+});
+
+describe('运行时诊断：能证明滑落真的进了物理世界', () => {
+  it('两个入口都暴露只读的滑落快照', () => {
+    expect(slideDebugSource).toContain('readMaterialSlideDebug');
+    expect(slideDebugSource).toContain('releases: number');
+    expect(appSource).toContain('getMaterialSlide: readMaterialSlideDebug');
+    expect(effectsSource).toContain('getMaterialSlide: readMaterialSlideDebug');
   });
 });

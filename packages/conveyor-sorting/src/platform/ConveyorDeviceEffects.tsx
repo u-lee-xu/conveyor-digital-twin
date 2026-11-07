@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useConveyorScoring } from '../hooks/useConveyorScoring';
 import { useDeviceStore } from '../stores';
+import { readMaterialSlideDebug } from '../scenes/conveyor-sorting/materialSlideDebug';
 
 export function ConveyorDeviceEffects() {
   useConveyorScoring();
@@ -14,6 +15,7 @@ export function ConveyorDeviceEffects() {
       setState: useDeviceStore.setState,
       spawnMaterial: () => { useDeviceStore.getState().spawnMaterial(); },
       clearMaterial: () => { useDeviceStore.getState().clearMaterial(); },
+      getMaterialSlide: readMaterialSlideDebug,
     };
     return () => { delete (window as unknown as { __DEBUG__?: unknown }).__DEBUG__; };
   }, []);

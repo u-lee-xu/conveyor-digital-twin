@@ -10,6 +10,7 @@ import { useSimMode } from './hooks/useSimMode';
 import { useConveyorScoring } from './hooks/useConveyorScoring';
 import { ConveyorSortingSceneContent } from './scenes/conveyor-sorting/SceneContent';
 import { VISUAL } from './scenes/conveyor-sorting/constants';
+import { readMaterialSlideDebug } from './scenes/conveyor-sorting/materialSlideDebug';
 
 /** 与自动配药 App 同款紧凑模式选择器（不再用共享 ModeSelector 的大标签） */
 const MODES = [
@@ -48,6 +49,7 @@ function App() {
         setState: useDeviceStore.setState,
         spawnMaterial: () => { useDeviceStore.getState().spawnMaterial(); },
         clearMaterial: () => { useDeviceStore.getState().clearMaterial(); },
+        getMaterialSlide: readMaterialSlideDebug,
       },
     });
   }, []);

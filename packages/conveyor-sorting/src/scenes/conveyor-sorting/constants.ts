@@ -253,11 +253,35 @@ export const SORT_CHUTE = {
   BIN_WALL_H: 0.18,
   // 靠近观察者的 -Z 侧做成低唇口，否则四壁等高会把盒子画成一块实心方块
   BIN_FRONT_WALL_H: 0.075,
+  // 靠槽口的 +Z 侧也做低唇口：动态工件沿槽滑到底时底面约 0.51m，
+  // 全高盒壁（顶 0.60m）会把它挡在盒外。
+  BIN_BACK_WALL_H: 0.065,
   BIN_RIM_T: 0.008,
   WALL_T: 0.014,
-  SLIDE_SECONDS: 0.70,   // 沿槽滑落时长
-  SETTLE_SECONDS: 0.40,  // 落盒后停留（让观众看到入盒）
-  MAX_STACK: 6,          // 3 列 × 2 排刚好装满一层，不会溢出盒口
+
+  // 进口引导挡板：从槽口朝 +Z（传送带方向）延伸一小段，末端外张成喇叭口，
+  // 把被推板送过来的工件导进槽道（工厂滑槽常见做法）。末端必须停在
+  // 带面工件（Z≈0、半宽 0.07）之前，否则会挡住沿 X 输送的物料。
+  GUIDE_LEN: 0.26,
+  GUIDE_FLARE_LEN: 0.05,
+  GUIDE_FLARE_ANGLE: 0.30,
+  GUIDE_H: 0.09,
+  GUIDE_BOTTOM_Y: 0.97,
+
+  // 真实物理滑落：工件以 dynamic 刚体在倾斜槽面上由重力加速下滑
+  CHUTE_FRICTION: 0.22,      // 与工件 0.6 取平均后仍小于 tan(38.7°)=0.80，保证能滑动
+  // 静态槽板碰撞体向下加厚（顶面仍与可见槽面重合）：薄板在快速接触时
+  // 求解器容易允许瞬时穿透，加厚后接触更稳定。
+  COLLIDER_HALF_T: 0.04,
+  // 释放到 dynamic 时几乎贴着槽面（1mm），避免自由落一小段再砸出穿透
+  SLIDE_START_GAP: 0.001,
+  SLIDE_LAUNCH_SPEED: 0.45,  // 沿下坡切线的入场初速度，避免起步卡住
+  SLIDE_ALIGN_SECONDS: 0.12, // 入槽前用 kinematic 把偏离的 X 平滑归位
+  SLIDE_MAX_SECONDS: 1.60,   // 看门狗：物理卡住也不能让演示状态机死等
+  DROP_SECONDS: 0.28,        // 槽尾 → 盒内的落盒插值（姿态同时回正）
+  SLIDE_SECONDS: 0.70,       // 兜底脚本轨迹时长（与重力滑落耗时同量级）
+  SETTLE_SECONDS: 0.40,      // 落盒后停留（让观众看到入盒）
+  MAX_STACK: 6,              // 3 列 × 2 排刚好装满一层，不会溢出盒口
   SLOTS: ['sorting1', 'sorting2'] as const,
 } as const;
 
