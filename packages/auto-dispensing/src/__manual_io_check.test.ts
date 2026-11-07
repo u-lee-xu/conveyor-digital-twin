@@ -4,13 +4,15 @@
  * 手动模式的语义是「面板按键 ≡ 直接置位/复位 PLC 输出线圈」，因此这里要守住三件事：
  *   1. 面板上的地址必须来自 constants.ts 的三张协议地址表，不能在 JSX 里回填 'Y2' / 'C32'；
  *   2. 输入点（X）电平由纯函数读取，编码器位镜像与 HR120 低 8 位严格一致；
- *   3. UI 紧凑化不能回退：只渲染两张卡、输入点三列、地址可见、手动模式不展示自动流程状态。
+ *   3. UI 紧凑化不能回退：只渲染两张卡、输入点三列、地址可见、手动模式不展示自动流程状态；
+ *   4. 滑台点动必须是一次点击 10mm 的离散脉冲，不能退回 rAF 连续速度。
  * 另外把「信号灯塔抬高」也锁进断言，防止后续改常量又让灯头与立杆脱开或被展台裁切。
  */
 import { describe, it, expect } from 'vitest';
 import {
   MODBUS_READ_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS,
   LIGHT_POLE_Y, LIGHT_POLE_H, LIGHT_DOME_R, LIGHT_DOME_STEP, PART_STAGES,
+  MANUAL_JOG, PULSES_PER_M, HOPPER, MAGAZINE_X, SCREW_DETAIL,
   type MagazineId,
 } from './scenes/auto-dispensing/constants';
 import {
@@ -21,13 +23,15 @@ import {
 
 const MAGS: MagazineId[] = ['A', 'B', 'C', 'D'];
 
-/** Vite 的 import.meta.glob 只接受静态字面量，五个文件分别声明 */
+/** Vite 的 import.meta.glob 只接受静态字面量，逐个文件分别声明 */
 const globs: Record<string, Record<string, string>> = {
   './App.tsx': import.meta.glob<string>('./App.tsx', { query: '?raw', import: 'default', eager: true }),
   './platform/PlatformModePanels.tsx': import.meta.glob<string>('./platform/PlatformModePanels.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/panels/DispenseControlPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseControlPanel.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/panels/DispenseStatusPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseStatusPanel.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/components/ControlCabinet.tsx': import.meta.glob<string>('./scenes/auto-dispensing/components/ControlCabinet.tsx', { query: '?raw', import: 'default', eager: true }),
+  './scenes/auto-dispensing/hooks/useDispenseLoop.ts': import.meta.glob<string>('./scenes/auto-dispensing/hooks/useDispenseLoop.ts', { query: '?raw', import: 'default', eager: true }),
+  './stores/useDispensingStore.ts': import.meta.glob<string>('./stores/useDispensingStore.ts', { query: '?raw', import: 'default', eager: true }),
 };
 
 function rawSource(path: string): string {
@@ -41,6 +45,8 @@ const platformSource = rawSource('./platform/PlatformModePanels.tsx');
 const controlSource = rawSource('./scenes/auto-dispensing/panels/DispenseControlPanel.tsx');
 const statusSource = rawSource('./scenes/auto-dispensing/panels/DispenseStatusPanel.tsx');
 const cabinetSource = rawSource('./scenes/auto-dispensing/components/ControlCabinet.tsx');
+const loopSource = rawSource('./scenes/auto-dispensing/hooks/useDispenseLoop.ts');
+const storeSource = rawSource('./stores/useDispensingStore.ts');
 
 function makeInput(): InputSnapshot {
   return {
@@ -240,14 +246,22 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
     expect(controlSource).toContain('setSendCyl(mag, false, cyl.position)');
     expect(controlSource).toContain('setTiltCyl(true, tiltCyl.angle)');
     expect(controlSource).toContain('setTiltCyl(false, tiltCyl.angle)');
-    expect(controlSource).toContain('setMotor(true, false)');
+    expect(controlSource).toContain('setMotor(dir > 0, dir < 0)');
     expect(controlSource).toContain('setMotor(false, false)');
   });
 
-  it('前进/后退是按住点动，松开即复位输出线圈', () => {
-    expect(controlSource).toContain('onPointerDown={() => setMotor(true, false)}');
-    expect(controlSource).toContain('onPointerUp={() => setMotor(false, false)}');
-    expect(controlSource).toContain('onPointerLeave={() => setMotor(false, false)}');
+  it('前进/后退是单击精确步进 + 长按连续点动，松开复位输出线圈', () => {
+    expect(controlSource).toContain('onPointerDown={() => beginJog(1)}');
+    expect(controlSource).toContain('onPointerDown={() => beginJog(-1)}');
+    expect(controlSource).toContain('onPointerUp={stopJog}');
+    expect(controlSource).toContain('onPointerLeave={stopJog}');
+    expect(controlSource).toContain('onPointerCancel={stopJog}');
+    expect(controlSource).toContain('jogStep(dir)');
+    expect(controlSource).toContain('MANUAL_JOG.HOLD_MS');
+    expect(controlSource).toContain('MANUAL_JOG.REPEAT_MS');
+    // Pointer Events 已覆盖触屏；旧版 pointer + touch 双绑定会让一次点击发两个脉冲
+    expect(controlSource).not.toContain('onTouchStart');
+    expect(controlSource).not.toContain('onTouchEnd');
   });
 
   it('输入点每点都显示地址，按组三列排布，不再只塞在 title 里', () => {
@@ -276,6 +290,47 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
     // 进度条只保留最顶部一条滑台位置总览，不再给每个执行器各铺一条
     expect((controlSource.match(/progress-bar/g) ?? []).length).toBe(1);
     expect(controlSource).toContain('补满');
+  });
+});
+
+// ============================================================
+// 滑台点动：单击一次只走 1 个编码器脉冲
+// ============================================================
+
+describe('手动点动：单击 10mm 精确步进', () => {
+  it('步长 = 1 个 HR120 脉冲，且远小于料斗半宽与药仓间距', () => {
+    expect(MANUAL_JOG.STEP * PULSES_PER_M).toBeCloseTo(1, 12);
+    expect(MANUAL_JOG.STEP).toBeGreaterThan(0);
+    expect(MANUAL_JOG.STEP).toBeLessThan(HOPPER.W / 2);
+    expect(MANUAL_JOG.STEP).toBeLessThan(MAGAZINE_X.B - MAGAZINE_X.A);
+  });
+
+  it('旧连续速度下轻点 0.2s 就越过接药窗口，新步长小一个量级', () => {
+    const oldShortClick = SCREW_DETAIL.SLIDER_SPEED * 0.2;
+    expect(oldShortClick).toBeGreaterThan(HOPPER.W / 2);
+    expect(MANUAL_JOG.STEP).toBeLessThan(oldShortClick / 4);
+  });
+
+  it('长按连续点动等效速度低于演示速度，且仍能覆盖相邻仓行程', () => {
+    const jogSpeed = MANUAL_JOG.STEP / (MANUAL_JOG.REPEAT_MS / 1000);
+    expect(jogSpeed).toBeGreaterThan(0);
+    expect(jogSpeed).toBeLessThan(SCREW_DETAIL.SLIDER_SPEED);
+    expect((MAGAZINE_X.B - MAGAZINE_X.A) / jogSpeed).toBeLessThan(5);
+  });
+
+  it('面板占用电机时 rAF 连续速度驱动让位，演示/PLC 链路不受影响', () => {
+    expect(loopSource).toContain('!s.jogActive');
+    expect(loopSource).toContain('SLIDER_SPEED * dt');
+    expect(controlSource).toContain('setJogActive(true)');
+    expect(controlSource).toContain('setJogActive(false)');
+    expect(storeSource).toContain('jogActive: false');
+    expect(storeSource).toContain('setJogActive: (active) => set({ jogActive: active })');
+  });
+
+  it('卸载与复位都会释放点动占用，Y0/Y1 不会一直挂着', () => {
+    expect(controlSource).toContain('window.clearInterval(j.repeat)');
+    expect(controlSource).toContain('s.setMotor(false, false)');
+    expect(storeSource).toContain('jogActive: false,');
   });
 });
 

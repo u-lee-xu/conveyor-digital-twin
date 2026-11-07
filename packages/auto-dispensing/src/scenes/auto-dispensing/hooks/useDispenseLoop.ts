@@ -97,8 +97,11 @@ export function useDispenseLoop() {
       const r = ref.current;
 
       // ========== 电机运动（手动/仿真共用：motorFwd/Rev 驱动滑台） ==========
+      // 手动点动（jogActive）时 Y0/Y1 线圈仍置位，但位移已由面板按 MANUAL_JOG.STEP
+      // 发离散脉冲，这里必须让位，否则 rAF 会用演示速度把「点一次」放大成几十毫米。
+      // 演示自动流程 / PLC / 观众广播不置 jogActive，速度仍是原来的 SLIDER_SPEED。
       const moving = s.motorFwd || s.motorRev;
-      if (moving && !s.buttons.estop) {
+      if (moving && !s.buttons.estop && !s.jogActive) {
         const dir = s.motorFwd ? 1 : -1;
         s.setSliderX(s.sliderX + dir * SLIDER_SPEED * dt);
       }

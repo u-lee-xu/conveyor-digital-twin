@@ -1,6 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  SLIDER_MIN_X, SLIDER_MAX_X, MODBUS_HOLDING_REGISTERS, MAG_CAPACITY,
+  SLIDER_MIN_X, SLIDER_MAX_X, MODBUS_HOLDING_REGISTERS, MAG_CAPACITY, MANUAL_JOG,
   type MagazineId,
 } from '../constants';
 import {
@@ -20,7 +21,17 @@ import { DispenseStatusPanel } from './DispenseStatusPanel';
  * 每张 20px padding + 逐行进度条，传感器状态要滚很久才看得到。
  * 现在把「说明 / 输出点 / 药仓」合成一张卡（内部分隔线），输入点单独一张，
  * 逐行进度条换成点位 LED，一屏内可完成单点操作与状态核对。
+ *
+ * 点动改造：前进/后退原来「按住 = 0.32m/s 连续走」，轻点一次就走几十毫米，
+ * 料斗很难对准药仓斜槽。现在单击只发一个 MANUAL_JOG.STEP 离散脉冲（10mm /
+ * 1 个 HR120 脉冲），长按超过 HOLD_MS 才转连续点动；Y0/Y1 线圈置位语义保留。
  */
+type JogDir = 1 | -1;
+interface JogState {
+  hold: number;
+  repeat: number;
+}
+
 const MAG_ORDER: MagazineId[] = ['A', 'B', 'C', 'D'];
 const OUTPUT_BY_KEY = Object.fromEntries(
   MANUAL_OUTPUT_POINTS.map((p) => [p.key, p]),
@@ -61,11 +72,57 @@ export function DispenseControlPanel() {
   const lamp = useDispensingStore((s) => s.lamp);
   const sensors = useDispensingStore((s) => s.sensors);
   const setMotor = useDispensingStore((s) => s.setMotor);
+  const setJogActive = useDispensingStore((s) => s.setJogActive);
   const setSendCyl = useDispensingStore((s) => s.setSendCyl);
   const setTiltCyl = useDispensingStore((s) => s.setTiltCyl);
   const setLamp = useDispensingStore((s) => s.setLamp);
   const encoderPulses = useDispensingStore((s) => s.encoderPulses);
   const encoderDir = useDispensingStore((s) => s.encoderDir);
+  const jogRef = useRef<JogState | null>(null);
+
+  /** 发一个点动脉冲：位移恒为 MANUAL_JOG.STEP，编码器同步 ±1 脉冲 */
+  const jogStep = (dir: JogDir) => {
+    const s = useDispensingStore.getState();
+    s.setSliderX(s.sliderX + dir * MANUAL_JOG.STEP);
+  };
+
+  /** 松开 / 移出 / 取消：停发脉冲，复位 Y0/Y1 并释放 rAF 让位标志 */
+  const stopJog = () => {
+    const j = jogRef.current;
+    if (!j) return;
+    window.clearTimeout(j.hold);
+    window.clearInterval(j.repeat);
+    jogRef.current = null;
+    setJogActive(false);
+    setMotor(false, false);
+  };
+
+  /** 按下：先给一个精确步进并置位输出线圈；按住超过 HOLD_MS 才转离散连续点动 */
+  const beginJog = (dir: JogDir) => {
+    stopJog();
+    setJogActive(true);
+    setMotor(dir > 0, dir < 0);
+    jogStep(dir);
+    const j: JogState = { hold: 0, repeat: 0 };
+    j.hold = window.setTimeout(() => {
+      if (jogRef.current !== j) return;
+      j.repeat = window.setInterval(() => jogStep(dir), MANUAL_JOG.REPEAT_MS);
+    }, MANUAL_JOG.HOLD_MS);
+    jogRef.current = j;
+  };
+
+  // 切模式 / 进展台时组件会卸载，必须清定时器并释放电机占用，否则 Y0 会一直挂着
+  useEffect(() => () => {
+    const j = jogRef.current;
+    if (j) {
+      window.clearTimeout(j.hold);
+      window.clearInterval(j.repeat);
+      jogRef.current = null;
+    }
+    const s = useDispensingStore.getState();
+    s.setJogActive(false);
+    s.setMotor(false, false);
+  }, []);
 
   const outSnap: OutputSnapshot = { motorFwd, motorRev, sendCyl, tiltCyl, lamp };
   const sliderPct = ((sliderX - SLIDER_MIN_X) / (SLIDER_MAX_X - SLIDER_MIN_X)) * 100;
@@ -98,7 +155,7 @@ export function DispenseControlPanel() {
           <div className="progress-fill" style={{ width: `${sliderPct}%` }} />
         </div>
         <div className="mt-0.5 text-[0.55rem] leading-tight text-slate-400">
-          按键 ≡ 直接置位/复位 PLC 输出；前进/后退按住点动，其余点一次保持。
+          {`按键 ≡ 直接置位/复位 PLC 输出；前进/后退单击 ${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm（1 脉冲），按住连续点动；其余点一次保持。`}
         </div>
 
         <div className={divider} />
@@ -109,27 +166,27 @@ export function DispenseControlPanel() {
           <span className="badge badge-slate">{MANUAL_OUTPUT_POINTS.length} 点可写</span>
         </div>
 
-        {/* 滑台电机：点动，两个输出点互锁 */}
+        {/* 滑台电机：单击精确步进 + 长按离散连续点动，两个输出点互锁 */}
         <div className={rowCls}>
           <span className={nameCls}>滑台</span>
           <AddrTag points={motorPoints} />
           <button
             className={`${btnCls} ${motorFwd ? 'btn-success' : 'btn-outline'}`}
-            onPointerDown={() => setMotor(true, false)}
-            onPointerUp={() => setMotor(false, false)}
-            onPointerLeave={() => setMotor(false, false)}
-            onTouchStart={() => setMotor(true, false)}
-            onTouchEnd={() => setMotor(false, false)}
+            title={`${motorPoints[0].addr} · 单击 +${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动`}
+            onPointerDown={() => beginJog(1)}
+            onPointerUp={stopJog}
+            onPointerLeave={stopJog}
+            onPointerCancel={stopJog}
           >
             前进
           </button>
           <button
             className={`${btnCls} ${motorRev ? 'btn-success' : 'btn-outline'}`}
-            onPointerDown={() => setMotor(false, true)}
-            onPointerUp={() => setMotor(false, false)}
-            onPointerLeave={() => setMotor(false, false)}
-            onTouchStart={() => setMotor(false, true)}
-            onTouchEnd={() => setMotor(false, false)}
+            title={`${motorPoints[1].addr} · 单击 -${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动`}
+            onPointerDown={() => beginJog(-1)}
+            onPointerUp={stopJog}
+            onPointerLeave={stopJog}
+            onPointerCancel={stopJog}
           >
             后退
           </button>

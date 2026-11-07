@@ -32,6 +32,11 @@ interface DispensingState {
   sliderX: number;
   motorFwd: boolean;
   motorRev: boolean;
+  /**
+   * 手动点动中：Y0/Y1 线圈照常置位，但滑台位移由面板按 MANUAL_JOG.STEP 发离散脉冲，
+   * rAF 不能再按演示连续速度推进，否则「点一次」会被放大成几十毫米。
+   */
+  jogActive: boolean;
   /** 目标 X（自动模式按目标直线移动） */
   targetX: number | null;
 
@@ -109,6 +114,8 @@ interface DispensingState {
   /** 观众端 / PLC 回读：直接按寄存器脉冲对齐滑块与累计器（寄存器即真值） */
   setEncoderPulses: (pulses: number) => void;
   setMotor: (fwd: boolean, rev: boolean) => void;
+  /** 手动点动占用电机时置位，让 rAF 的连续速度驱动让位给离散步进 */
+  setJogActive: (active: boolean) => void;
   setTargetX: (x: number | null) => void;
   setRecipe: (mag: MagazineId, n: number) => void;
   setMagStock: (mag: MagazineId, n: number) => void;
@@ -173,6 +180,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
   sliderX: SLIDER_MIN_X,
   motorFwd: false,
   motorRev: false,
+  jogActive: false,
   targetX: null,
 
   encoderPulses: 0,
@@ -263,6 +271,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
     if (fwd || rev) set({ targetX: null });
     void s;
   },
+  setJogActive: (active) => set({ jogActive: active }),
   setTargetX: (x) => set({ targetX: x }),
   setRecipe: (mag, n) =>
     set((s) => ({ recipe: { ...s.recipe, [mag]: Math.min(RECIPE_LIMIT, Math.max(0, n)) } })),
@@ -348,6 +357,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
       targetX: null,
       motorFwd: false,
       motorRev: false,
+      jogActive: false,
       encoderPulses: 0,
       encoderAccum: 0,
       encoderDir: 0,
