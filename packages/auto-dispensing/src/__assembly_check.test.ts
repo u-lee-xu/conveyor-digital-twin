@@ -19,10 +19,11 @@ import {
   CHUTE_RAMP_END_Z, CHUTE_RAMP_END_Y,
   PILL_BASE_Y, PILL_R, PILL_LAND_Y, HOPPER_OPEN_Y, HOPPER_CENTER_Y, HOPPER_CENTER_Z,
   HOPPER, HOPPER_LOCAL_Y, HOPPER_LOCAL_Z,
-  ROTARY_CENTER, ROTARY_BODY, ROTARY_DISC, SLIDER_SIZE, SLIDER_TOP_Y, SLIDER_MIN_X, SLIDER_MAX_X,
+  ROTARY_CENTER, ROTARY_BODY, ROTARY_DISC, ROTARY_DISC_RIM, ROTARY_TOP_DETAIL,
+  SLIDER_SIZE, SLIDER_TOP_Y, SLIDER_MIN_X, SLIDER_MAX_X,
   COLLECT_BIN_X, BIN_BASE_Y, BIN_TOP_Y, DUMP_LAND_Y,
   CABINET_POSITION, CABINET_SIZE, CABINET_PANEL, CABINET_BUTTONS, CABINET_LAMPS,
-  CABINET_LAMP_Y, CABINET_SELECTOR, VISUAL, FRAME_DETAIL, SLIDER_DETAIL,
+  CABINET_LAMP_Y, CABINET_SELECTOR, VISUAL, FRAME_DETAIL, DRIVE_STATIONS, SLIDER_DETAIL,
   VIEW_PRESETS, MIRROR_VIEW_SHIFT, MIRROR_LOCAL_VIEW_SHIFT,
   SCREW_DETAIL, AXIS_R, PULSES_PER_M, ENCODER_PULSES_PER_REV, ENCODER_PULSES_MAX,
   LIGHT_TOWER_X, LIGHT_POLE_H, LIGHT_POLE_Y, LIGHT_DOME_R, LIGHT_DOME_STEP,
@@ -487,6 +488,153 @@ describe('滚珠丝杆直线模组：拟真细节与装配接口零漂移', () =
   });
 });
 
+// ============================================================
+// 2026-11-07 近景穿模修复：输出法兰盘与取药料斗后壁的几何隔离。
+// 旧版盘半径 0.046 > 斗后壁半高 0.0325，且所有盘面贴片都放在 pivot z>0，
+// 正好插进 wallZ- 的板厚 [0, T]，从斜上方看就是「银色弧线插进黄色斗内」。
+// ============================================================
+describe('输出法兰盘不再穿进料斗（近景穿模防回退）', () => {
+  const rim = ROTARY_DISC_RIM;
+  const hopper = componentSources['./scenes/auto-dispensing/components/SliderHopper.tsx'];
+
+  it('盘半径小于斗后壁内轮廓的半高与半宽，盘缘不会越过斗口沿', () => {
+    expect(rim.MAX_R).toBeCloseTo(
+      Math.min(HOPPER.H / 2 - HOPPER.T, HOPPER.W / 2 - HOPPER.T), 9,
+    );
+    expect(ROTARY_DISC.R).toBeLessThan(rim.MAX_R);
+    expect(ROTARY_DISC.R).toBeLessThan(HOPPER.H / 2);
+    expect(HOPPER.W).toBeGreaterThan(2 * ROTARY_DISC.R);
+  });
+
+  it('盘缘亮边与径向紧定螺钉的外缘都留在 MAX_R 之内', () => {
+    expect(ROTARY_DISC.R + rim.BAND_TUBE).toBeLessThan(rim.MAX_R);
+    expect(ROTARY_DISC.R + rim.SCREW_LEN).toBeLessThan(rim.MAX_R);
+    expect(rim.SCREW_N).toBeGreaterThanOrEqual(4);
+    expect(hopper).toContain('RIM.MAX_R');
+    expect(hopper).toContain('RIM.BAND_TUBE');
+    expect(hopper).toContain('RIM.SCREW_LEN');
+  });
+
+  it('盘缘细节全部落在盘厚中面（pivot z = -TH/2 < 0），不进入斗后壁 [0, T]', () => {
+    const midZ = -ROTARY_DISC.TH / 2;
+    expect(midZ).toBeLessThan(0);
+    expect(midZ + rim.BAND_TUBE).toBeLessThan(0);
+    expect(midZ + rim.SCREW_R).toBeLessThan(0);
+    expect(ROTARY_DISC.TH / 2 + midZ).toBeCloseTo(0, 9);
+    expect(HOPPER.T).toBeGreaterThan(0);
+    // 组件里盘缘贴片一律用局部 z=0（盘厚中面），不能退回 z>0
+    expect(hopper).toContain('position={DISC_BODY_OFFSET}');
+    expect(hopper).not.toMatch(/position=\{\[Math\.cos\(a\) \* r, Math\.sin\(a\) \* r, [^0]/);
+  });
+
+  it('装配基准 / 斗心 / 落点 / 倒药点零漂移：盘半径不参与任何位置推导', () => {
+    expect(HOPPER_CENTER_Y).toBeGreaterThan(0);
+    expect(HOPPER_CENTER_Z).toBeGreaterThan(0);
+    expect(HOPPER_LOCAL_Y).toBeCloseTo(0, 9);
+    expect(PILL_LAND_Y).toBeLessThan(HOPPER_OPEN_Y);
+    expect(CHUTE_RAMP_END_Z).toBeLessThan(HOPPER_CENTER_Z);
+    expect(ROTARY_DISC.TH).toBe(0.008);
+  });
+
+  it('旋转气缸顶面不再生成纯黑补丁：沉头孔 + 沿 X 分列的磁性开关', () => {
+    // Raycaster 实测：旧版黑色 L 形斑块 = 2 只 ±Z 并排的 magSwitch 方盒
+    // + 4 个纯黑安装孔圆柱，斜俯视重叠后投影到台面像「破了个洞」。
+    expect(hopper).not.toContain('materials.magSwitch');
+    expect(hopper).toContain('ROTARY_TOP_DETAIL');
+    expect(hopper).toContain('TOP.SWITCH_X_RATIO');
+    expect(hopper).toContain('TOP.HOLE_RING_R');
+    const T = ROTARY_TOP_DETAIL;
+    expect(2 * T.SWITCH_X_RATIO * ROTARY_BODY.W).toBeGreaterThan(T.SWITCH_W * 2);
+    expect(T.HOLE_RING_R).toBeGreaterThan(T.HOLE_R);
+  });
+});
+
+// ============================================================
+// 2026-11-07 驱动端重写：按真实滚珠丝杆直线模组的安装链与外观建模。
+// ============================================================
+describe('驱动端真实安装链：编码器 / 电机 / 支架 / 联轴器 / 方形支撑单元', () => {
+  const F = FRAME_DETAIL;
+  const ST = DRIVE_STATIONS;
+  const frame = componentSources['./scenes/auto-dispensing/components/MachineFrame.tsx'];
+
+  it('轴向站位首尾相接：编码器 ↔ 机身 ↔ 法兰 ↔ 罩 ↔ 支撑单元无空隙', () => {
+    expect(ST.ENCODER_MAX).toBeCloseTo(ST.BODY_MIN, 9);
+    expect(ST.BODY_MAX).toBeCloseTo(ST.FLANGE_MIN, 9);
+    expect(ST.FLANGE_MAX).toBeCloseTo(ST.GUARD_MIN, 9);
+    expect(ST.GUARD_MAX).toBeCloseTo(ST.SUPPORT_MIN, 9);
+    expect(ST.SUPPORT_MIN).toBeLessThan(ST.SUPPORT_MAX);
+    expect(ST.COUPLING_MIN).toBeGreaterThan(ST.GUARD_MIN);
+    expect(ST.COUPLING_MAX).toBeLessThan(ST.GUARD_MAX);
+  });
+
+  it('三段式梅花联轴器：两铝毂 + 中间六瓣弹性体，互不重叠且填满总长', () => {
+    expect(F.COUPLING_JAW_N).toBeGreaterThanOrEqual(6);
+    expect(F.COUPLING_JAW_R).toBeGreaterThan(F.COUPLING_R);
+    const leftEnd = ST.HUB_L + F.COUPLING_HUB_LEN / 2;
+    const spiderMin = ST.SPIDER - F.COUPLING_SPIDER_LEN / 2;
+    const spiderMax = ST.SPIDER + F.COUPLING_SPIDER_LEN / 2;
+    const rightStart = ST.HUB_R - F.COUPLING_HUB_LEN / 2;
+    expect(leftEnd).toBeLessThanOrEqual(spiderMin + 1e-9);
+    expect(spiderMax).toBeLessThanOrEqual(rightStart + 1e-9);
+    expect(2 * F.COUPLING_HUB_LEN + F.COUPLING_SPIDER_LEN).toBeLessThanOrEqual(F.COUPLING_LEN);
+    expect(frame).toContain('JawCoupling');
+    expect(frame).toContain('materials.couplingSpider');
+  });
+
+  it('电机安装支架把联轴器围住，中间敞开可见，内腔大于弹性体半径', () => {
+    expect(F.GUARD_HALF_W).toBeGreaterThan(F.COUPLING_JAW_R);
+    expect(F.GUARD_HALF_H).toBeGreaterThan(F.COUPLING_JAW_R);
+    expect(F.GUARD_POST_W).toBeLessThan(ST.GUARD_MAX - ST.GUARD_MIN);
+    expect(2 * F.GUARD_HALF_H - 2 * F.GUARD_T).toBeGreaterThan(2 * F.COUPLING_JAW_R);
+    expect(frame).toContain('CouplingGuard');
+  });
+
+  it('固定端是方形支撑单元（含压盖螺栓 / 轴承外圈 / 锁紧螺母），浮动端才是圆筒', () => {
+    expect(F.SUPPORT_UNIT_W).toBeGreaterThan(2 * F.SUPPORT_RING_R);
+    expect(F.SUPPORT_UNIT_LEN).toBeCloseTo(0.08, 9);
+    expect(F.SUPPORT_BORE_R).toBeGreaterThan(F.MOTOR_SHAFT_R);
+    expect(F.SUPPORT_RING_R - F.SUPPORT_BORE_R * 0.22).toBeGreaterThan(F.COUPLING_R);
+    expect(frame).toContain('FixedSupportUnit');
+    expect(frame).toContain('FloatingBearing');
+    expect(frame).toContain('fixed={px === from}');
+    expect(frame).toContain('LOCK_NUT_LEN');
+    expect(frame).toContain('SUPPORT_RING_R');
+  });
+
+  it('编码器是电机尾部集成后罩：与机身同轴相接，线缆径向外伸不越出 MOTOR_MIN_X', () => {
+    expect(F.ENCODER_LEN).toBeGreaterThan(0);
+    expect(ST.ENCODER_MIN).toBeCloseTo(F.MOTOR_MIN_X, 9);
+    expect(F.ENCODER_CONN_Z).toBeGreaterThan(F.ENCODER_R);
+    expect(frame).toContain('ENCODER_CONN_Z');
+    expect(frame).toContain('materials.encoderCap');
+  });
+
+  it('散热筋与机身同色系，不再是「黑底 + 亮银异色条纹」斑马外观', () => {
+    expect(VISUAL.MOTOR_BODY_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.MOTOR_RIB_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.MOTOR_BODY_COLOR).not.toBe(VISUAL.MOTOR_RIB_COLOR);
+    expect(VISUAL.COUPLING_SPIDER_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(frame).toContain('materials.motorBody');
+    expect(frame).toContain('materials.motorRib');
+    expect(frame).not.toContain('fin-');
+  });
+
+  it('新增驱动端材质颜色仍只来自 VISUAL 单一来源', () => {
+    ['motorBody:', 'motorRib:', 'encoderCap:', 'couplingSpider:'].forEach((key) => {
+      const i = materialsSource.indexOf(key);
+      expect(i, `${key} 缺失`).toBeGreaterThan(-1);
+      expect(materialsSource.slice(i, i + 220)).toContain('VISUAL.');
+    });
+  });
+
+  it('旧版裸露光轴 / 独立黑编码器 / 皮带轮 / 单机身 ServoMotor 已删除', () => {
+    expect(frame).not.toContain('function ServoMotor');
+    expect(frame).not.toContain('COUPLING_LEN * 0.34');
+    expect(frame).not.toContain('0.035, 0.035, 0.05');
+    expect(frame).toContain('DriveEnd');
+  });
+});
+
 describe('驱动端特写机位：拟真零件的验收视角', () => {
   it('drive 是窄视野局部机位，从起点端外侧 +Z 侧看整条驱动链', () => {
     const d = VIEW_PRESETS.drive;
@@ -662,12 +810,16 @@ describe('z-fighting 防护：相邻可见面不再共面', () => {
     expect(bin).toContain('T + PILL_H / 2 + SURFACE_GAP');
   });
 
-  it('滑台上下压板半嵌入本体、旋转盘面贴片统一走 SURFACE_GAP', () => {
+  it('滑台上下压板半嵌入本体；输出法兰盘细节一律走盘厚中面，不再插进斗壁', () => {
     const hopper = componentSources['./scenes/auto-dispensing/components/SliderHopper.tsx'];
     expect(hopper).toContain('PLATE_T / 2 - SURFACE_GAP / 2');
-    expect(hopper).toContain('DISC_TH / 2 + SURFACE_GAP');
+    expect(hopper).toContain('DISC_BODY_OFFSET');
+    expect(hopper).toContain('ROTARY_DISC_RIM');
     expect(hopper).toContain('materials.decal');
-    expect(hopper).toContain('materials.decalDark');
+    // 旧版刻度环 / 刻线 / 螺栓孔 / 夹紧螺栓都在 pivot z>0，正是斗后壁板厚所在
+    expect(hopper).not.toContain('DISC_TH / 2 + SURFACE_GAP');
+    expect(hopper).not.toContain('HOPPER_BRACKET_TH / 4');
+    expect(hopper).not.toContain('materials.decalDark');
   });
 
   it('按钮柜贴面统一错开，柜脚外沿比柜体大一圈，且 SURFACE_GAP 已 import', () => {

@@ -141,6 +141,32 @@ export const materials = {
     roughness: 0.55,
   }),
 
+  // ---- 驱动端（伺服电机 / 编码器 / 联轴器）专用材质，颜色仍只来自 VISUAL ----
+  /** 伺服电机机身：深石墨灰，比结构件略深一档 */
+  motorBody: new THREE.MeshStandardMaterial({
+    color: VISUAL.MOTOR_BODY_COLOR,
+    metalness: 0.5,
+    roughness: 0.5,
+  }),
+  /** 机身散热筋：与机身同色系、只亮一档，靠形体起伏表现而不是异色斑马条 */
+  motorRib: new THREE.MeshStandardMaterial({
+    color: VISUAL.MOTOR_RIB_COLOR,
+    metalness: 0.55,
+    roughness: 0.48,
+  }),
+  /** 编码器后罩：集成在电机尾部的深色塑料罩 */
+  encoderCap: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_CAP_COLOR,
+    metalness: 0.2,
+    roughness: 0.72,
+  }),
+  /** 梅花联轴器中间弹性体：聚氨酯（非金属材料感） */
+  couplingSpider: new THREE.MeshStandardMaterial({
+    color: VISUAL.COUPLING_SPIDER_COLOR,
+    metalness: 0.05,
+    roughness: 0.75,
+  }),
+
   /** 控制柜柜体（石墨蓝灰，与背景分离、比门板深） */
   cabinet: new THREE.MeshStandardMaterial({
     color: VISUAL.CABINET_COLOR,
