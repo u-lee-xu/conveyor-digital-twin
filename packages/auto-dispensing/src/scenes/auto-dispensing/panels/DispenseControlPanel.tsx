@@ -1,30 +1,32 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  SLIDER_MIN_X, SLIDER_MAX_X, MAG_CAPACITY, MANUAL_JOG,
+  SLIDER_MIN_X, SLIDER_MAX_X, MAG_CAPACITY, MANUAL_JOG, PULSES_PER_M,
   type MagazineId,
 } from '../constants';
 import {
-  MANUAL_OUTPUT_POINTS, MANUAL_IO_SUMMARY, ENCODER_REGISTER_INFO, outputPointLevel,
+  MANUAL_OUTPUT_POINTS, MANUAL_IO_SUMMARY, ENCODER_REGISTER_INFO,
+  DINT_ADDRESS_ROWS, outputPointLevel,
   type IoPoint, type OutputSnapshot,
 } from '../manualIo';
+import { AddressHint } from './AddressHint';
 import { DispenseStatusPanel } from './DispenseStatusPanel';
 
 /**
  * 手动模式：PLC 单点 I/O 操作台。
  *
  * 面板按键等价于直接置位 / 复位输出线圈（Y），不跑自动流程；
- * 每个按键都标注真实点位地址（三菱 Y 号 + Modbus 线圈号，来自地址表），
- * 输入点（X）传感器状态由下方 DispenseStatusPanel 集中回显。
+ * X/Y/C 地址不直接铺在面板上，改为悬停信号名称时由 AddressHint 浮框显示，
+ * 完整映射仍以「使用说明」为准；输入点（X）状态由下方 DispenseStatusPanel 回显。
  *
  * 紧凑化改造：旧版是「6 张控制卡片 + 6 张状态卡片」共 12 张卡，
  * 每张 20px padding + 逐行进度条，传感器状态要滚很久才看得到。
  * 现在把「说明 / 输出点 / 药仓」合成一张卡（内部分隔线），输入点单独一张，
  * 逐行进度条换成点位 LED，一屏内可完成单点操作与状态核对。
  *
- * 点动改造：前进/后退原来「按住 = 0.32m/s 连续走」，轻点一次就走几十毫米，
- * 料斗很难对准药仓斜槽。现在单击只发一个 MANUAL_JOG.STEP 离散脉冲（10mm /
- * 1 个 32 位 DINT 位置脉冲），长按超过 HOLD_MS 才转连续点动；Y0/Y1 线圈置位语义保留。
+ * 点动改造：前进/后退原来「按住 = SLIDER_SPEED 连续走」，轻点一次就走几十毫米，
+ * 料斗很难对准药仓斜槽。现在单击只发一个 MANUAL_JOG.STEP 离散位移（10mm，
+ * 按 1024 脉冲/转 × 20mm 导程折算为 512 个 DINT 脉冲），长按超过 HOLD_MS 才连续点动。
  */
 type JogDir = 1 | -1;
 interface JogState {
@@ -37,18 +39,21 @@ const OUTPUT_BY_KEY = Object.fromEntries(
   MANUAL_OUTPUT_POINTS.map((p) => [p.key, p]),
 ) as Record<string, IoPoint>;
 
-/** 地址徽标：文本一律由点位表拼出，禁止在 JSX 里回填具体点位地址 */
-function AddrTag({ points }: { points: IoPoint[] }) {
-  const xy = points.map((p) => p.addr).join('/');
-  // 双点行（电机正/反转）两个线圈号都要可见，第二个省略重复的 C 前缀以守住紧凑宽度
-  const coils = points.map((p, i) => (i === 0 ? p.coil : p.coil.slice(1))).join('/');
+/**
+ * 信号名称 = 地址浮框的触发区。地址文本一律由点位表拼出，
+ * 面板上不直接显示 X/Y/C；双点行（滑台正/反转）两个点都要进浮框。
+ */
+function AddrLabel({ title, points, className, children }: {
+  title: string;
+  points: IoPoint[];
+  className?: string;
+  children?: ReactNode;
+}) {
+  const rows = points.map((p) => ({ label: p.label, addr: p.addr, coil: p.coil }));
   return (
-    <span
-      className="font-mono text-[0.55rem] text-sky-300 w-[68px] shrink-0 truncate"
-      title={points.map((p) => `${p.addr} / ${p.coil} / ${p.label}`).join('  ·  ')}
-    >
-      {xy}<span className="text-slate-500">·{coils}</span>
-    </span>
+    <AddressHint title={title} rows={rows} className={className}>
+      {children ?? title}
+    </AddressHint>
   );
 }
 
@@ -80,7 +85,7 @@ export function DispenseControlPanel() {
   const encoderDir = useDispensingStore((s) => s.encoderDir);
   const jogRef = useRef<JogState | null>(null);
 
-  /** 发一个点动脉冲：位移恒为 MANUAL_JOG.STEP，编码器同步 ±1 脉冲 */
+  /** 发一个点动脉冲：位移恒为 MANUAL_JOG.STEP，编码器按 PULSES_PER_M 同步折算 */
   const jogStep = (dir: JogDir) => {
     const s = useDispensingStore.getState();
     s.setSliderX(s.sliderX + dir * MANUAL_JOG.STEP);
@@ -128,6 +133,7 @@ export function DispenseControlPanel() {
   const sliderPct = ((sliderX - SLIDER_MIN_X) / (SLIDER_MAX_X - SLIDER_MIN_X)) * 100;
   const motorPoints = [OUTPUT_BY_KEY.MOTOR_FWD, OUTPUT_BY_KEY.MOTOR_REV];
   const tiltPoint = OUTPUT_BY_KEY.CYL_TILT;
+  const lampPoints = ['LAMP_GREEN', 'LAMP_YELLOW', 'LAMP_RED'].map((k) => OUTPUT_BY_KEY[k]);
   const emptyMag = MAG_ORDER.find((m) => magStock[m] <= 0);
 
   return (
@@ -142,9 +148,16 @@ export function DispenseControlPanel() {
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1">
           <span className="badge badge-blue">X {sliderX.toFixed(3)} m</span>
-          <span className="badge badge-blue" title={ENCODER_REGISTER_INFO.address}>
-            {ENCODER_REGISTER_INFO.type} {encoderPulses}
-          </span>
+          <AddressHint
+            title="位置寄存器"
+            rows={DINT_ADDRESS_ROWS}
+            note={ENCODER_REGISTER_INFO.address}
+            underline={false}
+          >
+            <span className="badge badge-blue">
+              {ENCODER_REGISTER_INFO.type} {encoderPulses}
+            </span>
+          </AddressHint>
           <span className="badge badge-slate">
             {encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}
           </span>
@@ -155,24 +168,23 @@ export function DispenseControlPanel() {
           <div className="progress-fill" style={{ width: `${sliderPct}%` }} />
         </div>
         <div className="mt-0.5 text-[0.55rem] leading-tight text-slate-400">
-          {`按键 ≡ 直接置位/复位 PLC 输出；前进/后退单击 ${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm（1 脉冲），按住连续点动；其余点一次保持。`}
+          {`按键 ≡ 直接置位/复位 PLC 输出；地址悬停信号名称查看，完整映射见「使用说明」。前进/后退单击 ${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm（${Math.round(MANUAL_JOG.STEP * PULSES_PER_M)} 脉冲），按住连续点动。`}
         </div>
 
         <div className={divider} />
 
         {/* 输出点：逐点控制执行器与三色灯 */}
         <div className="flex items-center justify-between mb-1">
-          <span className="section-title !mb-0">输出点 Y · 单点控制</span>
+          <span className="section-title !mb-0">输出点 · 单点控制</span>
           <span className="badge badge-slate">{MANUAL_OUTPUT_POINTS.length} 点可写</span>
         </div>
 
         {/* 滑台电机：单击精确步进 + 长按离散连续点动，两个输出点互锁 */}
         <div className={rowCls}>
-          <span className={nameCls}>滑台</span>
-          <AddrTag points={motorPoints} />
+          <AddrLabel title="滑台" points={motorPoints} className={nameCls} />
           <button
             className={`${btnCls} ${motorFwd ? 'btn-success' : 'btn-outline'}`}
-            title={`${motorPoints[0].addr} · 单击 +${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动`}
+            title={`单击 +${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动`}
             onPointerDown={() => beginJog(1)}
             onPointerUp={stopJog}
             onPointerLeave={stopJog}
@@ -182,7 +194,7 @@ export function DispenseControlPanel() {
           </button>
           <button
             className={`${btnCls} ${motorRev ? 'btn-success' : 'btn-outline'}`}
-            title={`${motorPoints[1].addr} · 单击 -${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动`}
+            title={`单击 -${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动`}
             onPointerDown={() => beginJog(-1)}
             onPointerUp={stopJog}
             onPointerLeave={stopJog}
@@ -199,8 +211,9 @@ export function DispenseControlPanel() {
           const cyl = sendCyl[mag];
           return (
             <div className={rowCls} key={mag}>
-              <span className={nameCls}>{mag} 缸</span>
-              <AddrTag points={[point]} />
+              <AddrLabel title={`${mag} 送药缸`} points={[point]} className={nameCls}>
+                {mag} 缸
+              </AddrLabel>
               <button
                 className={`${btnCls} ${cyl.extended ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => setSendCyl(mag, true, cyl.position)}
@@ -221,8 +234,7 @@ export function DispenseControlPanel() {
 
         {/* 料斗翻转缸 */}
         <div className={rowCls}>
-          <span className={nameCls}>翻转</span>
-          <AddrTag points={[tiltPoint]} />
+          <AddrLabel title="翻转缸" points={[tiltPoint]} className={nameCls}>翻转</AddrLabel>
           <button
             className={`${btnCls} ${tiltCyl.tilted ? 'btn-primary' : 'btn-outline'}`}
             onClick={() => setTiltCyl(true, tiltCyl.angle)}
@@ -241,7 +253,7 @@ export function DispenseControlPanel() {
 
         {/* 三色灯塔：三个输出点一行内独立置位/复位 */}
         <div className={`${rowCls} mt-0.5`}>
-          <span className={nameCls}>灯塔</span>
+          <AddrLabel title="三色灯塔" points={lampPoints} className={nameCls}>灯塔</AddrLabel>
           <div className="flex flex-1 gap-1">
             {(['green', 'yellow', 'red'] as const).map((color) => {
               const point = OUTPUT_BY_KEY[`LAMP_${color.toUpperCase()}`];
@@ -250,11 +262,9 @@ export function DispenseControlPanel() {
                 <button
                   key={color}
                   className={`${btnCls} ${on ? 'btn-success' : 'btn-outline'}`}
-                  title={`${point.addr} / ${point.coil}`}
                   onClick={() => setLamp(color, !lamp[color])}
                 >
-                  <span className="font-mono">{point.addr}</span>
-                  <span className="ml-0.5">{color === 'green' ? '绿' : color === 'yellow' ? '黄' : '红'}</span>
+                  {color === 'green' ? '绿灯' : color === 'yellow' ? '黄灯' : '红灯'}
                 </button>
               );
             })}
@@ -284,7 +294,7 @@ export function DispenseControlPanel() {
         )}
       </div>
 
-      {/* 输入点：传感器 / 主令 / 编码器位镜像，全部可见 */}
+      {/* 输入点：传感器 / 主令电平，地址由信号名称悬停浮框提供 */}
       <DispenseStatusPanel />
     </div>
   );

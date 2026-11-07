@@ -10,6 +10,14 @@ import { isPhysicsActive, PHYSICS } from '../physicsGeometry';
 const { SLIDER_SPEED } = SCREW_DETAIL;
 
 /**
+ * 自动流程到位窗口（m）：至少覆盖本帧可走的距离。
+ * 演示速度提到 0.45 m/s 后，50ms 帧可走 22.5mm，远大于旧的固定 6mm 窗口；
+ * 只判「接近」会让滑台在接药位两侧来回振荡、永远进不了 dosing。
+ * 因此窗口随 dt 放大，命中后由 setSliderX 精确落位，既不会越过也不会漂移。
+ */
+const arriveTol = (dt: number) => Math.max(0.006, SLIDER_SPEED * dt);
+
+/**
  * 在途药片计时（id → 生成时刻 / 超时是否按落斗计入）。
  * 放在 hook 模块里而不加进 store 的 PendingPill，是为了不破坏物理层与既有单测的数据形状。
  */
@@ -284,8 +292,9 @@ export function useDispenseLoop() {
           : SLIDER_MAX_X;
         const cur = st.sliderX;
         const delta = target - cur;
-        if (Math.abs(delta) < 0.006) {
-          // 到达
+        if (Math.abs(delta) <= arriveTol(dt)) {
+          // 到达：精确落到接药位 / 放药位，避免高速度低帧率下越过目标
+          useDispensingStore.getState().setSliderX(target);
           useDispensingStore.setState({ motorFwd: false, motorRev: false, targetX: null });
           if (r.queueIndex < r.queue.length) {
             const mag = r.queue[r.queueIndex];
@@ -366,7 +375,8 @@ export function useDispenseLoop() {
           return;
         }
         const delta = SLIDER_MIN_X - st.sliderX;
-        if (Math.abs(delta) < 0.006) {
+        if (Math.abs(delta) <= arriveTol(dt)) {
+          useDispensingStore.getState().setSliderX(SLIDER_MIN_X);
           useDispensingStore.setState({ motorFwd: false, motorRev: false, targetX: null, autoPhase: 'wait_confirm' });
         } else {
           // 与 travel 段保持同一符号约定：delta>0 → 正转(+X)，delta<0 → 反转(-X)

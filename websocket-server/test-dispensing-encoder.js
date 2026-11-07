@@ -7,7 +7,7 @@
  * 临时拉起 mock-dispensing-server.js（Modbus 11505 / 状态口 5085）
  * 与一个独立网关实例（WS 18081，用 WS_PORT 环境变量隔离），验证：
  *   1. HR120 低字 + HR121 高字，FC16 一次原子写、FC03 读回无损；
- *   2. 虚拟 PLC 以 DINT 为位置闭环真值（position = 25 + value）；
+ *   2. 虚拟 PLC 以 DINT 为位置闭环真值（position = START_PULSE + value）；
  *   3. 前进到终点 / 回原点（Z 相归零）；
  *   4. 32 位全范围（含负数、>65535、INT32 边界）拆字 / 合并无损；
  *   5. 线圈 42-49 不再承载编码器，恒为 false；
@@ -22,7 +22,7 @@ const http = require('http');
 const ModbusRTU = require('modbus-serial');
 const WebSocket = require('ws');
 const {
-  DISPENSING_ADDRESSES, DISPENSING_REGISTERS, DISPENSING_WORDS,
+  DISPENSING_ADDRESSES, DISPENSING_REGISTERS, DISPENSING_WORDS, ENCODER_SCALE,
 } = require('./mock-addresses');
 const { DINT_TEST_VECTORS, splitDint32, joinDint32 } = require('./dint32');
 
@@ -32,8 +32,8 @@ const WS_PORT = 18081;
 const A = DISPENSING_ADDRESSES;
 const R = DISPENSING_REGISTERS;
 const W = DISPENSING_WORDS;
-const START_PULSE = 25;           // 原点绝对脉冲（X=0.25m × 100）
-const ENCODER_PULSES_MAX = 170;   // 行程 1.70m
+const START_PULSE = ENCODER_SCALE.START_PULSE;        // 原点绝对脉冲（0.25m × 51200 = 12800）
+const ENCODER_PULSES_MAX = ENCODER_SCALE.PULSES_MAX;  // 1.70m × 51200 = 87040（跨 16 位）
 
 let passed = 0;
 let failed = 0;
@@ -147,21 +147,29 @@ async function main() {
     await sleep(180);
     st = await status();
     ok('寄存器来源标记为 twin', st.register.source === 'twin', `source=${st.register.source}`);
-    ok('PLC 位置 = 原点 25 + DINT 137', st.program.position === START_PULSE + 137,
+    ok(`PLC 位置 = 原点 ${START_PULSE} + DINT 137`, st.program.position === START_PULSE + 137,
       `position=${st.program.position}`);
 
     console.log('\n[3] 前进到终点 / 回原点 Z 相归零');
     await writeDint(ENCODER_PULSES_MAX);
     await sleep(180);
     st = await status();
-    ok('终点 DINT = 170', st.register.value === ENCODER_PULSES_MAX, `value=${st.register.value}`);
-    ok('终点位置 = 195', st.program.position === START_PULSE + ENCODER_PULSES_MAX,
+    const maxWords = await readWords();
+    ok(`终点 DINT = ${ENCODER_PULSES_MAX}`, st.register.value === ENCODER_PULSES_MAX,
+      `value=${st.register.value}`);
+    ok('行程上限跨 16 位：高字非零，单字寄存器会溢出',
+      ENCODER_PULSES_MAX > 0xffff && maxWords[1] > 0
+      && joinDint32(maxWords[0], maxWords[1]) === ENCODER_PULSES_MAX,
+      `HR120/121=[${maxWords.join(',')}]`);
+    ok(`终点位置 = ${START_PULSE + ENCODER_PULSES_MAX}`,
+      st.program.position === START_PULSE + ENCODER_PULSES_MAX,
       `position=${st.program.position}`);
     await writeDint(0);
     await sleep(180);
     st = await status();
     ok('回原点 DINT 归零', st.register.value === 0, `value=${st.register.value}`);
-    ok('回原点位置 = 25', st.program.position === START_PULSE, `position=${st.program.position}`);
+    ok(`回原点位置 = ${START_PULSE}`, st.program.position === START_PULSE,
+      `position=${st.program.position}`);
 
     console.log('\n[4] 32 位全范围：低字在前，拆字/合并无损');
     for (const { value, words } of DINT_TEST_VECTORS) {

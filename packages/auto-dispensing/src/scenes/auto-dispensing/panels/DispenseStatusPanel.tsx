@@ -1,28 +1,30 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
   MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY, IO_GROUP_TITLES, ENCODER_REGISTER_INFO,
-  inputPointLevel, type IoPoint, type IoGroup,
+  DINT_ADDRESS_ROWS, inputPointLevel, type IoPoint, type IoGroup,
 } from '../manualIo';
+import { AddressHint } from './AddressHint';
 
 /**
  * 输入点（X）传感器状态。
  *
- * 紧凑化改造：地址不再只放在 title 里靠鼠标悬停，而是每点都可见；
- * 按组排成三列 LED 网格，22 个输入点压进一屏，不再需要为看传感器状态
- * 一路滚动。电平由 manualIo.inputPointLevel() 纯函数读取，与地址表同源。
- * 位置改由单独的 32 位 DINT 数值行显示，不再拆成 8 个「编码器位」输入点。
+ * X/Y/C 地址不直接铺在面板上：鼠标悬停（或键盘聚焦）到「启动」「停止」「A 缸后」
+ * 等信号名称时由 AddressHint 弹出地址浮框，完整映射仍以「使用说明」为准。
+ * 这样 22 个输入点仍能三列压进一屏，且不会因为地址列把名称挤没。
+ * 电平由 manualIo.inputPointLevel() 纯函数读取，与地址表同源。
+ * 位置寄存器是数值不是输入点，单独一行显示 DINT32 读数。
  */
 function InputLed({ point, on }: { point: IoPoint; on: boolean }) {
   return (
-    <div
-      className="flex items-center gap-1 py-0 min-w-0 leading-[1.15rem]"
-      title={`${point.addr} / ${point.coil} / ${point.label}`}
-    >
+    <div className="flex items-center gap-1 py-0 min-w-0 leading-[1.15rem]">
       <span className={`io-led !w-[6px] !h-[6px] ${on ? 'io-led-on' : 'io-led-off'}`} />
-      <span className="font-mono text-[0.5rem] text-sky-400/80 w-[26px] shrink-0">{point.addr}</span>
-      <span className={`truncate text-[0.58rem] ${on ? 'text-green-300' : 'text-slate-500'}`}>
+      <AddressHint
+        title={point.label}
+        rows={[{ addr: point.addr, coil: point.coil, label: point.label }]}
+        className={`truncate min-w-0 flex-1 text-[0.58rem] ${on ? 'text-green-300' : 'text-slate-500'}`}
+      >
         {point.label}
-      </span>
+      </AddressHint>
     </div>
   );
 }
@@ -42,7 +44,7 @@ export function DispenseStatusPanel() {
   return (
     <div className="device-card !p-2">
       <div className="flex items-center justify-between mb-0.5">
-        <span className="section-title !mb-0">输入点 X · 传感器状态</span>
+        <span className="section-title !mb-0">输入点 · 传感器状态</span>
         <span className="badge badge-slate">{MANUAL_IO_SUMMARY.inputs} 点只读</span>
       </div>
       {GROUPS.map((group) => (
@@ -61,10 +63,16 @@ export function DispenseStatusPanel() {
       ))}
       {/* 位置寄存器是数值不是输入点；料斗/取药仓计数顺带一行显示 */}
       <div className="mt-1 flex flex-wrap items-center gap-1">
-        <span className="badge badge-blue" title={ENCODER_REGISTER_INFO.address}>
-          {ENCODER_REGISTER_INFO.type} {encoderPulses}
-        </span>
-        <span className="badge badge-slate">{ENCODER_REGISTER_INFO.address}</span>
+        <AddressHint
+          title="位置寄存器"
+          rows={DINT_ADDRESS_ROWS}
+          note={ENCODER_REGISTER_INFO.address}
+          underline={false}
+        >
+          <span className="badge badge-blue">
+            {ENCODER_REGISTER_INFO.type} {encoderPulses}
+          </span>
+        </AddressHint>
         <span className="badge badge-slate">料斗 {hopperPills}</span>
         <span className="badge badge-slate">仓内 {binCount}</span>
       </div>
