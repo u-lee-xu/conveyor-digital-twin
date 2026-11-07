@@ -539,8 +539,13 @@ export const CABINET_ESTOP_SHAPE = {
 
 /** 信号灯塔（局部原点 = 立杆底面，y=0 为地面） */
 export const LIGHT_DOME_R = 0.045;
-/** 最下层（红）灯罩中心高度，同时也是立杆顶面：灯罩必须坐在杆顶，不能悬浮 */
-export const LIGHT_POLE_Y = 1.15;
+/**
+ * 最下层（红）灯罩中心高度，同时也是立杆顶面：灯罩必须坐在杆顶，不能悬浮。
+ * 按反馈从 1.15 抬到 1.55：工业信号灯塔应明显高于药筒与机架横梁，
+ * 旧高度与机架齐平，整机里容易被设备挡住、也不像独立警示灯柱。
+ * 抬高后展台相机同步上移（PART_STAGES.tower），保证灯头不被裁切。
+ */
+export const LIGHT_POLE_Y = 1.55;
 /** 立杆高度由灯罩中心高度推导（旧值 0.55 会让灯头凭空悬浮 0.6m，展台核对时暴露） */
 export const LIGHT_POLE_H = LIGHT_POLE_Y;
 /** 三色灯罩堆叠步距（= 一个灯罩半径，灯罩彼此贴合） */
@@ -865,8 +870,9 @@ export const PART_STAGES: Record<string, PartStage> = {
   bin: { label: '取药仓', camera: [0.60, 0.35, 0.95], target: [0, -0.28, 0], fov: 50, grid: 1.2, gridY: -(BIN_BASE_Y - 0.04) },
   // 正面偏 17° 而非 33°，φ22 按钮环 / 铭牌在展台里才能逐个看清
   cabinet: { label: '控制柜', camera: [0.30, 0.42, 0.95], target: [0, 0.26, 0], fov: 36, grid: 1, gridY: 0 },
-  // 灯塔总高 1.285m，相机需覆盖 y ∈ [0, 1.285]（自检 covers() 断言）
-  tower: { label: '信号灯塔', camera: [0.80, 1.20, 2.30], target: [0, 0.66, 0], fov: 38, grid: 1.6, gridY: 0 },
+  // 灯塔抬高后总高 1.685m，展台相机需覆盖 y ∈ [0, 1.685]（自检 covers() 断言）
+  // 视点上移、稍退并放宽 fov 到 41°：竖向视野 [-0.16, 1.88]，上下各留约 8% 余量，灯头不再贴边
+  tower: { label: '信号灯塔', camera: [0.80, 1.44, 2.55], target: [0, 0.86, 0], fov: 41, grid: 1.6, gridY: 0 },
 };
 
 /** 展台部件的局部原点定义：截图/自检时明确「这个部件以哪个面为基准」 */
