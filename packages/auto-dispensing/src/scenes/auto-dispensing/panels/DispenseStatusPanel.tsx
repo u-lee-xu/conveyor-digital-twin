@@ -11,7 +11,10 @@ import { ReadoutNum } from './ReadoutNum';
  *
  * X/Y/C 地址不直接铺在面板上：鼠标悬停（或键盘聚焦）到「启动」「停止」「A 缸后」
  * 等信号名称时由 AddressHint 弹出地址浮框，完整映射仍以「使用说明」为准。
- * 这样 22 个输入点仍能三列压进一屏，且不会因为地址列把名称挤没。
+ * 输入点统一「每行 2 个」：manualIo.inputGroup() 保证每组点数为偶数，
+ * 磁性开关 10 点恰好是 5 对「A 缸后 / A 缸前 … 盛药位 / 翻转位」，
+ * 一行就是一个气缸的两个磁性开关，不再出现三列时末尾孤零零一个 LED。
+ * 这样 22 个输入点仍是 11 行压进一屏，且不会因为地址列把名称挤没。
  * 电平由 manualIo.inputPointLevel() 纯函数读取，与地址表同源。
  * 位置寄存器是数值不是输入点，单独一行显示 DINT32 读数。
  */
@@ -51,7 +54,7 @@ export function DispenseStatusPanel() {
       {GROUPS.map((group) => (
         <div key={group} className="mt-0.5">
           <div className="text-[0.55rem] leading-tight text-slate-500">{IO_GROUP_TITLES[group]}</div>
-          <div className="grid grid-cols-3 gap-x-1">
+          <div className="grid grid-cols-2 gap-x-2">
             {MANUAL_INPUT_POINTS.filter((p) => p.group === group).map((point) => (
               <InputLed
                 key={point.key}

@@ -17,7 +17,7 @@ import {
 
 export type IoGroup =
   | 'motor' | 'cylinder' | 'tilt' | 'lamp'
-  | 'button' | 'limit' | 'magazine' | 'bin' | 'reed';
+  | 'button' | 'limit' | 'magazine' | 'reed';
 
 export interface IoPoint {
   /** constants.ts 地址表里的键，输出/输入两组共用同一命名 */
@@ -80,11 +80,17 @@ const INPUT_LABELS: Record<InputKey, string> = {
   MSC_TILT_HOLD: '盛药位', MSC_TILT_DUMP: '翻转位',
 };
 
+/**
+ * 输入点分组。面板按「每行 2 个」渲染，因此每组点数必须是偶数，
+ * 否则最后一行会只剩一个 LED（用户反馈「翻转位」孤零零一行）。
+ * 取药仓只有 1 个点，并入主令组凑成 6 点；磁性开关 10 点天然是 5 对
+ * 「A 缸后 / A 缸前 … 盛药位 / 翻转位」，两列后每行正好是一个气缸的两个磁性开关。
+ */
 function inputGroup(key: InputKey): IoGroup {
   if (key.startsWith('BUTTON_')) return 'button';
+  if (key === 'S_BIN_HAS_DRUG') return 'button';
   if (key.startsWith('S_LIMIT_')) return 'limit';
   if (key.startsWith('S_MAG_')) return 'magazine';
-  if (key === 'S_BIN_HAS_DRUG') return 'bin';
   return 'reed';
 }
 
@@ -127,10 +133,9 @@ export const IO_GROUP_TITLES: Record<IoGroup, string> = {
   cylinder: '送药缸',
   tilt: '翻转缸',
   lamp: '灯塔',
-  button: '主令按钮',
+  button: '主令 / 取药仓',
   limit: '限位',
   magazine: '空仓',
-  bin: '取药仓',
   reed: '磁性开关',
 };
 
