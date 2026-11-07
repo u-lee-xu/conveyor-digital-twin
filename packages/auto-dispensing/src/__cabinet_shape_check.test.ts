@@ -29,10 +29,13 @@ describe('两位选择开关：短粗梯形拨柄与档位标记', () => {
     expect(SW.HANDLE_L).toBeGreaterThan(P.SELECTOR_HANDLE_L);
   });
 
-  it('拨柄是短粗梯形：宽长比合理，前端略收而不是尖针', () => {
+  it('拨柄是修长梯形：宽长比合理，前端略收而不是尖针', () => {
     const ratio = SW.HANDLE_W / SW.HANDLE_L;
     expect(ratio).toBeGreaterThan(0.35);
     expect(ratio).toBeLessThan(0.70);
+    // 按反馈从 11.6mm 收细到 9.6mm：仍比旧 8mm 宽，也不能再退回「细长指针」
+    expect(SW.HANDLE_W).toBeGreaterThan(P.SELECTOR_HANDLE_W);
+    expect(SW.HANDLE_W).toBeLessThan(P.SELECTOR_HANDLE_W * 1.35);
     expect(SW.HANDLE_TIP_W).toBeLessThan(SW.HANDLE_W);
     expect(SW.HANDLE_TIP_W).toBeGreaterThan(SW.HANDLE_W * 0.6);
     expect(SW.HANDLE_SHOULDER).toBeGreaterThan(0.6);
