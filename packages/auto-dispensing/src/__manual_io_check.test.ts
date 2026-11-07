@@ -288,13 +288,13 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
     expect(controlSource).not.toContain('onTouchEnd');
   });
 
-  it('输入点地址改由信号名称悬停浮框提供，仍按组三列排布', () => {
+  it('输入点地址改由信号名称悬停浮框提供，按组两列成对排布', () => {
     expect(statusSource).toContain('AddressHint');
     expect(statusSource).toContain('point.addr');
-    expect(statusSource).toContain('grid-cols-3');
+    expect(statusSource).toContain('grid-cols-2');
     expect(statusSource).toContain('inputPointLevel(point.key, snapshot)');
     expect(statusSource).toContain('IO_GROUP_TITLES[group]');
-    expect(statusSource).not.toContain('grid-cols-2');
+    expect(statusSource).not.toContain('grid-cols-3');
     // 地址不能再作为可见列渲染，也不能退化成原生 title
     expect(statusSource).not.toMatch(/>\{point\.addr\}</);
     expect(statusSource).not.toContain('title={point.addr}');
@@ -318,6 +318,55 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
     // 进度条只保留最顶部一条滑台位置总览，不再给每个执行器各铺一条
     expect((controlSource.match(/progress-bar/g) ?? []).length).toBe(1);
     expect(controlSource).toContain('补满');
+  });
+});
+
+// ============================================================
+// 输入点表两列成对：磁性开关 10 点 = 5 对前后磁性开关，不留孤儿行
+//
+// 旧版三列排布下「磁性开关」最后一行只剩「翻转位」一个 LED（用户反馈），
+// 且主令(5)/空仓(4)/取药仓(1) 都有不满行。现在每组点数必须为偶数，
+// 两列渲染后每行恰好 2 个点；取药仓单点并入主令组凑成 6 点。
+// ============================================================
+
+describe('输入点表两列成对排布（防回退）', () => {
+  const groupKeys = [...new Set(MANUAL_INPUT_POINTS.map((p) => p.group))];
+  const counts = Object.fromEntries(
+    groupKeys.map((g) => [g, MANUAL_INPUT_POINTS.filter((p) => p.group === g).length]),
+  ) as Record<string, number>;
+
+  it('每组点数都是偶数，22 个点恰好铺满 11 行、无孤儿行', () => {
+    expect(MANUAL_INPUT_POINTS.length).toBe(22);
+    expect(Object.values(counts).every((n) => n % 2 === 0)).toBe(true);
+    expect(Object.values(counts).reduce((a, b) => a + b / 2, 0)).toBe(11);
+  });
+
+  it('取药仓单点并入主令组凑成 6 点，不再有独立 bin 组', () => {
+    expect(counts.button).toBe(6);
+    expect(counts.bin).toBeUndefined();
+    expect(Object.keys(IO_GROUP_TITLES)).not.toContain('bin');
+    expect(MANUAL_INPUT_POINTS.find((p) => p.key === 'S_BIN_HAS_DRUG')?.group).toBe('button');
+    expect(IO_GROUP_TITLES.button).toContain('取药仓');
+  });
+
+  it('磁性开关 10 点按地址表顺序恰好是 5 对「后 / 前」磁性开关', () => {
+    const reedKeys = MANUAL_INPUT_POINTS.filter((p) => p.group === 'reed').map((p) => p.key);
+    expect(reedKeys).toEqual([
+      'MSC_A_BACK', 'MSC_A_FRONT',
+      'MSC_B_BACK', 'MSC_B_FRONT',
+      'MSC_C_BACK', 'MSC_C_FRONT',
+      'MSC_D_BACK', 'MSC_D_FRONT',
+      'MSC_TILT_HOLD', 'MSC_TILT_DUMP',
+    ]);
+    for (let i = 0; i < reedKeys.length; i += 2) {
+      expect(reedKeys[i].endsWith('_BACK') || reedKeys[i] === 'MSC_TILT_HOLD').toBe(true);
+      expect(reedKeys[i + 1].endsWith('_FRONT') || reedKeys[i + 1] === 'MSC_TILT_DUMP').toBe(true);
+    }
+  });
+
+  it('面板源码固定为 grid-cols-2，不回退三列', () => {
+    expect(statusSource).toContain('grid grid-cols-2');
+    expect(statusSource).not.toContain('grid-cols-3');
   });
 });
 
