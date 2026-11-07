@@ -11,6 +11,7 @@
  */
 import {
   MODBUS_READ_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS,
+  MITSUBISHI_DISPLAY_VARS, S7_VARS,
   ENCODER_DINT, ENCODER_REG_LABEL,
   type MagazineId,
 } from './constants';
@@ -24,11 +25,44 @@ export interface IoPoint {
   key: string;
   /** 面板上显示的中文简称 */
   label: string;
-  /** 三菱 X/Y 地址，工业现场最直观的一套点位编号 */
+  /** 三菱 X/Y 地址（八进制），工业现场最直观的一套点位编号 */
   addr: string;
-  /** Modbus 线圈号（显示成 C32） */
+  /** Modbus TCP 线圈号（显示成 C32） */
   coil: string;
+  /** 西门子 S7 M 区位地址（显示成 M30.2） */
+  s7: string;
   group: IoGroup;
+}
+
+/**
+ * 悬停浮框里的一行：一个信号在三种协议下的地址。
+ * 表头固定「三菱 FX / Modbus TCP / Siemens S7」，面板只消费点位表，
+ * 禁止在 JSX 里回填 'Y2' / 'C32' / 'M30.2' 这类地址字面量。
+ */
+export interface IoAddressRow {
+  label: string;
+  mitsubishi: string;
+  modbus: string;
+  s7: string;
+}
+
+/** 点位数组 → 浮框行，手动面板的双点行（滑台正/反转、三色灯）也走这里 */
+export function ioAddressRows(points: readonly IoPoint[]): IoAddressRow[] {
+  return points.map((p) => ({ label: p.label, mitsubishi: p.addr, modbus: p.coil, s7: p.s7 }));
+}
+
+/**
+ * 变量名 → 浮框行。仿真面板的 IO 信号 LED 用：不管当前连的是哪种协议，
+ * 悬停都同时给出三协议地址，不再随协议切换只显示一个。
+ */
+export function pointAddressRow(key: string, label: string): IoAddressRow {
+  const k = key as keyof typeof MODBUS_READ_VARS;
+  return {
+    label,
+    mitsubishi: MITSUBISHI_DISPLAY_VARS[k as keyof typeof MITSUBISHI_DISPLAY_VARS],
+    modbus: `C${MODBUS_READ_VARS[k]}`,
+    s7: S7_VARS[k as keyof typeof S7_VARS],
+  };
 }
 
 type OutputKey = keyof typeof MITSUBISHI_WRITE_VARS;
@@ -97,7 +131,8 @@ function inputGroup(key: InputKey): IoGroup {
 function makePoint(
   key: string, label: string, addr: string, coil: number, group: IoGroup,
 ): IoPoint {
-  return { key, label, addr, coil: `C${coil}`, group };
+  const k = key as keyof typeof S7_VARS;
+  return { key, label, addr, coil: `C${coil}`, s7: S7_VARS[k], group };
 }
 
 /** 可写输出点：面板每个按键都对应这里的一项 */
@@ -150,12 +185,22 @@ export const ENCODER_REGISTER_INFO = {
   mitsubishi: ENCODER_DINT.MITSUBISHI_LABEL,
 } as const;
 
-/** 位置寄存器三协议地址：只在悬停浮框里出现，面板不直接铺开 */
-export const DINT_ADDRESS_ROWS = [
-  { addr: ENCODER_REGISTER_INFO.modbus, label: 'Modbus 保持寄存器' },
-  { addr: ENCODER_REGISTER_INFO.s7, label: 'S7 M 区 DINT' },
-  { addr: ENCODER_REGISTER_INFO.mitsubishi, label: '三菱 D 寄存器' },
-] as const;
+/**
+ * 位置寄存器三协议地址：只在悬停浮框里出现，面板不直接铺开。
+ * 与布尔点位共用 IoAddressRow —— 浮框表头固定「三菱 / Modbus / S7」，
+ * 位置脉冲是「一个信号」，三列分别是它的双字地址。
+ * 值全部由 ENCODER_DINT 派生，禁止回填 HR120 / MD120 / D120 字面量。
+ */
+/** 双字标签去掉「 · 」两侧空格，避免浮框列宽装不下 HR120 · HR121 */
+const compactDint = (s: string) => s.replace(/\s*·\s*/g, '·');
+export const DINT_ADDRESS_ROWS: readonly IoAddressRow[] = [
+  {
+    label: '位置脉冲',
+    mitsubishi: compactDint(ENCODER_DINT.MITSUBISHI_LABEL),
+    modbus: compactDint(ENCODER_DINT.MODBUS_LABEL),
+    s7: ENCODER_DINT.S7_LABEL,
+  },
+];
 
 // ============================================================
 // 电平读取（纯函数，便于单测与 CDP 断言，不依赖 React / zustand）

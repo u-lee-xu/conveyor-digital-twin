@@ -1,7 +1,7 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
   MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY, IO_GROUP_TITLES, ENCODER_REGISTER_INFO,
-  DINT_ADDRESS_ROWS, inputPointLevel, type IoPoint, type IoGroup,
+  DINT_ADDRESS_ROWS, inputPointLevel, ioAddressRows, type IoPoint, type IoGroup,
 } from '../manualIo';
 import { AddressHint } from './AddressHint';
 import { ReadoutNum } from './ReadoutNum';
@@ -9,8 +9,9 @@ import { ReadoutNum } from './ReadoutNum';
 /**
  * 输入点（X）传感器状态。
  *
- * X/Y/C 地址不直接铺在面板上：鼠标悬停（或键盘聚焦）到「启动」「停止」「A 缸后」
- * 等信号名称时由 AddressHint 弹出地址浮框，完整映射仍以「使用说明」为准。
+ * 三协议地址不直接铺在面板上：鼠标悬停（或键盘聚焦）到「启动」「停止」「A 缸后」
+ * 等信号名称时由 AddressHint 浮框一次列出三菱 X / Modbus 线圈 / S7 M 区地址，
+ * 完整映射仍以「使用说明」为准。
  * 输入点统一「每行 2 个」：manualIo.inputGroup() 保证每组点数为偶数，
  * 磁性开关 10 点恰好是 5 对「A 缸后 / A 缸前 … 盛药位 / 翻转位」，
  * 一行就是一个气缸的两个磁性开关，不再出现三列时末尾孤零零一个 LED。
@@ -24,7 +25,7 @@ function InputLed({ point, on }: { point: IoPoint; on: boolean }) {
       <span className={`io-led !w-[6px] !h-[6px] ${on ? 'io-led-on' : 'io-led-off'}`} />
       <AddressHint
         title={point.label}
-        rows={[{ addr: point.addr, coil: point.coil, label: point.label }]}
+        rows={ioAddressRows([point])}
         className={`truncate min-w-0 flex-1 text-[0.58rem] ${on ? 'text-green-300' : 'text-slate-500'}`}
       >
         {point.label}
