@@ -7,6 +7,7 @@ import {
 } from '../constants';
 import { DINT_ADDRESS_ROWS, ENCODER_REGISTER_INFO } from '../manualIo';
 import { AddressHint } from './AddressHint';
+import { ReadoutNum, DIRECTION_BADGE_WIDE_CLS } from './ReadoutNum';
 import type { ProtocolType } from '../../../services/plc-websocket';
 import { plcService } from '../../../services/plc-websocket';
 
@@ -275,11 +276,11 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
             note={ENCODER_REGISTER_INFO.address}
             underline={false}
           >
-            <span className="badge badge-blue">DINT = {encoderPulses} 脉冲</span>
+            <span className="badge badge-blue">DINT = <ReadoutNum value={encoderPulses} digits={5} /> 脉冲</span>
           </AddressHint>
           <span className="badge badge-slate">{ENCODER_DINT.TYPE} · 低字在前</span>
           <span className="badge badge-slate">{PULSE_LENGTH_MM.toFixed(4)} mm / 脉冲</span>
-          <span className={`badge ${encoderDir > 0 ? 'badge-green' : encoderDir < 0 ? 'badge-yellow' : 'badge-slate'}`}>
+          <span className={`${DIRECTION_BADGE_WIDE_CLS} ${encoderDir > 0 ? 'badge-green' : encoderDir < 0 ? 'badge-yellow' : 'badge-slate'}`}>
             {encoderDir > 0 ? '↑ 前进 +' : encoderDir < 0 ? '↓ 后退 −' : '静止'}
           </span>
         </div>

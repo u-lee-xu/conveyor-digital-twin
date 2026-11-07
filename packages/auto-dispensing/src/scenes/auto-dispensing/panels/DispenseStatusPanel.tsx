@@ -4,6 +4,7 @@ import {
   DINT_ADDRESS_ROWS, inputPointLevel, type IoPoint, type IoGroup,
 } from '../manualIo';
 import { AddressHint } from './AddressHint';
+import { ReadoutNum } from './ReadoutNum';
 
 /**
  * 输入点（X）传感器状态。
@@ -70,11 +71,11 @@ export function DispenseStatusPanel() {
           underline={false}
         >
           <span className="badge badge-blue">
-            {ENCODER_REGISTER_INFO.type} {encoderPulses}
+            {ENCODER_REGISTER_INFO.type} <ReadoutNum value={encoderPulses} digits={5} />
           </span>
         </AddressHint>
-        <span className="badge badge-slate">料斗 {hopperPills}</span>
-        <span className="badge badge-slate">仓内 {binCount}</span>
+        <span className="badge badge-slate">料斗 <ReadoutNum value={hopperPills} digits={2} /></span>
+        <span className="badge badge-slate">仓内 <ReadoutNum value={binCount} digits={2} /></span>
       </div>
     </div>
   );

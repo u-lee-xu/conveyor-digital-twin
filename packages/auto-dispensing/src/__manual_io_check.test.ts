@@ -33,6 +33,8 @@ const globs: Record<string, Record<string, string>> = {
   './scenes/auto-dispensing/panels/DispenseStatusPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseStatusPanel.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/panels/DispenseSimPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseSimPanel.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/panels/AddressHint.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/AddressHint.tsx', { query: '?raw', import: 'default', eager: true }),
+  './scenes/auto-dispensing/panels/ReadoutNum.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/ReadoutNum.tsx', { query: '?raw', import: 'default', eager: true }),
+  './scenes/auto-dispensing/panels/DispenseDemoPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseDemoPanel.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/components/ControlCabinet.tsx': import.meta.glob<string>('./scenes/auto-dispensing/components/ControlCabinet.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/hooks/useDispenseLoop.ts': import.meta.glob<string>('./scenes/auto-dispensing/hooks/useDispenseLoop.ts', { query: '?raw', import: 'default', eager: true }),
   './stores/useDispensingStore.ts': import.meta.glob<string>('./stores/useDispensingStore.ts', { query: '?raw', import: 'default', eager: true }),
@@ -50,9 +52,24 @@ const controlSource = rawSource('./scenes/auto-dispensing/panels/DispenseControl
 const statusSource = rawSource('./scenes/auto-dispensing/panels/DispenseStatusPanel.tsx');
 const simSource = rawSource('./scenes/auto-dispensing/panels/DispenseSimPanel.tsx');
 const hintSource = rawSource('./scenes/auto-dispensing/panels/AddressHint.tsx');
+const readoutSource = rawSource('./scenes/auto-dispensing/panels/ReadoutNum.tsx');
+const demoSource = rawSource('./scenes/auto-dispensing/panels/DispenseDemoPanel.tsx');
 const cabinetSource = rawSource('./scenes/auto-dispensing/components/ControlCabinet.tsx');
 const loopSource = rawSource('./scenes/auto-dispensing/hooks/useDispenseLoop.ts');
 const storeSource = rawSource('./stores/useDispensingStore.ts');
+/**
+ * CSS 必须用文件读取而不是 ?raw：Vitest 默认会 stub CSS 模块，
+ * .css?raw 拿到的是空串；源码级断言必须读到真实文本。
+ *
+ * 但本包 vite.config.ts 挂了 vite-plugin-electron-renderer，它会把 `node:fs`
+ * 重写成用 CJS require 的垫片，在 vitest 的 ESM 环境里直接 `import 'node:fs'`
+ * 会抛 "require is not defined"。改用 Node 内建的 getBuiltinModule 绕过 Vite
+ * 解析拿真正的 fs；new URL 是全局 Web API，同样无需被垫片接管的 node:url。
+ */
+const cssSource = process.getBuiltinModule('fs').readFileSync(
+  new URL('./index.css', import.meta.url),
+  'utf8',
+);
 
 function makeInput(): InputSnapshot {
   return {
@@ -427,5 +444,71 @@ describe('信号灯塔抬高', () => {
     expect(cabinetSource).toContain('args={[0.012, 0.02, LIGHT_POLE_H, 8]}');
     expect(cabinetSource).toContain('LIGHT_POLE_Y + LIGHT_DOME_STEP * 2');
     expect(cabinetSource).not.toContain('0.55, 8]');
+  });
+});
+
+// ============================================================
+// 读数区布局稳定性：滑台走到终点时 UI 不得跳变
+//
+// 旧版把 5 个 badge 塞进一个 flex-wrap 行：脉冲数 0~87040（1~5 位）、
+// 方向文案「↑ + / ↓ − / 静止」宽度不同，在左栏临界宽度处「终点」会被挤到
+// 第二行，整张卡片与左栏高度跳变 28px。现在数值一行、传感器一行，
+// 且数值字段定宽 + 等宽数字，行数与每行宽度都与运行状态无关。
+// ============================================================
+
+describe('读数区布局稳定性（防回退）', () => {
+  /** 取出整个 data-readout 容器块（含其 className），用于禁止 flex-wrap 回退 */
+  const readoutBlock = controlSource.slice(
+    controlSource.indexOf('<div className="mt-1 space-y-1" data-readout'),
+    controlSource.indexOf('progress-bar mt-1'),
+  );
+
+  it('手动面板读数区固定两行、不再有 flex-wrap 换行判定', () => {
+    expect(readoutBlock).toContain('data-readout');
+    expect(readoutBlock).toContain('space-y-1');
+    expect(readoutBlock).not.toContain('flex-wrap');
+    // 两行：数值行 + 传感器行
+    expect((readoutBlock.match(/flex items-center gap-1 min-w-0/g) || []).length).toBe(2);
+  });
+
+  it('读数区每个变化数值都由 ReadoutNum 定宽，方向 badge 居中定宽', () => {
+    expect(readoutBlock).toContain('<ReadoutNum value={encoderPulses} digits={5} />');
+    expect(readoutBlock).toContain('DIRECTION_BADGE_CLS');
+    expect(controlSource).toContain('<ReadoutNum value={magStock[mag]} digits={2} />');
+    expect(statusSource).toContain('<ReadoutNum value={encoderPulses} digits={5} />');
+    expect(simSource).toContain('<ReadoutNum value={encoderPulses} digits={5} />');
+    expect(demoSource).toContain('<ReadoutNum value={encoderPulses} digits={5} />');
+  });
+
+  it('四个面板都不再把变长数值直接插进 flex-wrap badge', () => {
+    [controlSource, statusSource, simSource, demoSource].forEach((src) => {
+      expect(src).toContain("from './ReadoutNum'");
+    });
+    expect(statusSource).toContain('料斗 <ReadoutNum');
+    expect(statusSource).toContain('仓内 <ReadoutNum');
+    expect(demoSource).toContain('轮次 <ReadoutNum');
+    expect(demoSource).toContain('料斗 <ReadoutNum');
+  });
+
+  it('ReadoutNum 用 ch 定宽且 digits 与 32 位行程上限一致', () => {
+    expect(readoutSource).toContain('minWidth: `${digits + 0.6}ch`');
+    expect(readoutSource).toContain('tabular-nums');
+    expect(readoutSource).toContain('whitespace-nowrap');
+    expect(readoutSource).toContain('DIRECTION_BADGE_CLS');
+    expect(readoutSource).toContain('DIRECTION_BADGE_WIDE_CLS');
+    // 87040 是 5 位十进制，digits=5 必须能容纳
+    expect(String((1.95 - 0.25) * PULSES_PER_M).length).toBe(5);
+  });
+
+  it('.badge 全局等宽数字 + 不换行，避免数字位数改变 badge 宽度', () => {
+    const badgeRule = cssSource.slice(cssSource.indexOf('.badge {'), cssSource.indexOf('.badge-green'));
+    expect(badgeRule).toContain('font-variant-numeric: tabular-nums');
+    expect(badgeRule).toContain('white-space: nowrap');
+  });
+
+  it('演示/仿真的方向文案也有定宽，阶段文案定宽居中', () => {
+    expect(demoSource).toContain('DIRECTION_BADGE_CLS');
+    expect(demoSource).toContain('min-w-[5.2rem] justify-center');
+    expect(simSource).toContain('DIRECTION_BADGE_WIDE_CLS');
   });
 });

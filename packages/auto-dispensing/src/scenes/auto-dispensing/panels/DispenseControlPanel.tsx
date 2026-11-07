@@ -10,6 +10,7 @@ import {
   type IoPoint, type OutputSnapshot,
 } from '../manualIo';
 import { AddressHint } from './AddressHint';
+import { ReadoutNum, DIRECTION_BADGE_CLS } from './ReadoutNum';
 import { DispenseStatusPanel } from './DispenseStatusPanel';
 
 /**
@@ -146,23 +147,36 @@ export function DispenseControlPanel() {
             {MANUAL_IO_SUMMARY.outputs} 出 / {MANUAL_IO_SUMMARY.inputs} 入
           </span>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          <span className="badge badge-blue">X {sliderX.toFixed(3)} m</span>
-          <AddressHint
-            title="位置寄存器"
-            rows={DINT_ADDRESS_ROWS}
-            note={ENCODER_REGISTER_INFO.address}
-            underline={false}
-          >
-            <span className="badge badge-blue">
-              {ENCODER_REGISTER_INFO.type} {encoderPulses}
+        {/*
+          位置读数区固定为两行，禁止 flex-wrap 换行判定。
+          旧版 5 个 badge 塞在一个 flex-wrap 行里：脉冲数 0~87040（1~5 位）与方向文案
+          「↑ + / ↓ − / 静止」宽度不同，在左栏临界宽度处「终点」会被挤到第二行，
+          导致整张卡片和左栏高度跳变 28px（用户反馈「滑台到终点时页面变动」）。
+          现在数值一行、传感器一行，行数恒为 2；配合 ReadoutNum 定宽与等宽数字，
+          连行内每个 badge 的宽度都与运行状态无关。
+        */}
+        <div className="mt-1 space-y-1" data-readout="">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="badge badge-blue">X {sliderX.toFixed(3)} m</span>
+            <AddressHint
+              title="位置寄存器"
+              rows={DINT_ADDRESS_ROWS}
+              note={ENCODER_REGISTER_INFO.address}
+              underline={false}
+              className="min-w-0"
+            >
+              <span className="badge badge-blue">
+                {ENCODER_REGISTER_INFO.type} <ReadoutNum value={encoderPulses} digits={5} />
+              </span>
+            </AddressHint>
+            <span className={`${DIRECTION_BADGE_CLS} badge-slate shrink-0`}>
+              {encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}
             </span>
-          </AddressHint>
-          <span className="badge badge-slate">
-            {encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}
-          </span>
-          <span className={`badge ${sensors.limitStart ? 'badge-green' : 'badge-slate'}`}>原点</span>
-          <span className={`badge ${sensors.limitEnd ? 'badge-green' : 'badge-slate'}`}>终点</span>
+          </div>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className={`badge ${sensors.limitStart ? 'badge-green' : 'badge-slate'}`}>原点</span>
+            <span className={`badge ${sensors.limitEnd ? 'badge-green' : 'badge-slate'}`}>终点</span>
+          </div>
         </div>
         <div className="progress-bar mt-1">
           <div className="progress-fill" style={{ width: `${sliderPct}%` }} />
@@ -279,7 +293,7 @@ export function DispenseControlPanel() {
           <div className="flex flex-wrap gap-1">
             {MAG_ORDER.map((mag) => (
               <span key={mag} className={`badge ${magStock[mag] > 0 ? 'badge-slate' : 'badge-red'}`}>
-                {mag} {magStock[mag]}/{MAG_CAPACITY}
+                {mag} <ReadoutNum value={magStock[mag]} digits={2} />/{MAG_CAPACITY}
               </span>
             ))}
           </div>
