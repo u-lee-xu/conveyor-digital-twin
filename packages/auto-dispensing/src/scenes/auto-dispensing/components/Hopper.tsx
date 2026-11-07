@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { useDispensingStore } from '../../../stores/useDispensingStore';
-import { HOPPER, PILL_R, PILL_H, VISUAL } from '../constants';
+import {
+  HOPPER, PILL_R, PILL_H, PILL_STACK_STEP, VISUAL,
+  HOPPER_PILL_COLS, HOPPER_PILL_ROWS, HOPPER_PILL_CAPACITY,
+  HOPPER_PILL_PITCH_X, HOPPER_PILL_PITCH_Z,
+} from '../constants';
+import { expandHopperStock } from '../hopperContents';
 import { materials } from '../../../components/scene/shared/materials';
 
 /**
@@ -17,12 +22,22 @@ import { materials } from '../../../components/scene/shared/materials';
  */
 export function Hopper() {
   const hopperPills = useDispensingStore((s) => s.hopperPills);
+  const hopperStock = useDispensingStore((s) => s.hopperStock);
   const { W, H, D, T } = HOPPER;
 
-  /** 斗内药片：平放堆叠（圆柱轴沿 Y），最多示意 4 粒，准确数量看状态面板 */
-  const shown = Math.min(Math.max(hopperPills, 0), 4);
+  /**
+   * 斗内药片：按来源台账轮转交错展开，再按内腔容量排成 COLS × ROWS × LAYERS。
+   * 容量由 HOPPER / PILL_* 推导（放大料斗会自动多放几粒），不再写死「最多 4 粒」；
+   * 超过几何容量的部分只在状态面板里计数，不凭空堆出斗口。
+   * 轮转的目的是让俯视可见的顶层同时出现多个仓的颜色：按仓分组时灌满 16 粒
+   * 会让顶层整整一层都是 D 仓，看起来像「只装了一种药」。
+   */
+  const stockCount = Object.values(hopperStock).reduce((n, v) => n + v, 0);
+  // 轮转交错展开：顶层一眼能看出多个仓的药，而不是整层同色
+  const byMag = expandHopperStock(hopperStock, Math.max(hopperPills - stockCount, 0));
+  const shown = Math.min(byMag.length, HOPPER_PILL_CAPACITY);
   const bottomY = -H / 2 + T + PILL_H / 2;
-  const colors = [VISUAL.PILL_COLOR.A, VISUAL.PILL_COLOR.B, VISUAL.PILL_COLOR.C, VISUAL.PILL_COLOR.D];
+  const perLayer = HOPPER_PILL_COLS * HOPPER_PILL_ROWS;
 
   return (
     <group>
@@ -60,21 +75,31 @@ export function Hopper() {
         ))}
 
         {/* 斗内药片（随料斗一起翻转，倒药时由 store 清空） */}
-        {Array.from({ length: shown }, (_, i) => (
-          <mesh
-            key={`pill_${i}`}
-            position={[i % 2 === 0 ? -0.004 : 0.004, bottomY + i * (PILL_H + 0.002), 0]}
-            castShadow
-          >
-            <cylinderGeometry args={[PILL_R * 0.85, PILL_R * 0.85, PILL_H, 12]} />
-            <meshStandardMaterial
-              color={colors[i % colors.length]}
-              metalness={0.15}
-              roughness={0.55}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-        ))}
+        {Array.from({ length: shown }, (_, i) => {
+          const layer = Math.floor(i / perLayer);
+          const rem = i % perLayer;
+          const col = rem % HOPPER_PILL_COLS;
+          const row = Math.floor(rem / HOPPER_PILL_COLS);
+          return (
+            <mesh
+              key={`pill_${i}`}
+              position={[
+                (col - (HOPPER_PILL_COLS - 1) / 2) * HOPPER_PILL_PITCH_X,
+                bottomY + layer * PILL_STACK_STEP,
+                (row - (HOPPER_PILL_ROWS - 1) / 2) * HOPPER_PILL_PITCH_Z,
+              ]}
+              castShadow
+            >
+              <cylinderGeometry args={[PILL_R * 0.85, PILL_R * 0.85, PILL_H, 12]} />
+              <meshStandardMaterial
+                color={VISUAL.PILL_COLOR[byMag[i]]}
+                metalness={0.15}
+                roughness={0.55}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          );
+        })}
       </group>
     </group>
   );
