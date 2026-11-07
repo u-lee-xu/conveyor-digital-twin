@@ -673,7 +673,8 @@ describe('z-fighting 防护：相邻可见面不再共面', () => {
     expect(cabinet).toContain('P.FRONT_Z + SURFACE_GAP');
     expect(cabinet).toContain('CABINET_SIZE[0] + 2 * SURFACE_GAP');
     expect(cabinet).toContain('P.FRONT_Z - P.T / 2 - SURFACE_GAP / 2');
-    expect(cabinet).toContain('P.ESTOP_HEAD_R * 0.55 + SURFACE_GAP');
+    // 蘑菇头改成 Lathe 平顶后，符号贴片统一贴到 ES.CAP_Z（平顶绝对 Z）之外
+    expect(cabinet).toContain('ES.CAP_Z + SURFACE_GAP');
   });
 
   it('三个贴面材质都带 polygonOffset，作为渲染层深度精度兜底', () => {

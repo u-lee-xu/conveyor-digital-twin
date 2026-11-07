@@ -4,11 +4,14 @@ import { useDispensingStore } from '../../../stores/useDispensingStore';
 import { useAppStore, type AppMode } from '../../../stores/useAppStore';
 import {
   CABINET_SIZE, CABINET_PANEL, CABINET_BUTTONS, CABINET_LAMPS, CABINET_LAMP_Y, CABINET_SELECTOR,
+  CABINET_SELECTOR_SHAPE, CABINET_ESTOP_SHAPE,
   LIGHT_DOME_R, LIGHT_DOME_STEP, LIGHT_POLE_H, LIGHT_POLE_Y, VISUAL, SURFACE_GAP,
 } from '../constants';
 import { materials } from '../../../components/scene/shared/materials';
 
 const P = CABINET_PANEL;
+const SW = CABINET_SELECTOR_SHAPE;
+const ES = CABINET_ESTOP_SHAPE;
 
 /** 按钮盒细节材质：颜色来自 CABINET_PANEL.COLORS，表面质感在此统一定义 */
 const bezelMat = new THREE.MeshStandardMaterial({
@@ -19,6 +22,23 @@ const collarMat = new THREE.MeshStandardMaterial({
 });
 const estopBaseMat = new THREE.MeshStandardMaterial({
   color: P.COLORS.estopBase, metalness: 0.2, roughness: 0.55,
+});
+/**
+ * 旋钮拨柄 / 银色固定环专用：低金属度亮银。
+ * 旧版用 bezelMat（metalness 0.9）做拨柄，场景里没有 envMap 时金属无漫反射，
+ * 反射不到环境就渲染成一团深灰，拨柄在黑色旋钮座上完全看不见。
+ */
+const switchMat = new THREE.MeshStandardMaterial({
+  color: P.COLORS.handle, metalness: 0.18, roughness: 0.36,
+});
+/** 旋钮座顶面的银色刻度环是贴面薄片：再叠一层 polygonOffset 抗远机位闪烁 */
+const switchDecalMat = new THREE.MeshStandardMaterial({
+  color: P.COLORS.handle, metalness: 0.18, roughness: 0.36,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+});
+/** 急停收颈：深石墨圆柱，衬出「头大杆细」的蘑菇轮廓 */
+const neckMat = new THREE.MeshStandardMaterial({
+  color: P.COLORS.neck, metalness: 0.35, roughness: 0.55,
 });
 /** 分区线是贴面薄片：几何已错开 SURFACE_GAP，再叠 polygonOffset 抗远机位闪烁 */
 const trimMat = new THREE.MeshStandardMaterial({
@@ -77,7 +97,11 @@ function usePlateTexture(text: string, dark: boolean, warning: boolean) {
   }, [text, dark, warning]);
 }
 
-/** 急停蘑菇头顶面的「旋转释放」箭头符号（透明底白箭头，实物为激光刻印） */
+/**
+ * 急停蘑菇头平顶的「旋转释放」符号（透明底白色双弧箭头，实物为激光刻印）。
+ * 旧版是单条 288° 的粗弧 + 大三角，远看就是一个字母 C，既不像旋转标记，
+ * 又把红色平顶占满了；改成两段对称细弧 + 小箭头，留白更多也更容易辨认。
+ */
 function useEStopSymbol() {
   return useMemo(() => {
     if (typeof document === 'undefined') return new THREE.Texture();
@@ -88,25 +112,31 @@ function useEStopSymbol() {
     if (ctx) {
       ctx.strokeStyle = P.COLORS.symbol;
       ctx.fillStyle = P.COLORS.symbol;
-      ctx.lineWidth = 11;
+      ctx.lineWidth = 7;
       ctx.lineCap = 'round';
-      const end = Math.PI * 1.02;
-      ctx.beginPath();
-      ctx.arc(64, 64, 38, -Math.PI * 0.58, end);
-      ctx.stroke();
-      // 弧末端的箭头三角，沿切线方向
-      const ax = 64 + Math.cos(end) * 38;
-      const ay = 64 + Math.sin(end) * 38;
-      ctx.save();
-      ctx.translate(ax, ay);
-      ctx.rotate(end + Math.PI / 2);
-      ctx.beginPath();
-      ctx.moveTo(0, -13);
-      ctx.lineTo(-10, 9);
-      ctx.lineTo(10, 9);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      const radius = 36;
+      const arcs: [number, number][] = [
+        [-Math.PI * 0.92, -Math.PI * 0.12],
+        [Math.PI * 0.08, Math.PI * 0.88],
+      ];
+      arcs.forEach(([from, to]) => {
+        ctx.beginPath();
+        ctx.arc(64, 64, radius, from, to);
+        ctx.stroke();
+        // 弧末端的箭头三角，沿切线方向
+        const ax = 64 + Math.cos(to) * radius;
+        const ay = 64 + Math.sin(to) * radius;
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(to + Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(-6, 7);
+        ctx.lineTo(6, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
     }
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -188,7 +218,14 @@ function PushButton({ spec, pressed, lit, onDown, onUp }: {
   );
 }
 
-/** 急停：RAL1021 黄色警示底盘 + 银色固定环 + Φ40 红色蘑菇头 + 旋转释放箭头 */
+/**
+ * 急停：RAL1021 黄色警示底盘 → 亮银固定环 → 深石墨收颈 → 红色蘑菇伞 → 旋转释放符号。
+ *
+ * 关键改造：红头不再用「圆柱 + 压扁球」拼成一颗圆珠，而是按
+ * CABINET_ESTOP_SHAPE.PROFILE 车削（LatheGeometry）出真实蘑菇剖面：
+ * 细颈 → 外扩伞底 → 圆角伞缘 → 宽平顶。直径层级黄盘 > 红伞 > 银环 > 收颈，
+ * 斜视角能直接看出「头大杆细」，平顶区域留给符号贴片，不悬浮也不共面。
+ */
 function EStopButton({ spec, pressed, mirrored, onDown, onUp }: {
   spec: ButtonSpec; pressed: boolean; mirrored: boolean; onDown: () => void; onUp: () => void;
 }) {
@@ -202,71 +239,104 @@ function EStopButton({ spec, pressed, mirrored, onDown, onUp }: {
     emissiveIntensity: pressed ? 0.35 : 0,
   }), [spec.color, pressed]);
   useEffect(() => () => headMat.dispose(), [headMat]);
-
-  const headZ = P.FRONT_Z + 0.010 + P.ESTOP_T / 2 - (pressed ? 0.005 : 0);
+  /** 剖面点是相对面板前表面的 Z；Lathe 默认绕 +Y，转 90° 后轴朝 +Z（朝观察者） */
+  const profile = useMemo(
+    () => ES.PROFILE.map(([r, z]) => new THREE.Vector2(r, z)),
+    [],
+  );
 
   return (
     <group position={[spec.x, spec.y, 0]}>
-      <ZDisc r={P.ESTOP_BASE_R} depth={0.003} z={P.FRONT_Z + 0.0015} material={estopBaseMat} />
-      <ZDisc r={P.ESTOP_BASE_R * 0.78} depth={0.004} z={P.FRONT_Z + 0.004} material={bezelMat} />
-      {/* 固定环略向外错开，避免它的背面与银环正面精确共面 */}
-      <ZDisc
-        r={P.ESTOP_HEAD_R + 0.002} depth={0.004}
-        z={P.FRONT_Z + 0.008 + SURFACE_GAP / 2} material={collarMat}
-      />
-      <mesh
-        position={[0, 0, headZ]}
-        rotation={[Math.PI / 2, 0, 0]}
-        material={headMat}
+      {/* 黄盘与银环固定在面板上，按压时不跟着下沉 */}
+      <ZDisc r={P.ESTOP_BASE_R} depth={ES.BASE_T} z={P.FRONT_Z + ES.BASE_T / 2} material={estopBaseMat} />
+      <ZDisc r={ES.RING_R} depth={ES.RING_T} z={ES.RING_Z} material={switchMat} />
+      {/* 交互挂在头部 group：子网格命中后冒泡，符号贴片不会挡住点击 */}
+      <group
+        position={[0, 0, -(pressed ? ES.PRESS_DEPTH : 0)]}
         onPointerDown={(e) => { e.stopPropagation(); onDown(); }}
         onPointerUp={(e) => { e.stopPropagation(); onUp(); }}
         onPointerOut={onUp}
       >
-        <cylinderGeometry args={[P.ESTOP_HEAD_R, P.ESTOP_HEAD_R, P.ESTOP_T, 28]} />
-      </mesh>
-      <mesh position={[0, 0, headZ + P.ESTOP_T / 2]} scale={[1, 1, 0.55]} material={headMat}>
-        <sphereGeometry args={[P.ESTOP_HEAD_R, 24, 12]} />
-      </mesh>
-      {/* 头部白色旋转释放符号：贴在压扁球面最前端，旧 0.001 偏置会闪，改用 SURFACE_GAP */}
-      <mesh
-        position={[0, 0, headZ + P.ESTOP_T / 2 + P.ESTOP_HEAD_R * 0.55 + SURFACE_GAP]}
-        scale={mirrored ? [-1, 1, 1] : [1, 1, 1]}
-      >
-        <circleGeometry args={[P.ESTOP_HEAD_R * 0.7, 24]} />
-        <meshBasicMaterial
-          map={symbol} transparent depthWrite={false} toneMapped={false}
-          side={THREE.DoubleSide}
-          polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2}
-        />
-      </mesh>
+        {/* 收颈柱底端嵌进固定环，避免端面精确共面 */}
+        <ZDisc r={ES.NECK_R} depth={ES.NECK_H} z={ES.NECK_Z} material={neckMat} />
+        <mesh position={[0, 0, P.FRONT_Z]} rotation={[Math.PI / 2, 0, 0]} material={headMat}>
+          <latheGeometry args={[profile, 32]} />
+        </mesh>
+        {/* 符号只比平顶高一个 SURFACE_GAP，且带 polygonOffset 兜底 */}
+        <mesh
+          position={[0, 0, ES.CAP_Z + SURFACE_GAP]}
+          scale={mirrored ? [-1, 1, 1] : [1, 1, 1]}
+        >
+          <circleGeometry args={[ES.SYMBOL_R, 32]} />
+          <meshBasicMaterial
+            map={symbol} transparent depthWrite={false} toneMapped={false}
+            side={THREE.DoubleSide}
+            polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
 
-/** 两位选择开关：φ22 金属环 + 黑色短手柄，手柄角度只读跟随当前模式 */
+/**
+ * 两位选择开关：φ22 亮银安装环 + 黑色旋钮座 + 银色刻度环 + 楔形拨柄。
+ *
+ * 关键改造：拨柄长度推到安装环半径的 1.7 倍以上，用低金属度亮银材质
+ * （无 envMap 时也保持浅色），并做成根部宽 / 尖端收窄的箭头形，
+ * 一眼能看出指向哪一档；档位刻线按 manual / auto 的真实偏角摆放。
+ */
 function SelectorSwitch({ mode }: { mode: AppMode }) {
   const angle = CABINET_SELECTOR.angles[mode];
+  const handleShape = useMemo(() => {
+    const s = new THREE.Shape();
+    const half = SW.HANDLE_W / 2;
+    const tip = SW.HANDLE_TIP_W / 2;
+    const root = SW.HANDLE_ROOT_Y;
+    const shoulder = root + SW.HANDLE_L * SW.HANDLE_SHOULDER;
+    const end = root + SW.HANDLE_L;
+    s.moveTo(-half, root);
+    s.lineTo(half, root);
+    s.lineTo(half, shoulder);
+    s.lineTo(tip, end);
+    s.lineTo(-tip, end);
+    s.lineTo(-half, shoulder);
+    s.closePath();
+    return s;
+  }, []);
+
   return (
     <group position={[CABINET_SELECTOR.x, CABINET_SELECTOR.y, 0]}>
-      <ZDisc r={P.SELECTOR_R} depth={P.BEZEL_T} z={P.FRONT_Z + P.BEZEL_T / 2} material={bezelMat} />
-      <ZDisc r={P.COLLAR_R} depth={0.003} z={P.FRONT_Z + P.BEZEL_T + 0.001} material={collarMat} />
-      {/* 面板上的两个档位刻线，标明「手动 / 自动」两个位置；贴面统一错开 */}
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.022, 0, P.FRONT_Z + SURFACE_GAP]} material={materials.decalDark}>
-          <boxGeometry args={[0.002, 0.006, 0.001]} />
-        </mesh>
-      ))}
+      <ZDisc r={P.SELECTOR_R} depth={P.BEZEL_T} z={P.FRONT_Z + P.BEZEL_T / 2} material={switchMat} />
+      <ZDisc r={SW.KNOB_R} depth={SW.KNOB_T} z={SW.KNOB_Z} material={collarMat} />
+      {/* 旋钮座顶面的银色刻度环：贴面统一错开 SURFACE_GAP */}
+      <mesh position={[0, 0, SW.KNOB_TOP + SURFACE_GAP]} material={switchDecalMat}>
+        <ringGeometry args={[SW.SCALE_R0, SW.SCALE_R1, 32]} />
+      </mesh>
+      {/* 两个档位标记：小圆点按 manual / auto 真实偏角摆放，与拨柄指向严格同源 */}
+      {(['manual', 'auto'] as const).map((key) => {
+        const a = CABINET_SELECTOR.angles[key];
+        return (
+          <mesh
+            key={key}
+            position={[-Math.sin(a) * SW.NOTCH_R, Math.cos(a) * SW.NOTCH_R, P.FRONT_Z + SURFACE_GAP]}
+            material={materials.decalDark}
+          >
+            <circleGeometry args={[SW.NOTCH_DOT_R, 12]} />
+          </mesh>
+        );
+      })}
       <group rotation={[0, 0, angle]}>
-        {/* 亮银手柄明显伸出黑色内圈，一眼能看出是可旋转的选择开关 */}
-        <mesh position={[0, P.SELECTOR_HANDLE_L * 0.40, P.FRONT_Z + 0.013]} material={bezelMat}>
-          <boxGeometry args={[P.SELECTOR_HANDLE_W, P.SELECTOR_HANDLE_L, 0.010]} />
+        {/* 楔形拨柄：ExtrudeGeometry 沿 +Z 挤出，前端是收窄的箭头 */}
+        <mesh position={[0, 0, SW.HANDLE_Z]} material={switchMat}>
+          <extrudeGeometry args={[handleShape, { depth: SW.HANDLE_T, bevelEnabled: false }]} />
         </mesh>
-        {/* 手柄端部的深色指示线：旧版背面正好贴在手柄正面，会共面闪烁 */}
+        {/* 拨柄中轴的深色指示槽，与柄面错开 SURFACE_GAP */}
         <mesh
-          position={[0, P.SELECTOR_HANDLE_L * 0.82, P.FRONT_Z + 0.018 + SURFACE_GAP]}
+          position={[0, SW.MARK_Y, SW.HANDLE_TOP + SURFACE_GAP]}
           material={materials.decalDark}
         >
-          <boxGeometry args={[P.SELECTOR_HANDLE_W * 0.9, 0.004, 0.001]} />
+          <planeGeometry args={[SW.MARK_W, SW.MARK_L]} />
         </mesh>
       </group>
     </group>
