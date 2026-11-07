@@ -167,34 +167,66 @@ export const MAG_TUBE_TOP_Y = CHUTE_Y + MAG_TUBE_H;
 // 安装姿态：**侧立**——把参考件的顶面(+Y)转向观众(+Z)，输出轴由 Y 变为 Z。
 // 这样料斗能绕水平 Z 轴摆动 90°：angle=0 开口朝 +Y 接药，angle=1 开口朝 +X 倒药。
 // 侧立后的坐标映射：参考宽 X→BODY_W，参考深 Z→BODY_H，参考高 Y→BODY_D。
+//
+// 【共同旋转基准 ROTARY_PIVOT】法兰盘「端面中心点」与料斗「-Z 侧面外表面中心点」
+// 精确重合，两者都在输出轴 Z 上，是圆盘与料斗唯一的共同旋转基准。
+// 料斗几何中心只在旋转轴方向让位 HOPPER.D/2；绕 Z 旋转时 XY 偏心恒为 0、
+// Z 也不变，因此全程不产生附加平移（见 rotaryPivot.ts 的纯函数证明）。
+//
+// 为保持接药 / 斜槽 / 落斗 / 倒药等既有功能坐标零漂移，以「料斗世界中心」为主基准
+// 反推气缸位姿：HOPPER_CENTER_Y / HOPPER_CENTER_Z 及下游常量数值全部保持不变，
+// 改变的是气缸主体相对滑块的抬高量（盘端面中心上移到斗侧面中心）。
 // ------------------------------------------------------------
 
 /** 气缸主体尺寸（侧立后，X 宽 × Y 高 × Z 厚） */
 export const ROTARY_BODY = { W: 0.100, H: 0.070, D: 0.024 } as const;
 /** 输出法兰盘（盘面朝 +Z，轴线沿 Z；盘径 ≈ 主体宽度的 78%，与参考件一致） */
 export const ROTARY_DISC = { R: 0.039, TH: 0.008 } as const;
-/** 气缸主体中心相对「滑块组原点」的偏移（贴滑块 +Z 侧面、与滑块中心同高） */
-export const ROTARY_CENTER = {
-  Y: SLIDER_SIZE[1] / 2,
-  Z: SLIDER_SIZE[2] / 2 + ROTARY_BODY.D / 2 + 0.004,
-} as const;
-/** 料斗与法兰盘之间的连接臂厚度（沿 Z） */
+/** 气缸贴滑块 +Z 侧面的安装间隙（旧装配链尺寸，用于复现既有料斗基准） */
+export const ROTARY_MOUNT_GAP = 0.004;
+/** 料斗与法兰盘之间连接法兰的可见厚度（沿 Z；不再参与中心定位） */
 export const HOPPER_BRACKET_TH = 0.006;
-/** 取药料斗外形尺寸（X 宽 × Y 深 × Z 深）；开口朝 +Y，内腔可容纳 φ0.04 药片 */
+/** 取药料斗外形尺寸（X 宽 × Y 高 × Z 深）；开口朝 +Y，内腔可容纳 φ0.04 药片 */
 export const HOPPER = { W: 0.072, H: 0.055, D: 0.060, T: 0.005 } as const;
-/** 料斗底部相对盘面中心留的间隙（连接臂托住料斗底） */
+/** 料斗底部托板的可见厚度（不再参与中心定位） */
 export const HOPPER_FOOT_GAP = 0.006;
 
-/** 法兰盘中心世界 Y（滑块组原点在 SLIDER_TOP_Y） */
-export const DISC_CENTER_Y = SLIDER_TOP_Y + ROTARY_CENTER.Y;
-/** 法兰盘中心世界 Z */
-export const DISC_CENTER_Z = ROTARY_CENTER.Z + ROTARY_BODY.D / 2 + ROTARY_DISC.TH / 2;
-/** 料斗中心相对盘心的局部偏移（在盘 group 内，随盘一起绕 Z 翻转） */
-export const HOPPER_LOCAL_Y = HOPPER_FOOT_GAP + HOPPER.H / 2;
-export const HOPPER_LOCAL_Z = ROTARY_DISC.TH / 2 + HOPPER_BRACKET_TH + HOPPER.D / 2;
-/** 料斗中心世界坐标（angle=0，滑块在 sliderX 时） */
-export const HOPPER_CENTER_Y = DISC_CENTER_Y + HOPPER_LOCAL_Y;
-export const HOPPER_CENTER_Z = DISC_CENTER_Z + HOPPER_LOCAL_Z;
+/**
+ * 共同旋转基准相对「滑块组原点」的位置（沿用既有装配链长度，数值不变）。
+ * Y = 滑块半高 + 底部间隙 + 斗半高（即斗中心高度）；
+ * Z = 滑块半深 + 主体半厚 + 安装间隙 + 主体半厚 + 盘半厚 + 盘半厚 + 法兰厚
+ *     （即料斗 -Z 侧面外表面所在平面）。
+ */
+export const ROTARY_PIVOT_LOCAL = {
+  Y: SLIDER_SIZE[1] / 2 + HOPPER_FOOT_GAP + HOPPER.H / 2,
+  Z: SLIDER_SIZE[2] / 2 + ROTARY_BODY.D / 2 + ROTARY_MOUNT_GAP
+    + ROTARY_BODY.D / 2 + ROTARY_DISC.TH / 2
+    + ROTARY_DISC.TH / 2 + HOPPER_BRACKET_TH,
+} as const;
+
+/** 料斗几何中心世界坐标（angle=0，滑块在 sliderX 时）——既有功能基准，数值不变 */
+export const HOPPER_CENTER_Y = SLIDER_TOP_Y + ROTARY_PIVOT_LOCAL.Y;
+export const HOPPER_CENTER_Z = ROTARY_PIVOT_LOCAL.Z + HOPPER.D / 2;
+
+/** 共同旋转基准世界坐标：圆盘端面中心 = 料斗 -Z 侧面中心 */
+export const ROTARY_PIVOT_Y = HOPPER_CENTER_Y;
+export const ROTARY_PIVOT_Z = ROTARY_PIVOT_LOCAL.Z;
+/** 法兰盘体积中心（旋转轴穿过；盘端面中心在其 +TH/2 处） */
+export const DISC_CENTER_Y = ROTARY_PIVOT_Y;
+export const DISC_CENTER_Z = ROTARY_PIVOT_Z - ROTARY_DISC.TH / 2;
+/** 共同旋转基准在「气缸主体局部坐标」中的 Z（= 盘端面中心） */
+export const ROTARY_PIVOT_IN_BODY_Z = ROTARY_BODY.D / 2 + ROTARY_DISC.TH;
+/** 气缸主体中心相对「滑块组原点」的偏移：由共同基准反推，保证盘端面与斗侧面同心 */
+export const ROTARY_CENTER = {
+  Y: DISC_CENTER_Y - SLIDER_TOP_Y,
+  Z: DISC_CENTER_Z - ROTARY_BODY.D / 2 - ROTARY_DISC.TH / 2,
+} as const;
+/** 主体背面到滑块 +Z 侧面的安装间隙（由新位姿反推，供支座建模） */
+export const ROTARY_STANDOFF = ROTARY_CENTER.Z - ROTARY_BODY.D / 2 - SLIDER_SIZE[2] / 2;
+
+/** 料斗中心相对盘体积中心的局部偏移：Y 恒为 0（无偏心），Z 仅沿旋转轴让位 */
+export const HOPPER_LOCAL_Y = HOPPER_CENTER_Y - DISC_CENTER_Y;
+export const HOPPER_LOCAL_Z = HOPPER_CENTER_Z - DISC_CENTER_Z;
 /** 料斗开口平面 Y（接药落点） */
 export const HOPPER_OPEN_Y = HOPPER_CENTER_Y + HOPPER.H / 2;
 /** 药片落入斗内一点的 Y（略低于开口，避免停在口沿上） */
@@ -226,7 +258,12 @@ export const PILL_FLIGHT_SPLIT = 0.62;
 /** 料斗中心相对滑块中心的 X 偏移：料斗与法兰盘、滑块同轴，故为 0。
  *  演示停靠位 = 药仓 X - 该值，改装配时必须同步修改这里。 */
 export const HOPPER_OFFSET_X = 0;
-/** 翻转到位后料斗口相对滑块中心的坐标（倒药起点） */
+/**
+ * 翻转到位后料斗口相对滑块中心的坐标（倒药起点）。
+ * 同心装配后料斗中心不再绕盘心公转，斗口只在 +X 方向偏 H/2；
+ * Y 等于基准高度、Z 等于斗中心 Z（旋转轴方向不受角度影响）。
+ * 三个分量都由同一套同心几何推导，接口名保持既有不变。
+ */
 export const DUMP_MOUTH_X = HOPPER_LOCAL_Y + HOPPER.H / 2;
 export const DUMP_MOUTH_Y = DISC_CENTER_Y;
 export const DUMP_MOUTH_Z = HOPPER_CENTER_Z;
