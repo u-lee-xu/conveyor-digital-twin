@@ -1,9 +1,13 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
   SLIDER_SIZE, SLIDER_DETAIL, SURFACE_GAP,
-  ROTARY_BODY, ROTARY_DISC, ROTARY_CENTER,
-  HOPPER, HOPPER_BRACKET_TH, HOPPER_FOOT_GAP, HOPPER_LOCAL_Y, HOPPER_LOCAL_Z,
+  ROTARY_BODY, ROTARY_DISC, ROTARY_CENTER, ROTARY_STANDOFF,
+  HOPPER, HOPPER_BRACKET_TH, HOPPER_FOOT_GAP,
 } from '../constants';
+import {
+  PIVOT_LOCAL, HOPPER_SIDE_FACE_LOCAL, DISC_BODY_OFFSET, HOPPER_AXIAL_OFFSET,
+  rotaryAngleRad,
+} from '../rotaryPivot';
 import { materials } from '../../../components/scene/shared/materials';
 import { Hopper } from './Hopper';
 
@@ -182,11 +186,15 @@ function SideNameplate() {
  * 使盘面朝观众(+Z)、输出轴沿 Z，料斗才能绕水平轴翻转 90° 倒药。
  *
  * 装配链（沿 +Z 由后到前）：
- *   滑块 → 气缸主体 → 法兰盘 → 连接支架 → 料斗
+ *   滑块 → 安装支座 → 气缸主体 → 法兰盘端面 → 料斗 -Z 侧面
  *
- * 旋转：法兰盘绕 Z 轴，angle 0→1 对应 0°→-90°
- *   - angle=0：料斗在盘上方，开口朝 +Y（接药）
- *   - angle=1：料斗摆到盘 +X 侧，开口朝 +X（朝取药仓倒药）
+ * 【共同旋转基准】法兰盘端面中心点与料斗 -Z 侧面中心点精确重合（PIVOT_LOCAL）。
+ * 圆盘与料斗是同一个旋转 group 的子节点，共用同一个角度；
+ * angle 0→1 对应 0°→-90°：
+ *   - angle=0：开口朝 +Y（接药）
+ *   - angle=1：开口朝 +X（朝取药仓倒药）
+ * 料斗几何中心相对基准只有 +Z 方向的 HOPPER.D/2（旋转轴方向），
+ * 因此旋转全过程 XY 偏心恒为 0、Z 不变，既不公转也不产生附加平移。
  *
  * 局部原点 = 滑块底面中心（ASSEMBLY.sliderHopper 给出世界位姿，X 由 store 动态覆盖）。
  * 组件内不含世界坐标：丝杆/导轨从滑块中心穿过，局部高度即 SLIDER_SIZE[1]/2。
@@ -250,6 +258,16 @@ export function SliderHopper() {
       )))}
       <BallNut />
 
+      {/* 安装支座：把上移后的气缸主体重新锚在滑块 +Z 侧面上。
+          两端各嵌入实体 SURFACE_GAP，接触面藏在实体内部：既不悬空留缝，
+          也不会与滑块侧面 / 气缸背面共面闪烁。 */}
+      <mesh
+        position={[0, ROTARY_CENTER.Y, SLIDER_SIZE[2] / 2 + ROTARY_STANDOFF / 2]}
+        material={materials.darkMetal}
+      >
+        <boxGeometry args={[BODY_W * 0.7, BODY_H * 0.55, ROTARY_STANDOFF + 2 * SURFACE_GAP]} />
+      </mesh>
+
       {/* ===== 旋转气缸（侧立：盘面朝 +Z，输出轴沿 Z） ===== */}
       <group position={[0, ROTARY_CENTER.Y, ROTARY_CENTER.Z]}>
 
@@ -298,94 +316,78 @@ export function SliderHopper() {
           </mesh>
         ))}
 
-        {/* ===== 法兰盘（可旋转部分，angle 驱动） ===== */}
-        <group
-          position={[0, 0, BODY_D / 2 + DISC_TH / 2]}
-          rotation={[0, 0, -angle * Math.PI / 2]}
-        >
-          {/* 盘体：cylinder 默认轴沿 Y，转 90° 后轴沿 Z（盘面朝 +Z） */}
-          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow material={materials.endCap}>
-            <cylinderGeometry args={[DISC_R, DISC_R, DISC_TH, 32]} />
-          </mesh>
-
-          {/* 盘缘刻度环：torus 法线默认 +Z，与盘面一致；贴面错开并用 decal 兜底 */}
-          <mesh position={[0, 0, DISC_TH / 2 + SURFACE_GAP]} material={materials.decal}>
-            <torusGeometry args={[DISC_R - 0.002, 0.0015, 8, 48]} />
-          </mesh>
-
-          {/* 刻度线 ×12 */}
-          {Array.from({ length: 12 }, (_, i) => {
-            const a = (i / 12) * Math.PI * 2;
-            return (
-              <mesh
-                key={`scl_${i}`}
-                position={[Math.cos(a) * (DISC_R - 0.006), Math.sin(a) * (DISC_R - 0.006), DISC_TH / 2 + 2 * SURFACE_GAP]}
-                rotation={[0, 0, a]}
-                material={materials.decalDark}
-              >
-                <boxGeometry args={[0.001, 0.005, 0.0015]} />
-              </mesh>
-            );
-          })}
-
-          {/* 盘面螺栓孔 ×8 */}
-          {Array.from({ length: 8 }, (_, i) => {
-            const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-            const r = DISC_R * 0.66;
-            return (
-              <mesh
-                key={`bolt_${i}`}
-                position={[Math.cos(a) * r, Math.sin(a) * r, DISC_TH / 2 + 2 * SURFACE_GAP]}
-                material={materials.decalDark}
-              >
-                <circleGeometry args={[0.0035, 12]} />
-              </mesh>
-            );
-          })}
-
-          {/* 中心法兰凸台：后端面嵌进盘面内部，避免与盘面共面 */}
-          <mesh
-            position={[0, 0, DISC_TH / 2 + 0.002 - SURFACE_GAP / 2]}
-            rotation={[Math.PI / 2, 0, 0]}
-            material={materials.flange}
-          >
-            <cylinderGeometry args={[DISC_R * 0.34, DISC_R * 0.34, 0.004, 20]} />
-          </mesh>
-
-          {/* 中心内六角孔：circle 法线默认 +Z，平贴凸台前端面并用 decal 兜底 */}
-          <mesh position={[0, 0, DISC_TH / 2 + 0.004]} material={materials.decalDark}>
-            <circleGeometry args={[0.007, 6]} />
-          </mesh>
-
-          {/* ===== 连接支架：把料斗真正固定到法兰盘上 ===== */}
-          {/* 竖直安装板：从盘心向 +Y 延伸，贴在盘面前方 */}
-          <mesh
-            position={[0, HOPPER_LOCAL_Y / 2, DISC_TH / 2 + HOPPER_BRACKET_TH / 2]}
-            material={materials.flange}
-          >
-            <boxGeometry args={[HOPPER.W * 0.82, HOPPER_LOCAL_Y, HOPPER_BRACKET_TH]} />
-          </mesh>
-          {/* 水平托板：托住料斗底面（-Y），沿 +Z 伸到料斗中心 */}
-          <mesh
-            position={[0, HOPPER_FOOT_GAP - 0.002, DISC_TH / 2 + (HOPPER_BRACKET_TH + HOPPER.D / 2) / 2]}
-            material={materials.flange}
-          >
-            <boxGeometry args={[HOPPER.W * 0.9, 0.004, HOPPER_BRACKET_TH + HOPPER.D / 2]} />
-          </mesh>
-          {/* 支架固定螺栓 ×2 */}
-          {[-1, 1].map((sx) => (
-            <mesh
-              key={`brk_${sx}`}
-              position={[sx * HOPPER.W * 0.28, HOPPER_LOCAL_Y * 0.55, DISC_TH / 2 + HOPPER_BRACKET_TH + 0.001]}
-              rotation={[Math.PI / 2, 0, 0]}
-              material={materials.darkMetal}
-            >
-              <cylinderGeometry args={[0.0035, 0.0035, 0.003, 8]} />
+        {/* ===== 共同旋转基准：盘端面中心 = 料斗 -Z 侧面中心 =====
+            圆盘与料斗共用这一个 group、这一个角度；料斗不再相对盘心挂到 Y 偏移上 */}
+        <group position={PIVOT_LOCAL} rotation={[0, 0, rotaryAngleRad(angle)]}>
+          {/* 盘体：整体沿 -Z 让位半盘厚，使盘「前端面」精确落在基准点上 */}
+          <group position={DISC_BODY_OFFSET}>
+            {/* cylinder 默认轴沿 Y，转 90° 后轴沿 Z（盘面朝 +Z） */}
+            <mesh rotation={[Math.PI / 2, 0, 0]} castShadow material={materials.endCap}>
+              <cylinderGeometry args={[DISC_R, DISC_R, DISC_TH, 32]} />
             </mesh>
-          ))}
 
-          {/* ===== 取药料斗（恢复显示，随盘一起翻转） ===== */}
-          <group position={[0, HOPPER_LOCAL_Y, HOPPER_LOCAL_Z]}>
+            {/* 盘缘刻度环：torus 法线默认 +Z；贴面错开并用 decal 兜底 */}
+            <mesh position={[0, 0, DISC_TH / 2 + SURFACE_GAP]} material={materials.decal}>
+              <torusGeometry args={[DISC_R - 0.002, 0.0015, 8, 48]} />
+            </mesh>
+
+            {/* 刻度线 ×12（贴在盘面、位于料斗侧壁投影之后，不产生共面竞争） */}
+            {Array.from({ length: 12 }, (_, i) => {
+              const a = (i / 12) * Math.PI * 2;
+              return (
+                <mesh
+                  key={`scl_${i}`}
+                  position={[Math.cos(a) * (DISC_R - 0.006), Math.sin(a) * (DISC_R - 0.006), DISC_TH / 2 + SURFACE_GAP]}
+                  rotation={[0, 0, a]}
+                  material={materials.decalDark}
+                >
+                  <boxGeometry args={[0.001, 0.005, 0.0015]} />
+                </mesh>
+              );
+            })}
+
+            {/* 盘面螺栓孔 ×8 */}
+            {Array.from({ length: 8 }, (_, i) => {
+              const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+              const r = DISC_R * 0.66;
+              return (
+                <mesh
+                  key={`bolt_${i}`}
+                  position={[Math.cos(a) * r, Math.sin(a) * r, DISC_TH / 2 + SURFACE_GAP]}
+                  material={materials.decalDark}
+                >
+                  <circleGeometry args={[0.0035, 12]} />
+                </mesh>
+              );
+            })}
+          </group>
+
+          {/* 四颗夹紧螺栓：落在斗壁投影之外、盘缘之内，把斗侧面锁在盘端面上 */}
+          {[60, 120, 240, 300].map((deg) => {
+            const a = (deg * Math.PI) / 180;
+            const r = DISC_R * 0.90;
+            return (
+              <mesh
+                key={`brk_${deg}`}
+                position={[Math.cos(a) * r, Math.sin(a) * r, HOPPER_BRACKET_TH / 4]}
+                rotation={[Math.PI / 2, 0, 0]}
+                material={materials.darkMetal}
+              >
+                <cylinderGeometry args={[0.0035, 0.0035, HOPPER_BRACKET_TH / 2, 8]} />
+              </mesh>
+            );
+          })}
+
+          {/* 斗底托板：贴着料斗底面下方，与料斗同属一个旋转 group */}
+          <mesh
+            position={[0, -HOPPER.H / 2 - HOPPER_FOOT_GAP / 2 - SURFACE_GAP, HOPPER_AXIAL_OFFSET[2] + SURFACE_GAP]}
+            material={materials.flange}
+          >
+            <boxGeometry args={[HOPPER.W * 0.9, HOPPER_FOOT_GAP, HOPPER.D]} />
+          </mesh>
+
+          {/* 取药料斗：局部原点就是 -Z 侧面中心，直接挂在共同基准上，零额外偏移 */}
+          <group position={HOPPER_SIDE_FACE_LOCAL}>
             <Hopper />
           </group>
         </group>
