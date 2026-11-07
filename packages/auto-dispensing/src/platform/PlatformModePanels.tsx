@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { HelpPanel, PlcConnectionPanel, type PlcConnConfig } from '@digital-twin/shared';
 import { DispenseControlPanel } from '../scenes/auto-dispensing/panels/DispenseControlPanel';
-import { DispenseStatusPanel } from '../scenes/auto-dispensing/panels/DispenseStatusPanel';
 import { DispenseDemoPanel } from '../scenes/auto-dispensing/panels/DispenseDemoPanel';
 import { DispenseSimPanel } from '../scenes/auto-dispensing/panels/DispenseSimPanel';
 import { buildDispensingHelpContent } from '../scenes/auto-dispensing/helpContent';
@@ -15,14 +14,9 @@ import { plcService, type ProtocolType } from '../services/plc-websocket';
  * 使同一个面板既能被平台壳渲染，也能保持独立 App 的功能。
  */
 
-/** 手动模式：控制面板 + IO 状态面板（与独立 App 一致） */
+/** 手动模式：紧凑单点 I/O 操作台（内部已含输入点传感器状态，与独立 App 一致） */
 export function PlatformManualPanel() {
-  return (
-    <>
-      <DispenseControlPanel />
-      <DispenseStatusPanel />
-    </>
-  );
+  return <DispenseControlPanel />;
 }
 
 /** 演示模式：配方 + 启停（演示循环由 DeviceDefinition.effects 挂载） */

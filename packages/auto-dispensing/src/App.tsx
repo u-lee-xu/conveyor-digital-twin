@@ -4,7 +4,6 @@ import { OrbitControls } from '@react-three/drei';
 import { PlcConnectionPanel, HelpPanel, useMobile, type PlcConnConfig } from '@digital-twin/shared';
 import { useAppStore, type AppMode } from './stores/useAppStore';
 import { DispenseControlPanel } from './scenes/auto-dispensing/panels/DispenseControlPanel';
-import { DispenseStatusPanel } from './scenes/auto-dispensing/panels/DispenseStatusPanel';
 import { DispenseDemoPanel } from './scenes/auto-dispensing/panels/DispenseDemoPanel';
 import { DispenseSimPanel } from './scenes/auto-dispensing/panels/DispenseSimPanel';
 import { DispensingSceneContent } from './scenes/auto-dispensing/SceneContent';
@@ -169,12 +168,8 @@ export default function App() {
             </div>
           </div>
 
-          {mode === 'manual' && (
-            <>
-              <DispenseControlPanel />
-              <DispenseStatusPanel />
-            </>
-          )}
+          {/* 手动模式：紧凑单点 I/O 操作台（内部已含输入点传感器状态） */}
+          {mode === 'manual' && <DispenseControlPanel />}
           {mode === 'auto' && <DispenseDemoPanel />}
           {mode === 'sim' && (
             <>
@@ -240,12 +235,7 @@ export default function App() {
           {/* 底部抽屉面板 */}
           <div className="absolute bottom-2 left-2 right-2 z-10">
             <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-700/50 rounded-2xl p-3 shadow-2xl max-h-[52vh] overflow-y-auto scrollbar-thin">
-              {mode === 'manual' && (
-                <>
-                  <DispenseControlPanel />
-                  <DispenseStatusPanel />
-                </>
-              )}
+              {mode === 'manual' && <DispenseControlPanel />}
               {mode === 'auto' && <DispenseDemoPanel />}
               {mode === 'sim' && (
                 <>
