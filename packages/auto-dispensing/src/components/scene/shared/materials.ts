@@ -141,8 +141,8 @@ export const materials = {
     roughness: 0.55,
   }),
 
-  // ---- 驱动端（伺服电机 / 编码器 / 联轴器）专用材质，颜色仍只来自 VISUAL ----
-  /** 伺服电机机身：深石墨灰，比结构件略深一档 */
+  // ---- 普通正反转电机 / 轴末端独立编码器 / 联轴器材质，颜色只来自 VISUAL ----
+  /** 正反转电机圆柱机身：深石墨灰，比结构件略深一档 */
   motorBody: new THREE.MeshStandardMaterial({
     color: VISUAL.MOTOR_BODY_COLOR,
     metalness: 0.5,
@@ -154,11 +154,23 @@ export const materials = {
     metalness: 0.55,
     roughness: 0.48,
   }),
-  /** 编码器后罩：集成在电机尾部的深色塑料罩 */
-  encoderCap: new THREE.MeshStandardMaterial({
-    color: VISUAL.ENCODER_CAP_COLOR,
-    metalness: 0.2,
-    roughness: 0.72,
+  /** 尾部风扇罩：深色冲压件（普通异步电机特征，不是编码器） */
+  motorFan: new THREE.MeshStandardMaterial({
+    color: VISUAL.MOTOR_FAN_COLOR,
+    metalness: 0.25,
+    roughness: 0.7,
+  }),
+  /** 顶部接线盒：铸件灰 */
+  terminalBox: new THREE.MeshStandardMaterial({
+    color: VISUAL.TERMINAL_BOX_COLOR,
+    metalness: 0.35,
+    roughness: 0.6,
+  }),
+  /** 轴末端独立增量编码器外壳：深色金属圆筒 */
+  encoderBody: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_BODY_COLOR,
+    metalness: 0.45,
+    roughness: 0.5,
   }),
   /** 梅花联轴器中间弹性体：聚氨酯（非金属材料感） */
   couplingSpider: new THREE.MeshStandardMaterial({

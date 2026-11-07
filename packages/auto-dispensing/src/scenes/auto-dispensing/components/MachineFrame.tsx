@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   AXIS_R, FRAME, FRAME_LEN, FRAME_CX, FRAME_DETAIL, DRIVE_STATIONS,
+  SHAFT_END_ENCODER, ENCODER_STATIONS,
   SCREW_DETAIL, SENSOR, VISUAL, SURFACE_GAP, FOOT_RISE,
 } from '../constants';
 import { materials } from '../../../components/scene/shared/materials';
@@ -344,53 +345,87 @@ function JawCoupling() {
 }
 
 /**
- * 驱动端整条安装链（全部在机架局部坐标，轴线 y=FRAME.SCREW_H、z=0）。
+ * -X 驱动端安装链（机架局部坐标，轴线 y=FRAME.SCREW_H、z=0）。
  *
- * 沿 +X 依次为：编码器后罩 → 伺服电机机身（同色散热筋）→ 前端法兰/止口
- * → 电机安装支架（联轴器罩）→ 三段式梅花联轴器 → 固定端方形支撑单元
- * → 丝杆轴端。编码器是电机尾部集成件，不再是独立悬空黑圆柱；
- * 散热筋与机身同色系，不再是「黑底 + 灰条纹」的斑马外观。
+ * 沿 +X 依次为：尾部风扇罩 → 普通正反转电机圆柱机身（同色散热筋 +
+ * 顶部接线盒 + 底脚）→ 前端法兰 → 电机安装支架（联轴器罩）
+ * → 三段式梅花联轴器 → 固定端方形支撑单元 → 丝杆轴端。
+ *
+ * 这里没有编码器：原始设计的增量式编码器是独立外置件，装在 +X 丝杆末端
+ * （见 ShaftEndEncoder）。电机也没有伺服后罩 / 定位止口 / 速度给定，
+ * PLC 只有 MOTOR_FWD / MOTOR_REV 两个布尔输出点。
  */
 function DriveEnd() {
   const bodyCx = (ST.BODY_MIN + ST.BODY_MAX) / 2;
-  const encCx = (ST.ENCODER_MIN + ST.ENCODER_MAX) / 2;
+  const fanCx = (ST.FAN_MIN + ST.FAN_MAX) / 2;
+  const bodyR = D.MOTOR_BODY_W / 2;
+  const boxY = bodyR + D.TERMINAL_BOX_H / 2 - SURFACE_GAP;
   return (
     <group position={[0, FRAME.SCREW_H, 0]}>
-      {/* —— 1. 编码器后罩：集成在电机尾部，与机身同轴 —— */}
-      <mesh position={[encCx, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow material={materials.encoderCap}>
-        <cylinderGeometry args={[D.ENCODER_R, D.ENCODER_R, D.ENCODER_LEN, 20]} />
+      {/* —— 1. 尾部风扇罩：普通异步电机特征，端面带环向通风孔 —— */}
+      <mesh position={[fanCx, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow material={materials.motorFan}>
+        <cylinderGeometry args={[D.MOTOR_FAN_R, D.MOTOR_FAN_R, D.MOTOR_FAN_LEN, 24]} />
       </mesh>
-      {/* 动力 / 编码器两根线缆：从后罩径向外伸，不把 MOTOR_MIN_X 再往外推 */}
-      {[-1, 1].map((s) => (
-        <group key={`enc-conn-${s}`} position={[encCx + s * D.ENCODER_CONN_D, 0, D.ENCODER_CONN_Z]}>
-          <mesh material={materials.encoderCap}>
-            <boxGeometry args={[D.ENCODER_CONN_W, D.ENCODER_CONN_H, D.ENCODER_CONN_D]} />
+      {Array.from({ length: D.FAN_VENT_N }, (_, i) => {
+        const a = (i / D.FAN_VENT_N) * Math.PI * 2;
+        return (
+          <mesh
+            key={`fan-vent-${i}`}
+            position={[ST.FAN_MIN - 0.001, Math.cos(a) * D.MOTOR_FAN_R * 0.62, Math.sin(a) * D.MOTOR_FAN_R * 0.62]}
+            rotation={[0, 0, Math.PI / 2]}
+            material={materials.darkMetal}
+          >
+            <cylinderGeometry args={[D.FAN_VENT_R, D.FAN_VENT_R, 0.002, 8]} />
           </mesh>
-          <mesh position={[0, 0, D.ENCODER_CONN_D / 2 + D.ENCODER_CABLE_LEN / 2]} rotation={[Math.PI / 2, 0, 0]} material={materials.magSwitch}>
-            <cylinderGeometry args={[D.ENCODER_CABLE_R, D.ENCODER_CABLE_R, D.ENCODER_CABLE_LEN, 8]} />
-          </mesh>
-        </group>
-      ))}
+        );
+      })}
 
-      {/* —— 2. 伺服电机机身 + 同色散热筋 —— */}
-      <mesh position={[bodyCx, 0, 0]} castShadow material={materials.motorBody}>
-        <boxGeometry args={[D.MOTOR_BODY_LEN, D.MOTOR_BODY_W, D.MOTOR_BODY_W]} />
+      {/* —— 2. 圆柱机身 + 环向散热筋 + 顶部接线盒 + 底脚 —— */}
+      <mesh position={[bodyCx, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow material={materials.motorBody}>
+        <cylinderGeometry args={[bodyR, bodyR, D.MOTOR_BODY_LEN, 24]} />
       </mesh>
       {Array.from({ length: D.MOTOR_RIB_N }, (_, i) => (
         <mesh
           key={`rib-${i}`}
           position={[ST.BODY_MIN + D.MOTOR_RIB_PITCH * (i + 0.5), 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
           material={materials.motorRib}
         >
-          <boxGeometry args={[
+          <cylinderGeometry args={[
+            bodyR + D.MOTOR_RIB_OUT,
+            bodyR + D.MOTOR_RIB_OUT,
             D.MOTOR_RIB_T,
-            D.MOTOR_BODY_W + 2 * D.MOTOR_RIB_OUT,
-            D.MOTOR_BODY_W + 2 * D.MOTOR_RIB_OUT,
+            24,
           ]} />
         </mesh>
       ))}
+      <mesh position={[bodyCx, boxY, 0]} castShadow material={materials.terminalBox}>
+        <boxGeometry args={[D.TERMINAL_BOX_W, D.TERMINAL_BOX_H, D.TERMINAL_BOX_D]} />
+      </mesh>
+      <mesh
+        position={[bodyCx, boxY + D.TERMINAL_BOX_H / 2 + D.TERMINAL_BOX_LID_T / 2 - SURFACE_GAP, 0]}
+        material={materials.motorRib}
+      >
+        <boxGeometry args={[D.TERMINAL_BOX_W + 0.004, D.TERMINAL_BOX_LID_T, D.TERMINAL_BOX_D + 0.004]} />
+      </mesh>
+      <mesh
+        position={[bodyCx, boxY, D.TERMINAL_BOX_D / 2 + D.CABLE_GLAND_LEN / 2]}
+        rotation={[Math.PI / 2, 0, 0]}
+        material={materials.darkMetal}
+      >
+        <cylinderGeometry args={[D.CABLE_GLAND_R, D.CABLE_GLAND_R, D.CABLE_GLAND_LEN, 10]} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh
+          key={`motor-foot-${s}`}
+          position={[bodyCx, -bodyR - D.MOTOR_FOOT_H / 2 + SURFACE_GAP, s * D.MOTOR_FOOT_Z]}
+          material={materials.motorBody}
+        >
+          <boxGeometry args={[D.MOTOR_FOOT_W * 2, D.MOTOR_FOOT_H, D.MOTOR_FOOT_W]} />
+        </mesh>
+      ))}
 
-      {/* —— 3. 前端安装法兰 + 四角螺栓 + 定位止口凸环 —— */}
+      {/* —— 3. 前端安装法兰 + 四角螺栓（无伺服定位止口） —— */}
       <mesh position={[D.MOTOR_FLANGE_X, 0, 0]} castShadow material={materials.motorBody}>
         <boxGeometry args={[D.MOTOR_FLANGE_T, D.MOTOR_FLANGE_W, D.MOTOR_FLANGE_W]} />
       </mesh>
@@ -404,9 +439,6 @@ function DriveEnd() {
           <cylinderGeometry args={[D.BEARING_BOLT_R, D.BEARING_BOLT_R, 0.004, 8]} />
         </mesh>
       )))}
-      <mesh position={[ST.FLANGE_MAX + SURFACE_GAP, 0, 0]} rotation={[0, Math.PI / 2, 0]} material={materials.brightSilver}>
-        <torusGeometry args={[D.MOTOR_PILOT_R, 0.0025, 8, 28]} />
-      </mesh>
 
       {/* —— 4. 电机安装支架 / 联轴器罩 —— */}
       <CouplingGuard />
@@ -421,6 +453,123 @@ function DriveEnd() {
         material={materials.axle}
       >
         <cylinderGeometry args={[D.MOTOR_SHAFT_R, D.MOTOR_SHAFT_R, ST.SUPPORT_MIN - ST.COUPLING_MAX, 12]} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * 随丝杆自转的部分：+X 轴伸 + 编码器侧弹性联轴器。
+ * 放在 MachineFrame 的 screwRef 旋转组里，因此与丝杆严格同步；
+ * 编码器本体是静止件，见 ShaftEndEncoder。
+ */
+function EncoderRotatingParts() {
+  const E = SHAFT_END_ENCODER;
+  const S = ENCODER_STATIONS;
+  const couplingCx = (S.COUPLING_MIN + S.COUPLING_MAX) / 2;
+  const third = E.COUPLING_LEN / 3;
+  return (
+    <group>
+      <mesh
+        position={[(S.SHAFT_MIN + S.SHAFT_MAX) / 2, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        material={materials.axle}
+      >
+        <cylinderGeometry args={[E.SHAFT_STUB_R, E.SHAFT_STUB_R, E.SHAFT_STUB_LEN, 12]} />
+      </mesh>
+      {[-1, 0, 1].map((k) => (
+        <mesh
+          key={`enc-cpl-${k}`}
+          position={[couplingCx + k * third, 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+          material={k === 0 ? materials.couplingSpider : materials.brightSilver}
+        >
+          <cylinderGeometry args={[
+            k === 0 ? E.SPIDER_R : E.COUPLING_R,
+            k === 0 ? E.SPIDER_R : E.COUPLING_R,
+            third - SURFACE_GAP / 2,
+            k === 0 ? 6 : 16,
+          ]} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * +X 轴末端独立增量式编码器（需求原文：「安装于轴末端，连续检测料斗位置」）。
+ *
+ * 编码器本体由前端夹紧法兰锁在 L 型支架上，支架贴浮动轴承座端面，
+ * 本体不随丝杆转；A/B 相出线 → PLC X0/X1 高速计数器 C0 → DINT 位置寄存器。
+ * 与 -X 电机侧完全独立，不是伺服电机尾部集成件。
+ */
+function ShaftEndEncoder() {
+  const E = SHAFT_END_ENCODER;
+  const S = ENCODER_STATIONS;
+  const bodyCx = (S.BODY_MIN + S.BODY_MAX) / 2;
+  return (
+    <group position={[0, FRAME.SCREW_H, 0]}>
+      {/* L 型安装支架：立柱贴浮动轴承座端面下沿（不悬空），托板水平伸出托住法兰底面 */}
+      <mesh
+        position={[E.BEARING_FACE_X + E.BRACKET_T / 2, -E.BRACKET_DROP / 2, 0]}
+        material={materials.base}
+      >
+        <boxGeometry args={[E.BRACKET_T, E.BRACKET_DROP, E.BRACKET_W]} />
+      </mesh>
+      <mesh
+        position={[(E.BEARING_FACE_X + S.FLANGE_MAX) / 2, -E.FLANGE_R - E.BRACKET_T / 2, 0]}
+        material={materials.base}
+      >
+        <boxGeometry args={[S.FLANGE_MAX - E.BEARING_FACE_X, E.BRACKET_T, E.BRACKET_W]} />
+      </mesh>
+
+      {/* 前端夹紧法兰 + 环向螺钉 */}
+      <mesh
+        position={[(S.FLANGE_MIN + S.FLANGE_MAX) / 2, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        material={materials.brightSilver}
+      >
+        <cylinderGeometry args={[E.FLANGE_R, E.FLANGE_R, E.FLANGE_T, 24]} />
+      </mesh>
+      {Array.from({ length: E.FLANGE_BOLT_N }, (_, i) => {
+        const a = (i / E.FLANGE_BOLT_N) * Math.PI * 2;
+        return (
+          <mesh
+            key={`enc-flange-bolt-${i}`}
+            position={[S.FLANGE_MIN - 0.001, Math.cos(a) * E.FLANGE_R * 0.82, Math.sin(a) * E.FLANGE_R * 0.82]}
+            rotation={[0, 0, Math.PI / 2]}
+            material={materials.darkMetal}
+          >
+            <cylinderGeometry args={[E.FLANGE_BOLT_R, E.FLANGE_BOLT_R, 0.003, 8]} />
+          </mesh>
+        );
+      })}
+
+      {/* 编码器本体（静止）：金属圆筒 + 尾部端盖 + 朝 +Z 的铭牌 */}
+      <mesh position={[bodyCx, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow material={materials.encoderBody}>
+        <cylinderGeometry args={[E.BODY_R, E.BODY_R, E.BODY_LEN, 24]} />
+      </mesh>
+      <mesh position={[S.BODY_MAX - 0.002, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.endCap}>
+        <cylinderGeometry args={[E.BODY_R * 0.94, E.BODY_R * 0.94, 0.004, 24]} />
+      </mesh>
+      <mesh position={[bodyCx, 0, E.BODY_R + SURFACE_GAP]} material={materials.decal}>
+        <boxGeometry args={[E.BODY_LEN * 0.6, E.BODY_R * 0.7, 0.001]} />
+      </mesh>
+
+      {/* 尾部出线插头 + 电缆（A/B 相 → X0/X1 → C0） */}
+      <mesh
+        position={[S.BODY_MAX + E.CONN_LEN / 2, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        material={materials.magSwitch}
+      >
+        <cylinderGeometry args={[E.CONN_R, E.CONN_R, E.CONN_LEN, 12]} />
+      </mesh>
+      <mesh
+        position={[S.CONN_MAX + E.CABLE_LEN / 2, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        material={materials.darkMetal}
+      >
+        <cylinderGeometry args={[E.CABLE_R, E.CABLE_R, E.CABLE_LEN, 10]} />
       </mesh>
     </group>
   );
@@ -486,8 +635,8 @@ export function MachineFrame() {
       <ProfileBase />
 
       {/* 旋转组：组原点放在丝杆轴线上，绕 X 旋转 = 丝杆原地自转。
-          固定端支撑单元外侧的六角锁紧螺母拧在丝杆上，随丝杆一起转。
-          旧的「同步带轮」属于上一版皮带传动模型，直连伺服后已删除。 */}
+          固定端锁紧螺母、+X 轴伸与编码器侧弹性联轴器都随丝杆一起转。
+          轴末端编码器本体不转，由 L 型支架固定，放在本组之外。 */}
       <group ref={screwRef} position={[0, FRAME.SCREW_H, 0]}>
         <BallScrew from={from} to={to} lead={K.LEAD} y={0} />
         <mesh
@@ -497,6 +646,7 @@ export function MachineFrame() {
         >
           <cylinderGeometry args={[D.LOCK_NUT_R, D.LOCK_NUT_R, D.LOCK_NUT_LEN, 6]} />
         </mesh>
+        <EncoderRotatingParts />
       </group>
 
       {/* 双方形直线导轨（顶面托滑块底面） */}
@@ -520,8 +670,11 @@ export function MachineFrame() {
         <BearingHousing key={`bearing-${px}`} x={px} fixed={px === from} />
       ))}
 
-      {/* 驱动端：编码器 → 伺服电机 → 电机座 → 梅花联轴器 → 固定端支撑单元 */}
+      {/* -X 驱动端：风扇罩 → 正反转电机 → 电机座 → 梅花联轴器 → 固定端支撑单元 */}
       <DriveEnd />
+
+      {/* +X 轴末端：独立增量式编码器（静止件），与电机侧是两套安装链 */}
+      <ShaftEndEncoder />
 
       {/* 接地垫脚 + 调节螺栓
           旧版垫脚与铝挤型底座 Y 范围完全相同（都是 0~BASE_H），两个顶面/底面

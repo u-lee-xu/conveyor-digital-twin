@@ -284,7 +284,8 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         <div className="text-[0.55rem] text-slate-500 leading-relaxed">
           32 位有符号整数，低字在前，一次原子写；随滑台前进递增、后退递减，回到原点传感器（Z 相）归零。
           寄存器地址悬停上方数值查看，完整映射见「使用说明」。
-          A/B 两相接线与高速计数器 C0 由 PLC 程序处理，孪生不占用输入点。
+          编码器独立装在 +X 丝杆末端，A/B 相接线与高速计数器 C0 由 PLC 程序处理，孪生不占用输入点；
+          电机为普通正反转布尔控制，非伺服、无速度给定。
         </div>
       </div>
 

@@ -780,18 +780,22 @@ export const MANUAL_JOG = {
 
 /**
  * 机架拟真细节（全部相对机架局部原点，只做「增细节」不改装配坐标）。
- * 参照滚珠丝杆直线模组实物：铝挤型底座、方形直线导轨、固定端轴承座、
- * 一端伺服电机 + 梅花联轴器、侧面拖链槽。
+ * 参照滚珠丝杆直线模组实物：铝挤型底座、方形直线导轨、两端轴承座、
+ * 一端普通正反转电机 + 梅花联轴器、侧面拖链槽。
  *
  * 关键接口：方轨半高 = TRACK_R，因此导轨下沿仍是 FRAME.TRACK_H - TRACK_R，
  * 与 SENSOR.BRACKET_TOP_Y（原点/终点传感器 L 形吊架夹持面）严格闭合。
  *
- * 【2026-11-07 驱动端重写】按真实安装链把这一端重新拆成
- *   编码器后罩（集成在电机尾部）→ 伺服电机机身（同色散热筋）
- *   → 前端止口/法兰 → 电机安装支架（兼联轴器保护罩）
- *   → 三段式梅花联轴器（铝毂 / 聚氨酯弹性体 / 铝毂）
- *   → 固定端方形支撑单元（角接触轴承 + 压盖 + 锁紧螺母）→ 丝杆轴端。
- * 所有轴向站位由 DRIVE_STATIONS 从本表派生，组件里不得再写死坐标。
+ * 【设备口径，以 docs/auto-dispensing/requirements.md 为准】
+ *   - 电机是「正反转电机」，PLC 只有 MOTOR_FWD / MOTOR_REV 两个布尔输出点，
+ *     没有伺服使能 / 报警 / 就绪，也没有 LREAL velocity 速度给定；
+ *     速度由电源与减速比开环决定，位置闭环全靠轴末端编码器反馈。
+ *   - 增量式编码器是独立外置件，装在 +X 丝杆末端（终点限位 / 翻转位 /
+ *     编码器同侧），不是伺服电机尾部集成件；测丝杆转角可避开联轴器间隙误差。
+ *   - 传动沿用现有滚珠丝杆（20mm 导程），不改 1024 脉冲/转与 ENCODER_SCALE。
+ *
+ * -X 电机侧站位由 DRIVE_STATIONS 派生，+X 轴末端编码器站位由
+ * ENCODER_STATIONS / SHAFT_END_ENCODER 派生，组件里不得再写死坐标。
  */
 export const FRAME_DETAIL = {
   // 铝挤型底座：侧面 T 槽、端盖、顶面安装螺栓
@@ -807,7 +811,7 @@ export const FRAME_DETAIL = {
   RAIL_GROOVE_W: 0.004,
   RAIL_BOLT_R: 0.0035,
   RAIL_BOLT_PITCH: 0.18,
-  // 伺服电机 + 联轴器：沿 -X 从固定端轴承座向外伸。
+  // 普通正反转电机 + 联轴器：沿 -X 从固定端轴承座向外伸。
   // 轴承座长 0.08（局部 -0.04~+0.04）；联轴器右端贴近 -0.04、左端接电机法兰，
   // 把整段间隙填满，从侧机位能真正看见联轴器，而不是被电机本体挡住。
   MOTOR_FLANGE_X: -0.095,
@@ -816,21 +820,20 @@ export const FRAME_DETAIL = {
   MOTOR_X0: -0.099,
   MOTOR_BODY_LEN: 0.058,
   MOTOR_BODY_W: 0.064,
-  ENCODER_LEN: 0.014,
-  ENCODER_R: 0.028,
+  /** 尾部风扇罩（普通异步电机特征，不是编码器后罩） */
+  MOTOR_FAN_LEN: 0.014,
+  MOTOR_FAN_R: 0.028,
   COUPLING_X: -0.0665,
   COUPLING_LEN: 0.045,
   COUPLING_R: 0.016,
   COUPLING_JAW_R: 0.020,
-  /** 电机最外端（局部）；自检会换算到世界 X，确认不碰到灯塔 / 控制柜 */
+  /** 电机最外端（局部）= 风扇罩端面；自检换算到世界 X，确认不碰到灯塔 / 控制柜 */
   MOTOR_MIN_X: -0.099 - 0.058 - 0.014,
   // 固定端 / 支撑端轴承座端盖螺栓
   BEARING_BOLT_R: 0.004,
   BEARING_BOLT_OFFSET: 0.036,
 
-  // ---- 伺服电机：机身、前端止口、输出轴、同色散热筋 ----
-  /** 前端定位止口（凸台）半径：插进电机座定位孔，真实伺服靠它定心 */
-  MOTOR_PILOT_R: 0.020,
+  // ---- 普通正反转异步电机：圆柱机身、散热筋、接线盒、风扇罩、底脚 ----
   /** 机身散热筋数量 / 厚度 / 外扩 / 节距：与机身同色，不再是异色薄片 */
   MOTOR_RIB_N: 7,
   MOTOR_RIB_T: 0.003,
@@ -838,6 +841,20 @@ export const FRAME_DETAIL = {
   MOTOR_RIB_PITCH: 0.008,
   /** 输出轴半径：穿过电机座进入联轴器电机侧铝毂 */
   MOTOR_SHAFT_R: 0.007,
+  /** 顶部接线盒（三相进线）+ 电缆格兰头 */
+  TERMINAL_BOX_W: 0.030,
+  TERMINAL_BOX_H: 0.016,
+  TERMINAL_BOX_D: 0.026,
+  TERMINAL_BOX_LID_T: 0.003,
+  CABLE_GLAND_R: 0.005,
+  CABLE_GLAND_LEN: 0.014,
+  /** 底脚：把圆柱机身锁到型材支撑柱 */
+  MOTOR_FOOT_W: 0.018,
+  MOTOR_FOOT_H: 0.010,
+  MOTOR_FOOT_Z: 0.030,
+  /** 风扇罩端面通风孔（环向阵列） */
+  FAN_VENT_N: 8,
+  FAN_VENT_R: 0.003,
 
   // ---- 电机安装支架 / 联轴器保护罩：上下板 + 四角立柱的开放框架 ----
   /** 罩体内腔半宽 / 半高（Z / Y），比联轴器最大半径大一圈 */
@@ -871,13 +888,8 @@ export const FRAME_DETAIL = {
   LOCK_NUT_R: 0.021,
   LOCK_NUT_LEN: 0.010,
 
-  // ---- 编码器：电机尾部集成后罩 + 动力/编码器两根线缆（径向外伸，不越出 MOTOR_MIN_X） ----
-  ENCODER_CABLE_R: 0.004,
-  ENCODER_CABLE_LEN: 0.018,
-  ENCODER_CONN_W: 0.014,
-  ENCODER_CONN_H: 0.012,
-  ENCODER_CONN_D: 0.010,
-  ENCODER_CONN_Z: 0.030,
+  // 轴末端独立增量式编码器不在这里：它是 +X 端的另一套安装链，
+  // 全部尺寸见下方 SHAFT_END_ENCODER / ENCODER_STATIONS。
 
   // 侧面拖链铝槽（真实模组的静态部件；动态链带留待后续）
   CARRIER_Z: -(FRAME.TRACK_Z + 0.075),
@@ -889,13 +901,13 @@ export const FRAME_DETAIL = {
 } as const;
 
 /**
- * 驱动端轴向站位：沿局部 +X 从电机尾端排到丝杆轴端，全部由 FRAME_DETAIL 派生。
- * 组件只读这张表，不再自己写 -0.0xx 之类的坐标；自检也用它验证
- * 「编码器 ↔ 机身 ↔ 法兰 ↔ 罩 ↔ 联轴器 ↔ 支撑单元」首尾相接、无空隙无穿插。
+ * -X 驱动端轴向站位：沿局部 +X 从电机风扇罩端面排到丝杆轴端，
+ * 全部由 FRAME_DETAIL 派生。组件只读这张表，不再自己写 -0.0xx 坐标；
+ * 自检用它验证「风扇罩 ↔ 机身 ↔ 法兰 ↔ 罩 ↔ 联轴器 ↔ 支撑单元」首尾相接。
  */
 export const DRIVE_STATIONS = {
-  ENCODER_MIN: FRAME_DETAIL.MOTOR_MIN_X,
-  ENCODER_MAX: FRAME_DETAIL.MOTOR_MIN_X + FRAME_DETAIL.ENCODER_LEN,
+  FAN_MIN: FRAME_DETAIL.MOTOR_MIN_X,
+  FAN_MAX: FRAME_DETAIL.MOTOR_MIN_X + FRAME_DETAIL.MOTOR_FAN_LEN,
   BODY_MIN: FRAME_DETAIL.MOTOR_X0 - FRAME_DETAIL.MOTOR_BODY_LEN,
   BODY_MAX: FRAME_DETAIL.MOTOR_X0,
   FLANGE_MIN: FRAME_DETAIL.MOTOR_FLANGE_X - FRAME_DETAIL.MOTOR_FLANGE_T / 2,
@@ -912,6 +924,65 @@ export const DRIVE_STATIONS = {
   HUB_R: FRAME_DETAIL.COUPLING_X + FRAME_DETAIL.COUPLING_LEN / 2
     - FRAME_DETAIL.COUPLING_HUB_LEN / 2,
   SPIDER: FRAME_DETAIL.COUPLING_X,
+} as const;
+
+/**
+ * +X 轴末端独立增量式编码器。
+ *
+ * 需求原文：「增量式编码器 1，安装于轴末端，连续检测料斗位置」，且
+ * 「终点限位 + 翻转位 + 编码器同侧」。它不是伺服电机附件，而是另一套安装链：
+ *   丝杆轴伸（随丝杆转）→ 小型弹性联轴器 → 编码器轴
+ *   编码器本体由前端夹紧法兰锁在 L 型支架上，支架贴浮动轴承座端面，本体不转。
+ * A/B 相出线 → PLC X0/X1 高速计数器 C0 → 32 位 DINT 位置寄存器。
+ * 测的是丝杆转角，因此 1024 脉冲/转 × 20mm 导程的换算不受联轴器间隙影响。
+ */
+export const SHAFT_END_ENCODER = {
+  /** 浮动端轴承座外端面（机架局部 X）= 轴承座半长 + 端盖厚 */
+  BEARING_FACE_X: FRAME.AXLE_TO + FRAME_DETAIL.SUPPORT_UNIT_LEN / 2 + 0.006,
+  /** 丝杆轴伸出段（随丝杆转） */
+  SHAFT_STUB_LEN: 0.028,
+  SHAFT_STUB_R: 0.008,
+  /** 小型弹性联轴器：两铝毂 + 中间弹性体 */
+  COUPLING_LEN: 0.018,
+  COUPLING_R: 0.011,
+  SPIDER_R: 0.013,
+  /** 前端夹紧法兰 + 环向螺钉 */
+  FLANGE_R: 0.030,
+  FLANGE_T: 0.006,
+  FLANGE_BOLT_N: 3,
+  FLANGE_BOLT_R: 0.0025,
+  /** 编码器本体：φ50 × 44 的圆柱形金属外壳 */
+  BODY_R: 0.025,
+  BODY_LEN: 0.044,
+  /** L 型安装支架：立柱贴浮动轴承座端面下沿，托板水平伸出承托法兰 */
+  BRACKET_T: 0.006,
+  BRACKET_W: 0.060,
+  BRACKET_DROP: 0.030,
+  /** 尾部出线插头 + 电缆（朝 +X） */
+  CONN_R: 0.009,
+  CONN_LEN: 0.012,
+  CABLE_R: 0.004,
+  CABLE_LEN: 0.020,
+} as const;
+
+const encX0 = SHAFT_END_ENCODER.BEARING_FACE_X;
+const encShaftEnd = encX0 + SHAFT_END_ENCODER.SHAFT_STUB_LEN;
+const encCouplingEnd = encShaftEnd + SHAFT_END_ENCODER.COUPLING_LEN;
+const encFlangeEnd = encCouplingEnd + SHAFT_END_ENCODER.FLANGE_T;
+const encBodyEnd = encFlangeEnd + SHAFT_END_ENCODER.BODY_LEN;
+
+/** 轴末端编码器轴向站位：全部由 SHAFT_END_ENCODER 派生，组件不写死坐标 */
+export const ENCODER_STATIONS = {
+  SHAFT_MIN: encX0,
+  SHAFT_MAX: encShaftEnd,
+  COUPLING_MIN: encShaftEnd,
+  COUPLING_MAX: encCouplingEnd,
+  FLANGE_MIN: encCouplingEnd,
+  FLANGE_MAX: encFlangeEnd,
+  BODY_MIN: encFlangeEnd,
+  BODY_MAX: encBodyEnd,
+  CONN_MAX: encBodyEnd + SHAFT_END_ENCODER.CONN_LEN,
+  CABLE_MAX: encBodyEnd + SHAFT_END_ENCODER.CONN_LEN + SHAFT_END_ENCODER.CABLE_LEN,
 } as const;
 
 /**
@@ -932,7 +1003,7 @@ export const SLIDER_DETAIL = {
   CARRIAGE_BOLT_DZ: 0.016,
   GREASE_NIPPLE_R: 0.0035,
   GREASE_NIPPLE_L: 0.008,
-  // 滚珠螺母座：装在 -X 端中央（朝伺服电机），避开取药仓一侧
+  // 滚珠螺母座：装在 -X 端中央（朝正反转电机），避开取药仓一侧
   NUT_FLANGE_R: 0.030,
   NUT_FLANGE_T: 0.006,
   NUT_BODY_R: 0.021,
@@ -1102,14 +1173,24 @@ export const VIEW_PRESETS: Record<string, ViewPreset> = {
     camera: [3.4, 11.5, 4.2], target: [3.4, 1.5, 0.2], fov: 40,
   },
   /**
-   * 驱动端局部：伺服电机 / 梅花联轴器 / 固定端轴承座 / 方形导轨起点 /
+   * 驱动端局部：普通正反转电机 / 梅花联轴器 / 固定端轴承座 / 方形导轨起点 /
    * 滑台滚珠螺母座与四滑块、原点接近开关。
    * 丝杆滑台拟真改造后，整机机位下这些零件太小，用专用近景核对。
    */
   drive: {
-    label: '驱动端', desc: '伺服电机、联轴器、轴承座、方形导轨与滑台螺母座特写',
+    label: '驱动端', desc: '正反转电机、联轴器、轴承座、方形导轨与滑台螺母座特写',
     // 从 +Z 侧偏 -X 看：电机 / 联轴器 / 轴承座沿 X 排开，联轴器不会被电机本体挡住
     camera: [-1.0, 4.0, 3.2] as Vec3, target: [0.30, 3.20, 0.05] as Vec3, fov: 30,
+  },
+  /**
+   * 轴末端局部：独立增量式编码器装在 +X 丝杆末端（需求指定「终点限位 +
+   * 翻转位 + 编码器同侧」），与电机侧是两套独立安装链。专用近景核对
+   * 弹性联轴器、夹紧法兰、L 型支架与出线插头。
+   */
+  shaftEnd: {
+    label: '轴末端', desc: '独立增量编码器、弹性联轴器、浮动端轴承座与终点传感器特写',
+    // 从 +Z 侧偏 +X 看：轴伸 / 联轴器 / 编码器沿 X 排开，本体不被轴承座挡住
+    camera: [8.6, 4.4, 3.2] as Vec3, target: [7.35, 3.15, 0.05] as Vec3, fov: 30,
   },
   /** 供药段局部：料筒 / 推药气缸 / 斜槽 / 接药 */
   feed: {
@@ -1170,10 +1251,12 @@ export const VISUAL = {
   PILL_COLOR: { A: '#b3382f', B: '#2e8b57', C: '#2563a8', D: '#7d54a8' }, // 药片色（比料筒更深）
   BIN_COLOR: '#d45f24',          // 取药仓（砖橙红，与琥珀拉开）
 
-  // —— 驱动端真实安装链专用配色（2026-11-07 起）——
-  MOTOR_BODY_COLOR: '#303a46',   // 伺服电机机身：石墨灰，与结构件同族但更深
-  MOTOR_RIB_COLOR: '#3d4957',    // 散热筋：同色系略亮一档，不再是「黑底灰条纹」斑马
-  ENCODER_CAP_COLOR: '#232b35',  // 编码器后罩：深色塑料，集成在电机尾部
+  // —— 普通正反转电机 / 轴末端编码器配色（2026-11-08 去伺服化后）——
+  MOTOR_BODY_COLOR: '#303a46',   // 正反转电机圆柱机身：石墨灰
+  MOTOR_RIB_COLOR: '#3d4957',    // 散热筋：同色系略亮一档
+  MOTOR_FAN_COLOR: '#232b35',    // 尾部风扇罩：深色冲压件
+  TERMINAL_BOX_COLOR: '#46525f', // 顶部接线盒：铸件灰
+  ENCODER_BODY_COLOR: '#2b3440', // 轴末端独立编码器金属外壳
   COUPLING_SPIDER_COLOR: '#c2552f', // 梅花联轴器聚氨酯弹性体（工业常用砖红/绿）
 } as const;
 

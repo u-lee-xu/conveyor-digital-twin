@@ -5,7 +5,7 @@ import {
 } from './constants';
 
 /** 视野较窄的局部特写：镜像时只需小幅平移，否则远端部件会被推出画面 */
-const LOCAL_VIEW_KEYS = new Set(['drive', 'feed', 'dump']);
+const LOCAL_VIEW_KEYS = new Set(['drive', 'feed', 'dump', 'shaftEnd']);
 
 export interface Goal {
   pos: THREE.Vector3;
