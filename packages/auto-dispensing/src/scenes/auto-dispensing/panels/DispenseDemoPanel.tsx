@@ -3,6 +3,7 @@ import {
   RECIPE_LIMIT, MAG_CAPACITY, MAGAZINE_LABELS, ENCODER_DINT, ENCODER_REG_LABEL,
   type MagazineId,
 } from '../constants';
+import { ReadoutNum, DIRECTION_BADGE_CLS } from './ReadoutNum';
 
 /**
  * 演示模式面板：配方设定（0~9 份/仓）+ 启动/停止/复位/急停 + 取药确认
@@ -56,7 +57,7 @@ export function DispenseDemoPanel() {
               >
                 +
               </button>
-              <span className={`badge ${magStock[mag] > 0 ? 'badge-slate' : 'badge-red'}`}>余{magStock[mag]}</span>
+              <span className={`badge ${magStock[mag] > 0 ? 'badge-slate' : 'badge-red'}`}>余<ReadoutNum value={magStock[mag]} digits={2} /></span>
             </div>
           ))}
         </div>
@@ -127,20 +128,22 @@ export function DispenseDemoPanel() {
       {/* 运行状态 */}
       <div className="card">
         <div className="section-title !mb-1">运行状态</div>
+        {/* 读数行定宽：阶段文案 / 轮次 / 脉冲 / 方向宽度都随运行状态变化，
+            若让 flex-wrap 自由折行，演示走到不同阶段时整张卡片高度会跳动。 */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={`badge ${running ? 'badge-green' : 'badge-slate'}`}>{phaseLabel[autoPhase]}</span>
-          <span className="badge badge-blue">轮次 {autoCycle}</span>
+          <span className={`badge min-w-[5.2rem] justify-center ${running ? 'badge-green' : 'badge-slate'}`}>{phaseLabel[autoPhase]}</span>
+          <span className="badge badge-blue">轮次 <ReadoutNum value={autoCycle} digits={2} /></span>
           <span className="badge badge-slate">位置 {sliderX.toFixed(2)}m</span>
           <span className="badge badge-slate" title={ENCODER_REG_LABEL}>
-            {ENCODER_DINT.TYPE} {encoderPulses} 脉冲
+            {ENCODER_DINT.TYPE} <ReadoutNum value={encoderPulses} digits={5} /> 脉冲
           </span>
-          <span className="badge badge-slate">{encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}</span>
+          <span className={`${DIRECTION_BADGE_CLS} badge-slate`}>{encoderDir > 0 ? '↑ +' : encoderDir < 0 ? '↓ −' : '静止'}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <span className={`badge ${sensors.limitStart ? 'badge-green' : 'badge-slate'}`}>原点传感器</span>
           <span className={`badge ${sensors.limitEnd ? 'badge-green' : 'badge-slate'}`}>终点传感器</span>
           <span className={`badge ${sensors.binHasDrug ? 'badge-yellow' : 'badge-slate'}`}>取药仓有药</span>
-          <span className="badge badge-slate">料斗 {hopperPills}</span>
+          <span className="badge badge-slate">料斗 <ReadoutNum value={hopperPills} digits={2} /></span>
         </div>
       </div>
     </div>
