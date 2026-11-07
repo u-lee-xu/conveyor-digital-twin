@@ -17,6 +17,19 @@ import {
   INDUSTRIAL_VISUAL, INDUSTRIAL_LIGHTING, INDUSTRIAL_DETAIL,
 } from '../../../../shared/src/styles/industrialVisual';
 
+/**
+ * 贴面细节与宿主表面之间允许的最小错开量（m，局部坐标）。
+ *
+ * 整机渲染时整体 ×SCENE_SCALE(3)，而旧代码大量用 0.0005~0.001 的「几乎贴着」
+ * 偏置：在远距离相机 + 软件渲染的深度精度下，两个面会反复争夺深度值，
+ * 表现为灰/黑斑驳闪烁（z-fighting）。现在统一用这个量把可见面错开；
+ * 若两个实体必须接触，则让贴合面**嵌进宿主内部**（朝内的面不可见），
+ * 而不是让两个朝外的面停在同一平面。
+ *
+ * 声明前置到文件顶部：控制柜元件外形表、板件尺寸表等派生常量都要引用它。
+ */
+export const SURFACE_GAP = INDUSTRIAL_DETAIL.SURFACE_GAP;
+
 // ============================================================
 // LAYOUT 布局坐标
 // ============================================================
@@ -380,6 +393,10 @@ export const CABINET_PANEL = {
     nameplate: '#f1f5f9',
     text: '#1f2937',
     symbol: '#ffffff',
+    /** 旋钮 / 固定环：低金属度亮银，避免无 envMap 时高 metalness 发黑 */
+    handle: '#e8eef5',
+    /** 急停收颈：深石墨，把「头大杆细」的轮廓衬出来 */
+    neck: '#232b35',
   },
 } as const;
 
@@ -400,8 +417,9 @@ export const CABINET_SELECTOR = {
   x: 0,
   y: 0.160,
   label: '手动 / 自动',
-  /** 各 AppMode 对应的手柄偏角（rad，面板平面内；scoring 归到中位） */
-  angles: { manual: -0.7, sim: 0, scoring: 0, auto: 0.7 },
+  /** 各 AppMode 对应的手柄偏角（rad，面板平面内；scoring 归到中位）。
+   *  两位开关实物左右档接近 ±60°，旧 ±0.7rad(40°) 让拨柄直指上方，不像左右两档。 */
+  angles: { manual: -1.0, sim: 0, scoring: 0, auto: 1.0 },
 } as const;
 
 /** 三个状态指示灯：颜色统一取 VISUAL.LAMP_*，这里只管位置与铭牌 */
@@ -413,6 +431,107 @@ export const CABINET_LAMPS = [
 
 /** 指示灯排高度（与按钮排分区） */
 export const CABINET_LAMP_Y = 0.365;
+
+// ============================================================
+// 控制柜元件外形单一尺寸表
+//
+// 旧版两件「不像实物」的根因：
+//  ① 选择开关拨柄只比 φ22 安装环半径多 2.8mm，且用 metalness=0.9 的银材质，
+//     无 envMap 时反射不到环境，渲染成深灰，看起来像黑按钮上贴了一块污渍；
+//  ② 急停红头是压扁的完整球，没有「细颈 → 外扩伞底 → 圆角伞缘 → 平顶」
+//     的蘑菇剖面，黄盘与红头之间也看不出收颈，顶面粗白弧被看成字母 C。
+//
+// 两件外形全部由 CABINET_PANEL 的 φ22 基准尺寸推导：组件只按表渲染，
+// 不回填坐标；贴面继续统一走 SURFACE_GAP，避免改外形顺带引入共面闪烁。
+// ============================================================
+
+const SELECTOR_KNOB_T = CABINET_PANEL.BEZEL_T * 2;
+const SELECTOR_KNOB_R = CABINET_PANEL.SELECTOR_R * 0.86;
+/** 旋钮座底面嵌进安装环 SURFACE_GAP/2，避免两者端面精确共面 */
+const SELECTOR_KNOB_Z = CABINET_PANEL.FRONT_Z + CABINET_PANEL.BEZEL_T
+  + SELECTOR_KNOB_T / 2 - SURFACE_GAP / 2;
+const SELECTOR_KNOB_TOP = SELECTOR_KNOB_Z + SELECTOR_KNOB_T / 2;
+/** 短粗梯形拨柄：宽 11.6mm / 长 23.1mm，比旧「细长指针」更接近 XB4 实物 */
+const SELECTOR_HANDLE_W = CABINET_PANEL.SELECTOR_HANDLE_W * 1.45;
+const SELECTOR_HANDLE_L = CABINET_PANEL.SELECTOR_HANDLE_L * 1.05;
+const SELECTOR_HANDLE_T = CABINET_PANEL.BEZEL_T * 1.8;
+const SELECTOR_HANDLE_Z = SELECTOR_KNOB_TOP - SURFACE_GAP / 2;
+
+/** φ22 两位旋钮：黑色旋钮座 + 明显伸出的楔形拨柄 + 按档位偏角摆放的刻线 */
+export const CABINET_SELECTOR_SHAPE = {
+  KNOB_R: SELECTOR_KNOB_R,
+  KNOB_T: SELECTOR_KNOB_T,
+  KNOB_Z: SELECTOR_KNOB_Z,
+  KNOB_TOP: SELECTOR_KNOB_TOP,
+  /** 旋钮座顶面的银色刻度环（内 / 外径） */
+  SCALE_R0: SELECTOR_KNOB_R * 0.76,
+  SCALE_R1: SELECTOR_KNOB_R * 0.92,
+  /** 短粗梯形拨柄：根部宽、前端略收，长度明显越过安装环外缘 */
+  HANDLE_W: SELECTOR_HANDLE_W,
+  HANDLE_TIP_W: SELECTOR_HANDLE_W * 0.72,
+  HANDLE_L: SELECTOR_HANDLE_L,
+  HANDLE_ROOT_Y: CABINET_PANEL.SELECTOR_R * 0.12,
+  HANDLE_SHOULDER: 0.78,
+  HANDLE_T: SELECTOR_HANDLE_T,
+  HANDLE_Z: SELECTOR_HANDLE_Z,
+  HANDLE_TOP: SELECTOR_HANDLE_Z + SELECTOR_HANDLE_T,
+  /** 拨柄中轴的深色指示线：细长条，不做成方孔 */
+  MARK_W: SELECTOR_HANDLE_W * 0.18,
+  MARK_L: SELECTOR_HANDLE_L * 0.42,
+  MARK_Y: CABINET_PANEL.SELECTOR_R * 0.12 + SELECTOR_HANDLE_L * 0.55,
+  /**
+   * 档位标记：按 manual / auto 真实偏角摆放的两个小圆点，半径落在拨柄尖端之外。
+   * 旧版用两条长刻线，远看像旋钮长了两根触角；改成点状档位标更接近实物铭牌。
+   */
+  NOTCH_R: CABINET_PANEL.SELECTOR_R * 1.68,
+  NOTCH_DOT_R: CABINET_PANEL.SELECTOR_HANDLE_W * 0.22,
+} as const;
+
+const ESTOP_R = CABINET_PANEL.ESTOP_HEAD_R;
+/** 收颈：足够长且足够细，斜侧机位才能看出「头大杆细」的蘑菇轮廓 */
+const ESTOP_NECK_R = ESTOP_R * 0.46;
+const ESTOP_NECK_H = CABINET_PANEL.ESTOP_T * 0.50;
+const ESTOP_NECK_BOTTOM = CABINET_PANEL.BEZEL_T;
+const ESTOP_NECK_TOP = ESTOP_NECK_BOTTOM + ESTOP_NECK_H;
+const ESTOP_CAP_RISE = ESTOP_R * 0.55;
+/** 伞部剖面高度：0 = 收颈柱顶面，1 = 蘑菇头平顶 */
+const estopAt = (f: number) => ESTOP_NECK_TOP + ESTOP_CAP_RISE * f;
+
+/** Ø40 蘑菇头急停：黄盘 > 红伞 > 银环 > 收颈，四层直径逐级递减 */
+export const CABINET_ESTOP_SHAPE = {
+  BASE_T: CABINET_PANEL.BEZEL_T * 0.75,
+  RING_T: CABINET_PANEL.BEZEL_T,
+  RING_R: ESTOP_R * 0.62,
+  RING_Z: CABINET_PANEL.FRONT_Z + ESTOP_NECK_BOTTOM,
+  NECK_R: ESTOP_NECK_R,
+  NECK_H: ESTOP_NECK_H,
+  NECK_Z: CABINET_PANEL.FRONT_Z + ESTOP_NECK_BOTTOM + ESTOP_NECK_H / 2,
+  HEAD_R: ESTOP_R,
+  CAP_RISE: ESTOP_CAP_RISE,
+  /** 平顶绝对 Z：旋转释放符号只比它高一个 SURFACE_GAP，不悬浮 */
+  CAP_Z: CABINET_PANEL.FRONT_Z + estopAt(1),
+  /** 按压时只有头部下沉，黄盘与固定环留在面板上 */
+  PRESS_DEPTH: CABINET_PANEL.ESTOP_T * 0.28,
+  /**
+   * Lathe 剖面：[半径, 相对面板前表面的 Z]，从伞底中心一路到平顶中心。
+   * 伞底中心下沉 SURFACE_GAP 嵌进收颈柱，避免与柱顶精确共面；
+   * 末两点同 Z 形成 r ≤ 0.72R 的平顶，符号贴片完全落在平顶上。
+   */
+  PROFILE: [
+    [0, ESTOP_NECK_TOP - SURFACE_GAP],
+    [ESTOP_NECK_R, ESTOP_NECK_TOP - SURFACE_GAP],
+    [ESTOP_R * 0.70, estopAt(0.05)],
+    [ESTOP_R * 0.96, estopAt(0.12)],
+    [ESTOP_R, estopAt(0.26)],
+    [ESTOP_R * 0.985, estopAt(0.45)],
+    [ESTOP_R * 0.95, estopAt(0.72)],
+    [ESTOP_R * 0.78, estopAt(0.95)],
+    [ESTOP_R * 0.72, estopAt(1)],
+    [0, estopAt(1)],
+  ],
+  /** 顶面旋转释放符号半径（落在平顶 r ≤ 0.72R 内，且不过度占满红顶） */
+  SYMBOL_R: ESTOP_R * 0.48,
+} as const;
 
 /** 信号灯塔（局部原点 = 立杆底面，y=0 为地面） */
 export const LIGHT_DOME_R = 0.045;
@@ -492,17 +611,6 @@ export const MAGAZINE_ASSEMBLY: Record<MagazineId, Vec3> = {
 };
 
 // ---- 部件局部几何（全部相对各自原点，供组件直接取用）----
-
-/**
- * 贴面细节与宿主表面之间允许的最小错开量（m，局部坐标）。
- *
- * 整机渲染时整体 ×SCENE_SCALE(3)，而旧代码大量用 0.0005~0.001 的「几乎贴着」
- * 偏置：在远距离相机 + 软件渲染的深度精度下，两个面会反复争夺深度值，
- * 表现为灰/黑斑驳闪烁（z-fighting）。现在统一用这个量把可见面错开；
- * 若两个实体必须接触，则让贴合面**嵌进宿主内部**（朝内的面不可见），
- * 而不是让两个朝外的面停在同一平面。
- */
-export const SURFACE_GAP = INDUSTRIAL_DETAIL.SURFACE_GAP;
 
 /**
  * 落料斜槽的侧挡边（视觉 MagazineUnit.ChuteRamp 与物理 railCollidersWorld 共用）。
