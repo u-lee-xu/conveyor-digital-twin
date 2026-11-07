@@ -196,6 +196,10 @@ describe('场景容器与机位：两个入口渲染一致', () => {
     expect(physicsSceneSource).toContain('LEGACY_BACKGROUND');
     expect(physicsSceneSource).toContain('makeDefault');
     expect(physicsSceneSource).toContain('ambientLight');
+    // 固定步长可配置，但旧设备不传时仍是 1/30
+    expect(physicsSceneSource).toContain('timeStep?: number');
+    expect(physicsSceneSource).toContain('timeStep = 1 / 30');
+    expect(physicsSceneSource).toContain('timeStep={timeStep}');
   });
 
   it('传送带容器把背景和三点布光接到共享令牌上', () => {
@@ -203,6 +207,8 @@ describe('场景容器与机位：两个入口渲染一致', () => {
     expect(wrapperSource).toContain('lighting={VISUAL.SCENE_LIGHTING}');
     expect(wrapperSource).toContain('orbitTarget={SCENE_TARGET}');
     expect(wrapperSource).toContain('ConveyorViewSwitcher');
+    // 动态工件落在倾斜薄板上需要更细的接触求解
+    expect(wrapperSource).toContain('timeStep={1 / 60}');
   });
 
   it('五个机位全部有相机 / 观察点 / FOV，首屏与总览一致', () => {

@@ -15,6 +15,8 @@ interface PhysicsSceneProps {
   background?: string;
   cameraFov?: number;
   orbitTarget?: [number, number, number];
+  /** 可选：Rapier 固定步长；需要更精细接触求解的场景可传 1/60 */
+  timeStep?: number;
 }
 
 const LEGACY_BACKGROUND = '#1e293b';
@@ -26,6 +28,7 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
   background,
   cameraFov = 45,
   orbitTarget,
+  timeStep = 1 / 30,
 }) => {
   const [isHidden, setIsHidden] = useState(false);
 
@@ -52,7 +55,7 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
         }}
       >
         <Suspense fallback={null}>
-          <Physics gravity={[0, -9.8, 0]} debug={false} timeStep={1 / 30}>
+          <Physics gravity={[0, -9.8, 0]} debug={false} timeStep={timeStep}>
             {background && <color attach="background" args={[background]} />}
             <ambientLight intensity={ambient} />
             <directionalLight position={keyPosition as [number, number, number]} intensity={keyLight} />
