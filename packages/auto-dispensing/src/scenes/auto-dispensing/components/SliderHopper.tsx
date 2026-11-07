@@ -3,6 +3,7 @@ import {
   SLIDER_SIZE, SLIDER_DETAIL, SURFACE_GAP,
   ROTARY_BODY, ROTARY_DISC, ROTARY_CENTER, ROTARY_STANDOFF,
   HOPPER, HOPPER_BRACKET_TH, HOPPER_FOOT_GAP,
+  HOPPER_INNER_W, HOPPER_INNER_D,
 } from '../constants';
 import {
   PIVOT_LOCAL, HOPPER_SIDE_FACE_LOCAL, DISC_BODY_OFFSET, HOPPER_AXIAL_OFFSET,
@@ -381,12 +382,17 @@ export function SliderHopper() {
             );
           })}
 
-          {/* 斗底托板：贴着料斗底面下方，与料斗同属一个旋转 group */}
+          {/* 斗底托板：顶面嵌入斗底 SURFACE_GAP（贴合面藏在实体内，不留悬空缝也不共面闪烁），
+              四周按内腔尺寸缩进，外表面不与斗底 / 斗壁外表面同向共面 */}
           <mesh
-            position={[0, -HOPPER.H / 2 - HOPPER_FOOT_GAP / 2 - SURFACE_GAP, HOPPER_AXIAL_OFFSET[2] + SURFACE_GAP]}
+            position={[
+              0,
+              -HOPPER.H / 2 + SURFACE_GAP - HOPPER_FOOT_GAP / 2,
+              HOPPER_AXIAL_OFFSET[2],
+            ]}
             material={materials.flange}
           >
-            <boxGeometry args={[HOPPER.W * 0.9, HOPPER_FOOT_GAP, HOPPER.D]} />
+            <boxGeometry args={[HOPPER_INNER_W, HOPPER_FOOT_GAP, HOPPER_INNER_D]} />
           </mesh>
 
           {/* 取药料斗：局部原点就是 -Z 侧面中心，直接挂在共同基准上，零额外偏移 */}

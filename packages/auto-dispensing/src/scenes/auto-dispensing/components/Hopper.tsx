@@ -6,10 +6,11 @@ import {
   HOPPER_PILL_PITCH_X, HOPPER_PILL_PITCH_Z,
 } from '../constants';
 import { expandHopperStock } from '../hopperContents';
+import { hopperPanels, HOPPER_PILL_SEAT_GAP } from '../hopperPanels';
 import { materials } from '../../../components/scene/shared/materials';
 
 /**
- * 取药料斗：5 面板矩形容器，直接锁在旋转气缸法兰盘端面上。
+ * 取药料斗：5 面板矩形容器 + 上口四根翻边，直接锁在旋转气缸法兰盘端面上。
  *
  * 局部原点 = 料斗 -Z 侧面（安装侧壁）外表面中心点，
  * 与旋转气缸法兰盘端面中心精确重合，是两者的共同旋转基准。
@@ -17,13 +18,15 @@ import { materials } from '../../../components/scene/shared/materials';
  * 绕 Z 翻转时既不偏心也不产生附加平移。
  * +Y 为开口（angle=0 朝上接药），-Y 为底面。
  * 法兰盘绕 Z 轴转 -90° 后，开口朝 +X（朝取药仓倒药）。
- * 尺寸全部取自 constants.ts 的 HOPPER，与 SliderHopper 的连接法兰、
- * SceneContent 的药片飞行落点共用同一组常量。
+ *
+ * 板件不再在组件里现算尺寸：全部走 hopperPanels() 的榫接尺寸表，
+ * 保证相邻板只相接、不互相穿入，也没有同向共面的可见面（防闪烁 / 穿模）。
+ * 该表同时是 physicsGeometry.ts 落斗碰撞体的唯一来源。
  */
 export function Hopper() {
   const hopperPills = useDispensingStore((s) => s.hopperPills);
   const hopperStock = useDispensingStore((s) => s.hopperStock);
-  const { W, H, D, T } = HOPPER;
+  const panels = hopperPanels();
 
   /**
    * 斗内药片：按来源台账轮转交错展开，再按内腔容量排成 COLS × ROWS × LAYERS。
@@ -36,41 +39,23 @@ export function Hopper() {
   // 轮转交错展开：顶层一眼能看出多个仓的药，而不是整层同色
   const byMag = expandHopperStock(hopperStock, Math.max(hopperPills - stockCount, 0));
   const shown = Math.min(byMag.length, HOPPER_PILL_CAPACITY);
-  const bottomY = -H / 2 + T + PILL_H / 2;
+  // 底板顶面 + 微小净空，避免药片底盖与底板顶面精确共面闪烁
+  const bottomY = -HOPPER.H / 2 + HOPPER.T + HOPPER_PILL_SEAT_GAP + PILL_H / 2;
   const perLayer = HOPPER_PILL_COLS * HOPPER_PILL_ROWS;
 
   return (
     <group>
       {/* 局部原点落在 -Z 侧面中心，网格整体前移半个斗深即回到原来的几何中心 */}
       <group position={[0, 0, HOPPER.D / 2]}>
-        {/* 底板（-Y 面） */}
-        <mesh position={[0, -H / 2, 0]} castShadow material={materials.hopper}>
-          <boxGeometry args={[W, T, D]} />
-        </mesh>
-
-        {/* 前壁（+Z）/ 后壁（-Z） */}
-        {[1, -1].map((side) => (
-          <mesh key={`z_${side}`} position={[0, 0, side * (D / 2 - T / 2)]} castShadow material={materials.hopper}>
-            <boxGeometry args={[W, H, T]} />
-          </mesh>
-        ))}
-
-        {/* 左壁（-X）/ 右壁（+X） */}
-        {[-1, 1].map((side) => (
-          <mesh key={`x_${side}`} position={[side * (W / 2 - T / 2), 0, 0]} castShadow material={materials.hopper}>
-            <boxGeometry args={[T, H, D]} />
-          </mesh>
-        ))}
-
-        {/* 上口翻边：亮银，明确标出开口方向 */}
-        {[1, -1].map((sz) => (
-          <mesh key={`rim_z_${sz}`} position={[0, H / 2, sz * (D / 2 - T / 2)]} material={materials.endCap}>
-            <boxGeometry args={[W + T, T * 0.7, T]} />
-          </mesh>
-        ))}
-        {[-1, 1].map((sx) => (
-          <mesh key={`rim_x_${sx}`} position={[sx * (W / 2 - T / 2), H / 2, 0]} material={materials.endCap}>
-            <boxGeometry args={[T, T * 0.7, D - T * 2]} />
+        {/* 底板 / 四壁 / 上口翻边：尺寸全部来自同一张榫接尺寸表 */}
+        {panels.map((p) => (
+          <mesh
+            key={p.key}
+            position={p.center}
+            castShadow={p.role === 'wall'}
+            material={p.role === 'rim' ? materials.endCap : materials.hopper}
+          >
+            <boxGeometry args={p.size} />
           </mesh>
         ))}
 
