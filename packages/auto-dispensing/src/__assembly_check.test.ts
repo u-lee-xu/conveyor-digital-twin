@@ -24,7 +24,7 @@ import {
   CABINET_POSITION, CABINET_SIZE, CABINET_PANEL, CABINET_BUTTONS, CABINET_LAMPS,
   CABINET_LAMP_Y, CABINET_SELECTOR, VISUAL, FRAME_DETAIL, SLIDER_DETAIL,
   VIEW_PRESETS, MIRROR_VIEW_SHIFT, MIRROR_LOCAL_VIEW_SHIFT,
-  SCREW_DETAIL, AXIS_R, PULSES_PER_M, ENCODER_PULSES_MAX,
+  SCREW_DETAIL, AXIS_R, PULSES_PER_M, ENCODER_PULSES_PER_REV, ENCODER_PULSES_MAX,
   LIGHT_TOWER_X, LIGHT_POLE_H, LIGHT_POLE_Y, LIGHT_DOME_R, LIGHT_DOME_STEP,
   FEED_PUSH_Z0, FEED_PUSH_Z1, CYL_FEED_STROKE, TRACK_R, SENSOR,
   SURFACE_GAP, CHUTE_RAIL, FOOT_RISE, MAG_TRAY_W, SCENE_SCALE, PILL_H,
@@ -551,12 +551,15 @@ describe('滚珠丝杆传动比例：几何 / 运动学 / 控制语义', () => {
     expect(((K.SLIDER_SPEED / K.LEAD) * K.LEAD)).toBeCloseTo(K.SLIDER_SPEED, 12);
   });
 
-  it('编码器是直线标尺语义，不与电机轴编码器混用', () => {
-    expect(PULSES_PER_M).toBe(100);
-    expect(ENCODER_PULSES_MAX).toBe(170);
-    expect(PULSES_PER_M * (SLIDER_MAX_X - SLIDER_MIN_X)).toBe(ENCODER_PULSES_MAX);
-    // 每转仅 2 个「直线脉冲」，证明 32 位 DINT 位置寄存器不能当电机轴编码器读
-    expect(PULSES_PER_M * K.LEAD).toBeCloseTo(2, 6);
+  it('编码器按 1024 脉冲/转 × 丝杆导程换算，行程跨 16 位边界', () => {
+    expect(ENCODER_PULSES_PER_REV).toBe(1024);
+    expect(PULSES_PER_M).toBe(ENCODER_PULSES_PER_REV / K.LEAD);
+    expect(PULSES_PER_M * (SLIDER_MAX_X - SLIDER_MIN_X)).toBeCloseTo(ENCODER_PULSES_MAX, 6);
+    // 每转正好 1024 个脉冲，证明口径来自「电机轴编码器 × 导程」而非拍脑袋的直线标尺
+    expect(PULSES_PER_M * K.LEAD).toBeCloseTo(ENCODER_PULSES_PER_REV, 6);
+    // 87040 > 65535：单字 16 位寄存器会溢出，必须由两个 16 位字组成 32 位 DINT
+    expect(ENCODER_PULSES_MAX).toBeGreaterThan(0xffff);
+    expect(ENCODER_PULSES_MAX).toBeLessThan(2 ** 31);
   });
 
   it('有效行程 / 丝杆总长落在常见模组区间，且装配接口零漂移', () => {

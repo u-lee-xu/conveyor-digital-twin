@@ -4,7 +4,8 @@
  * 手动模式的语义是「面板按键 ≡ 直接置位/复位 PLC 输出线圈」，因此这里要守住三件事：
  *   1. 面板上的地址必须来自 constants.ts 的三张协议地址表，不能在 JSX 里回填 'Y2' / 'C32'；
  *   2. 输入点（X）电平由纯函数读取；位置改走 32 位 DINT 数据寄存器，不占任何输入点；
- *   3. UI 紧凑化不能回退：只渲染两张卡、输入点三列、地址可见、手动模式不展示自动流程状态；
+ *   3. UI 紧凑化不能回退：只渲染两张卡、输入点三列；X/Y/C 地址不直显，
+ *      改由信号名称悬停浮框提供；手动模式不展示自动流程状态；
  *   4. 滑台点动必须是一次点击 10mm 的离散脉冲，不能退回 rAF 连续速度。
  * 另外把「信号灯塔抬高」也锁进断言，防止后续改常量又让灯头与立杆脱开或被展台裁切。
  */
@@ -12,12 +13,13 @@ import { describe, it, expect } from 'vitest';
 import {
   MODBUS_READ_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS,
   LIGHT_POLE_Y, LIGHT_POLE_H, LIGHT_DOME_R, LIGHT_DOME_STEP, PART_STAGES,
-  MANUAL_JOG, PULSES_PER_M, HOPPER, MAGAZINE_X, SCREW_DETAIL,
+  MANUAL_JOG, PULSES_PER_M, ENCODER_PULSES_PER_REV, HOPPER, MAGAZINE_X, SCREW_DETAIL,
   type MagazineId,
 } from './scenes/auto-dispensing/constants';
 import {
   MANUAL_OUTPUT_POINTS, MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY,
-  IO_GROUP_TITLES, ENCODER_REGISTER_INFO, inputPointLevel, outputPointLevel,
+  IO_GROUP_TITLES, ENCODER_REGISTER_INFO, DINT_ADDRESS_ROWS,
+  inputPointLevel, outputPointLevel,
   type InputSnapshot, type OutputSnapshot,
 } from './scenes/auto-dispensing/manualIo';
 
@@ -29,6 +31,8 @@ const globs: Record<string, Record<string, string>> = {
   './platform/PlatformModePanels.tsx': import.meta.glob<string>('./platform/PlatformModePanels.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/panels/DispenseControlPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseControlPanel.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/panels/DispenseStatusPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseStatusPanel.tsx', { query: '?raw', import: 'default', eager: true }),
+  './scenes/auto-dispensing/panels/DispenseSimPanel.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/DispenseSimPanel.tsx', { query: '?raw', import: 'default', eager: true }),
+  './scenes/auto-dispensing/panels/AddressHint.tsx': import.meta.glob<string>('./scenes/auto-dispensing/panels/AddressHint.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/components/ControlCabinet.tsx': import.meta.glob<string>('./scenes/auto-dispensing/components/ControlCabinet.tsx', { query: '?raw', import: 'default', eager: true }),
   './scenes/auto-dispensing/hooks/useDispenseLoop.ts': import.meta.glob<string>('./scenes/auto-dispensing/hooks/useDispenseLoop.ts', { query: '?raw', import: 'default', eager: true }),
   './stores/useDispensingStore.ts': import.meta.glob<string>('./stores/useDispensingStore.ts', { query: '?raw', import: 'default', eager: true }),
@@ -44,6 +48,8 @@ const appSource = rawSource('./App.tsx');
 const platformSource = rawSource('./platform/PlatformModePanels.tsx');
 const controlSource = rawSource('./scenes/auto-dispensing/panels/DispenseControlPanel.tsx');
 const statusSource = rawSource('./scenes/auto-dispensing/panels/DispenseStatusPanel.tsx');
+const simSource = rawSource('./scenes/auto-dispensing/panels/DispenseSimPanel.tsx');
+const hintSource = rawSource('./scenes/auto-dispensing/panels/AddressHint.tsx');
 const cabinetSource = rawSource('./scenes/auto-dispensing/components/ControlCabinet.tsx');
 const loopSource = rawSource('./scenes/auto-dispensing/hooks/useDispenseLoop.ts');
 const storeSource = rawSource('./stores/useDispensingStore.ts');
@@ -235,8 +241,9 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
   it('控制面板地址一律由点位表拼出，不回填写死地址', () => {
     expect(controlSource).toContain('MANUAL_OUTPUT_POINTS');
     expect(controlSource).toContain('outputPointLevel(point.key, outSnap)');
-    // 双点行（电机正/反转）必须把两个线圈号都拼出来，不能只显示 points[0].coil
-    expect(controlSource).toContain('const coils = points.map');
+    // 双点行（滑台正/反转、三色灯塔）必须把每个点的地址都拼进浮框
+    expect(controlSource).toContain('AddrLabel');
+    expect(controlSource).toContain('points.map');
     expect(controlSource).not.toContain('points[0].coil');
     // 只允许点位表引用，不允许任何具体 Y 地址 / 线圈号字面量（含注释示例）
     expect(controlSource).not.toMatch(/['"`]Y\d+['"`]/);
@@ -264,12 +271,16 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
     expect(controlSource).not.toContain('onTouchEnd');
   });
 
-  it('输入点每点都显示地址，按组三列排布，不再只塞在 title 里', () => {
+  it('输入点地址改由信号名称悬停浮框提供，仍按组三列排布', () => {
+    expect(statusSource).toContain('AddressHint');
     expect(statusSource).toContain('point.addr');
     expect(statusSource).toContain('grid-cols-3');
     expect(statusSource).toContain('inputPointLevel(point.key, snapshot)');
     expect(statusSource).toContain('IO_GROUP_TITLES[group]');
     expect(statusSource).not.toContain('grid-cols-2');
+    // 地址不能再作为可见列渲染，也不能退化成原生 title
+    expect(statusSource).not.toMatch(/>\{point\.addr\}</);
+    expect(statusSource).not.toContain('title={point.addr}');
   });
 
   it('App 与平台壳只挂一次操作台，不再额外重复挂状态面板', () => {
@@ -294,12 +305,53 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
 });
 
 // ============================================================
-// 滑台点动：单击一次只走 1 个编码器脉冲
+// 地址显示：X/Y/C 不直显，只在信号名称悬停浮框里出现
+// ============================================================
+
+describe('PLC 地址改为信号名称悬停浮框', () => {
+  it('AddressHint 用 portal + fixed 定位，不受左栏滚动裁剪', () => {
+    expect(hintSource).toContain('createPortal');
+    expect(hintSource).toContain("position: 'fixed'");
+    expect(hintSource).toContain('document.body');
+    expect(hintSource).toContain('onMouseEnter={show}');
+    expect(hintSource).toContain('onMouseLeave={hide}');
+    expect(hintSource).toContain('role="tooltip"');
+    expect(hintSource).toContain('data-io-hint-trigger');
+    expect(hintSource).toContain('完整地址映射见');
+  });
+
+  it('三个模式面板都不再直接渲染 X/Y/C 地址文本', () => {
+    [controlSource, statusSource, simSource].forEach((src) => {
+      expect(src).toContain('AddressHint');
+      expect(src).not.toMatch(/>\{point\.addr\}</);
+      expect(src).not.toMatch(/>\{ENCODER_REGISTER_INFO\.address\}</);
+    });
+    expect(controlSource).not.toContain('AddrTag');
+    expect(simSource).not.toContain('title={addr}');
+  });
+
+  it('位置寄存器三协议地址收进浮框，完整映射仍以使用说明为准', () => {
+    expect(DINT_ADDRESS_ROWS).toHaveLength(3);
+    expect(DINT_ADDRESS_ROWS.map((r) => r.addr)).toEqual([
+      'HR120 · HR121', 'MD120', 'D120 · D121',
+    ]);
+    [controlSource, statusSource, simSource].forEach((src) => {
+      expect(src).toContain('DINT_ADDRESS_ROWS');
+    });
+  });
+});
+
+// ============================================================
+// 滑台点动：单击固定 10mm，脉冲数按编码器分辨率派生
 // ============================================================
 
 describe('手动点动：单击 10mm 精确步进', () => {
-  it('步长 = 1 个 32 位 DINT 位置脉冲，且远小于料斗半宽与药仓间距', () => {
-    expect(MANUAL_JOG.STEP * PULSES_PER_M).toBeCloseTo(1, 12);
+  it('步长脉冲数由 1024 脉冲/转 × 导程派生，且远小于料斗半宽与药仓间距', () => {
+    const stepPulses = MANUAL_JOG.STEP * PULSES_PER_M;
+    expect(stepPulses).toBeCloseTo(
+      MANUAL_JOG.STEP * ENCODER_PULSES_PER_REV / SCREW_DETAIL.LEAD, 6);
+    expect(Number.isInteger(stepPulses)).toBe(true);
+    expect(stepPulses).toBeGreaterThan(1);
     expect(MANUAL_JOG.STEP).toBeGreaterThan(0);
     expect(MANUAL_JOG.STEP).toBeLessThan(HOPPER.W / 2);
     expect(MANUAL_JOG.STEP).toBeLessThan(MAGAZINE_X.B - MAGAZINE_X.A);

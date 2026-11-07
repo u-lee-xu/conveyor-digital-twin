@@ -671,8 +671,10 @@ export const FRAME_CX = FRAME_LEN / 2;
  * 真实 Ø32 滚珠丝杆标准导程 5 / 10 / 20 mm，升角约 3°~12°；取 20 mm/转
  * （大导程系列），升角 12.0°、112.5 圈 / 2.25 m，牙顶外径 ≈ Ø41。
  *
- * 注意：PULSES_PER_M 是「直线标尺式」PLC 高速计数（1 脉冲 = 10 mm 直线位移），
- * 并非电机轴编码器，因此不与 LEAD 做「每转脉冲数」换算，两者语义独立。
+ * 编码器与丝杆同源：增量式编码器 1024 脉冲/转（A/B 相 → PLC 高速计数器 C0），
+ * 丝杆每转一圈滑台走一个 LEAD（20mm），故 1m 行程 = 1024 / 0.020 = 51200 脉冲
+ * （1 脉冲 ≈ 0.0195mm）。PULSES_PER_M 由 ENCODER_PULSES_PER_REV / LEAD 推导，
+ * 不再写死；1.70m 有效行程 = 87040 脉冲，已超过 65535，必须双字 32 位 DINT 承载。
  */
 export const SCREW_DETAIL = {
   /** 导程：丝杆每转一圈，滑台移动的距离（m/转） */
@@ -689,25 +691,28 @@ export const SCREW_DETAIL = {
   SEGMENTS_PER_TURN: 12,
   /** 螺旋筋截面的径向分段 */
   THREAD_RADIAL_SEGMENTS: 4,
-  /** 演示滑台速度（m/s）；丝杆转速 = SLIDER_SPEED / LEAD */
-  SLIDER_SPEED: 0.32,
+  /** 演示 / 自动 / PLC 共用的滑台速度（m/s）；丝杆转速 = SLIDER_SPEED / LEAD */
+  SLIDER_SPEED: 0.45,
 } as const;
 
 /**
- * 手动模式滑台点动（jog）：一次点击只走 1 个编码器脉冲，方便把料斗对准药仓斜槽。
+ * 手动模式滑台点动（jog）：一次点击只走固定 10mm，方便把料斗对准药仓斜槽。
  *
- * 旧实现是「按住 = SLIDER_SPEED 0.32m/s 连续走」：轻点 0.2s 就走 64mm，已超过
+ * 旧实现是「按住 = SLIDER_SPEED 连续走」：轻点 0.2s 就走几十毫米，已超过
  * 料斗 98mm 宽度的一半；四仓接药位间距 400mm，稍按久一点就直接越过，很难停准。
  * 改成「单击 = 固定 10mm 步进」+「长按离散连续点动」，位移由面板定时器发脉冲，
- * 不再经过 rAF 的演示连续速度；演示自动流程 / PLC / 观众广播的电机速度保持原值。
+ * 不再经过 rAF 的演示连续速度。
+ *
+ * 单击对应的脉冲数由 STEP × PULSES_PER_M 派生（1024 脉冲/转 × 20mm 导程 → 10mm = 512 脉冲），
+ * 不再写死「1 个脉冲」；位移手感不变，只是位置寄存器读数按真实编码器分辨率放大。
  */
 export const MANUAL_JOG = {
-  /** 单次步进 10mm = HR120 的 1 脉冲（PULSES_PER_M = 100），与编码器读数一一对应 */
+  /** 单次步进 10mm = 半个导程；按编码器分辨率折算为 512 个 DINT 脉冲 */
   STEP: 0.01,
   /** 按住超过此阈值才进入连续点动（ms） */
   HOLD_MS: 320,
-  /** 连续点动每步间隔（ms）：等效 0.01/0.08 = 0.125 m/s，约为演示速度的 4 成 */
-  REPEAT_MS: 80,
+  /** 连续点动每步间隔（ms）：等效 0.01/0.055 ≈ 0.182 m/s，约为演示速度的 4 成 */
+  REPEAT_MS: 55,
 } as const;
 
 /**
@@ -1180,11 +1185,17 @@ export const MITSUBISHI_DISPLAY_VARS = { ...MITSUBISHI_READ_VARS, ...MITSUBISHI_
 export const RECIPE_LIMIT = 9; // 每仓 0~9 份
 
 /**
- * 编码器脉冲换算：0.01m = 1 脉冲（与 mock PLC 一致）。
- * 这是孪生输出的「标尺脉冲」教学口径；真实编码器 A/B 相 → C0 的脉冲当量
- * 与 32 位 DINT 缩放由 PLC 程序负责，孪生只提供等效计数器当前值。
+ * 编码器脉冲换算：增量式编码器 1024 脉冲/转，丝杆导程 20mm/转。
+ * PULSES_PER_M = 1024 / 0.020 = 51200 脉冲/m（1 脉冲 ≈ 0.0195mm），
+ * 有效行程 1.70m → 87040 脉冲，跨过 16 位（65535），必须双字 DINT 承载。
+ *
+ * 真实 A/B 相接线、高速计数器 C0 与 DINT 缩放由 PLC 程序负责，孪生只提供等效计数器当前值；
+ * 网关侧同名尺度见 websocket-server/mock-addresses.js 的 ENCODER_SCALE（--check 校验同源）。
  */
-export const PULSES_PER_M = 100;
+export const ENCODER_PULSES_PER_REV = 1024;
+export const PULSES_PER_M = ENCODER_PULSES_PER_REV / SCREW_DETAIL.LEAD;
+/** 单个脉冲对应的直线位移（mm），面板显示用 */
+export const PULSE_LENGTH_MM = 1000 / PULSES_PER_M;
 
 // ============================================================
 // 位置反馈：原点/终点接近开关 + 32 位 DINT 位置寄存器
@@ -1193,7 +1204,7 @@ export const PULSES_PER_M = 100;
 /** 传感器触发窗口（m）：进入 ON 与离开 OFF 用不同阈值做滞回，避免边界抖动闪烁 */
 export const LIMIT_ENTER_TOL = 0.005;
 export const LIMIT_EXIT_TOL = 0.015;
-/** 行程最大脉冲：原点 = 0，终点 = 该值（170）；32 位 DINT 为真机原始计数值留足余量 */
+/** 行程最大脉冲：原点 = 0，终点 = 87040（1024 脉冲/转 × 20mm 导程 × 1.70m 行程） */
 export const ENCODER_PULSES_MAX = Math.round((SLIDER_MAX_X - SLIDER_MIN_X) * PULSES_PER_M);
 /** 32 位 DINT 位置寄存器在各协议中的显示地址 */
 export const ENCODER_REG_LABEL = 'HR120·HR121 / MD120 / D120·D121';

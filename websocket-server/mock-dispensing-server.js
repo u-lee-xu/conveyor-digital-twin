@@ -30,7 +30,7 @@
  */
 const ModbusRTU = require('modbus-serial');
 const http = require('http');
-const { DISPENSING_ADDRESSES, DISPENSING_REGISTERS } = require('./mock-addresses');
+const { DISPENSING_ADDRESSES, DISPENSING_REGISTERS, ENCODER_SCALE } = require('./mock-addresses');
 const { splitDint32, joinDint32, toUnsigned16 } = require('./dint32');
 
 const PORT = parseInt(process.argv[2] || '1505', 10);
@@ -38,20 +38,20 @@ const HTTP_PORT = 5085;
 const CYL_HOLD_MS = 900;      // 送药缸伸出保持
 const CYL_OFF_MS = 400;       // 送药缸缩回保持
 const TILT_HOLD_MS = 1200;    // 翻转保持
-const POS_TOL = 4;            // 到位容差（脉冲）
+const POS_TOL = ENCODER_SCALE.POSITION_TOL_PULSES; // 到位容差（脉冲，按 40mm 位移折算）
 
 const coils = new Array(64).fill(false);
 const A = DISPENSING_ADDRESSES;
 const R = DISPENSING_REGISTERS;
 
-// 编码器脉冲换算：0.01m = 1 脉冲（32 位 DINT 位置寄存器，与前端 PULSES_PER_M 一致）
-const PULSES_PER_M = 100;
+// 编码器 1024 脉冲/转 × 丝杆导程 20mm/转 = 51200 脉冲/m（与前端 PULSES_PER_M 同源）
+const PULSES_PER_M = ENCODER_SCALE.PULSES_PER_M;
 const MAGA_PULSE = Math.round(0.55 * PULSES_PER_M);
 const MAGB_PULSE = Math.round(0.95 * PULSES_PER_M);
 const MAGC_PULSE = Math.round(1.35 * PULSES_PER_M);
 const MAGD_PULSE = Math.round(1.75 * PULSES_PER_M);
-const END_PULSE = Math.round(1.95 * PULSES_PER_M);
-const START_PULSE = Math.round(0.25 * PULSES_PER_M);
+const END_PULSE = Math.round(ENCODER_SCALE.SLIDER_MAX_M * PULSES_PER_M);
+const START_PULSE = ENCODER_SCALE.START_PULSE;
 
 let recipe = { A: 2, B: 1, C: 1, D: 1 };
 let mode = 'idle';            // idle | running | stopped
@@ -78,7 +78,7 @@ function markEncoderFeedback() {
 function syncEncoderFeedback() {
   encoderFromDT = lastEncoderWriteAt > 0 && Date.now() - lastEncoderWriteAt < ENCODER_FEEDBACK_TIMEOUT;
   if (encoderFromDT) {
-    // curPos 是 X×100；寄存器是「距原点的脉冲」，故要加上原点绝对脉冲
+    // curPos 是 X×PULSES_PER_M；寄存器是「距原点的脉冲」，故要加上原点绝对脉冲
     curPos = START_PULSE + readEncoderReg();
   }
 }
@@ -123,9 +123,9 @@ function moveToward(target) {
   const d = target - curPos;
   if (Math.abs(d) <= POS_TOL) { motorOff(); return true; }
   if (d > 0) motorFwd(); else motorRev();
-  // 有孪生反馈时位置由 DINT 寄存器决定；仅独立运行（无 DT）才按 0.32 m/s 自积分
+  // 有孪生反馈时位置由 DINT 寄存器决定；仅独立运行（无 DT）才按共享演示速度自积分
   if (!encoderFromDT) {
-    curPos += (d > 0 ? 1 : -1) * Math.round(0.32 * PULSES_PER_M * 0.1);
+    curPos += (d > 0 ? 1 : -1) * Math.round(ENCODER_SCALE.SLIDER_SPEED * PULSES_PER_M * 0.1);
     writeEncoderReg(curPos - START_PULSE);
   }
   return false;

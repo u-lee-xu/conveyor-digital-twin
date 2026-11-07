@@ -64,6 +64,31 @@ const DISPENSING_WORDS = {
   },
 };
 
+/**
+ * 编码器 / 丝杆 / 速度换算尺度（网关侧单一来源）。
+ *
+ * 增量式编码器 1024 脉冲/转（A/B 相 → PLC 高速计数器 C0），丝杆导程 20mm/转：
+ *   1m 行程 = 1024 / 0.020 = 51200 脉冲（1 脉冲 ≈ 0.0195mm）
+ *   1.70m 有效行程 = 87040 脉冲 > 65535，必须由两个 16 位字（32 位 DINT）承载。
+ * 前端 constants.ts 的同名常量与虚拟 PLC 都不得另写一套数值，由 --check 校验。
+ */
+const ENCODER_SCALE = {
+  PULSES_PER_REV: 1024,
+  LEAD_M: 0.020,
+  SLIDER_SPEED: 0.45,
+  POSITION_TOL_M: 0.040,
+  SLIDER_MIN_M: 0.25,
+  SLIDER_MAX_M: 1.95,
+};
+ENCODER_SCALE.PULSES_PER_M = ENCODER_SCALE.PULSES_PER_REV / ENCODER_SCALE.LEAD_M;
+ENCODER_SCALE.START_PULSE = Math.round(ENCODER_SCALE.SLIDER_MIN_M * ENCODER_SCALE.PULSES_PER_M);
+ENCODER_SCALE.PULSES_MAX = Math.round(
+  (ENCODER_SCALE.SLIDER_MAX_M - ENCODER_SCALE.SLIDER_MIN_M) * ENCODER_SCALE.PULSES_PER_M,
+);
+ENCODER_SCALE.POSITION_TOL_PULSES = Math.round(
+  ENCODER_SCALE.POSITION_TOL_M * ENCODER_SCALE.PULSES_PER_M,
+);
+
 /** 对照前端 constants.ts 做一致性检查（text 正则解析，仅数字型线圈映射） */
 function checkSceneAgainstConstants(scene, addrMap, constPath, blockName) {
   const fs = require('fs');
@@ -180,6 +205,38 @@ function checkDintGateway() {
   return true;
 }
 
+/** 编码器尺度：前端常量、虚拟 PLC、端到端脚本必须与 ENCODER_SCALE 同源 */
+function checkEncoderScale() {
+  const fs = require('fs');
+  const path = require('path');
+  const read = (rel) => fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  const front = read('../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts');
+  const mockPlc = read('mock-dispensing-server.js');
+  const e2e = read('test-dispensing-encoder.js');
+  const required = [
+    [front, `ENCODER_PULSES_PER_REV = ${ENCODER_SCALE.PULSES_PER_REV}`, '前端编码器分辨率'],
+    [front, `LEAD: ${ENCODER_SCALE.LEAD_M.toFixed(3)}`, '前端丝杆导程'],
+    [front, `SLIDER_SPEED: ${ENCODER_SCALE.SLIDER_SPEED}`, '前端演示速度'],
+    [front, `SLIDER_MIN_X = ${ENCODER_SCALE.SLIDER_MIN_M}`, '前端行程下限'],
+    [front, `SLIDER_MAX_X = ${ENCODER_SCALE.SLIDER_MAX_M}`, '前端行程上限'],
+    [front, 'ENCODER_PULSES_PER_REV / SCREW_DETAIL.LEAD', '前端脉冲换算同源'],
+    [mockPlc, 'ENCODER_SCALE', '虚拟 PLC 引用共享尺度'],
+    [e2e, 'ENCODER_SCALE', '端到端脚本引用共享尺度'],
+  ];
+  const missing = required.filter(([src, token]) => !src.includes(token)).map(([, , name]) => name);
+  const valid = ENCODER_SCALE.PULSES_PER_M === ENCODER_SCALE.PULSES_PER_REV / ENCODER_SCALE.LEAD_M
+    && ENCODER_SCALE.PULSES_MAX > 0xffff
+    && ENCODER_SCALE.PULSES_MAX < 2 ** 31;
+  if (missing.length || !valid) {
+    console.error('[check][encoder-scale] ❌ 编码器尺度不一致：');
+    if (missing.length) console.error('  缺:', missing.join(' | '));
+    if (!valid) console.error('  脉冲换算或 32 位边界不成立');
+    return false;
+  }
+  console.log(`[check][encoder-scale] ✅ ${ENCODER_SCALE.PULSES_PER_REV} 脉冲/转 ÷ ${ENCODER_SCALE.LEAD_M}m/转 = ${ENCODER_SCALE.PULSES_PER_M} 脉冲/m，行程 0~${ENCODER_SCALE.PULSES_MAX}（跨 16 位），速度 ${ENCODER_SCALE.SLIDER_SPEED} m/s`);
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -190,9 +247,10 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkDintWords(path) && ok;
   ok = checkDintCodec() && ok;
   ok = checkDintGateway() && ok;
+  ok = checkEncoderScale() && ok;
   process.exit(ok ? 0 : 1);
 }
 
 module.exports = {
-  COAL_ADDRESSES, DISPENSING_ADDRESSES, DISPENSING_REGISTERS, DISPENSING_WORDS,
+  COAL_ADDRESSES, DISPENSING_ADDRESSES, DISPENSING_REGISTERS, DISPENSING_WORDS, ENCODER_SCALE,
 };

@@ -145,6 +145,13 @@ export const ENCODER_REGISTER_INFO = {
   mitsubishi: ENCODER_DINT.MITSUBISHI_LABEL,
 } as const;
 
+/** 位置寄存器三协议地址：只在悬停浮框里出现，面板不直接铺开 */
+export const DINT_ADDRESS_ROWS = [
+  { addr: ENCODER_REGISTER_INFO.modbus, label: 'Modbus 保持寄存器' },
+  { addr: ENCODER_REGISTER_INFO.s7, label: 'S7 M 区 DINT' },
+  { addr: ENCODER_REGISTER_INFO.mitsubishi, label: '三菱 D 寄存器' },
+] as const;
+
 // ============================================================
 // 电平读取（纯函数，便于单测与 CDP 断言，不依赖 React / zustand）
 // ============================================================

@@ -3,17 +3,25 @@ import { useAppStore } from '../../../stores/useAppStore';
 import { useDispensingStore, type MagazineId } from '../../../stores/useDispensingStore';
 import {
   MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS,
-  ENCODER_REG_LABEL, ENCODER_DINT,
+  ENCODER_DINT, PULSE_LENGTH_MM,
 } from '../constants';
+import { DINT_ADDRESS_ROWS, ENCODER_REGISTER_INFO } from '../manualIo';
+import { AddressHint } from './AddressHint';
 import type { ProtocolType } from '../../../services/plc-websocket';
 import { plcService } from '../../../services/plc-websocket';
 
-/** 单个IO信号LED指示灯 */
+/** 单个 IO 信号 LED：地址由信号名称悬停浮框提供，不直接铺在面板上 */
 function IOLed({ label, active, addr }: { label: string; active: boolean; addr: string }) {
   return (
-    <div className="flex items-center gap-1 py-0.5 flex-1 min-w-0" title={addr} style={{ fontSize: '0.62rem' }}>
+    <div className="flex items-center gap-1 py-0.5 flex-1 min-w-0" style={{ fontSize: '0.62rem' }}>
       <span className={`io-led ${active ? 'io-led-on' : 'io-led-off'}`} />
-      <span className={`truncate ${active ? 'text-green-300' : 'text-slate-500'}`}>{label}</span>
+      <AddressHint
+        title={label}
+        rows={[{ addr, label }]}
+        className={`truncate min-w-0 flex-1 ${active ? 'text-green-300' : 'text-slate-500'}`}
+      >
+        {label}
+      </AddressHint>
     </div>
   );
 }
@@ -261,16 +269,24 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
       <div className="card">
         <div className="section-title !mb-1.5">位置数据寄存器（32 位 DINT）</div>
         <div className="flex flex-wrap items-center gap-1.5 mb-1">
-          <span className="badge badge-blue">DINT = {encoderPulses} 脉冲</span>
+          <AddressHint
+            title="位置寄存器"
+            rows={DINT_ADDRESS_ROWS}
+            note={ENCODER_REGISTER_INFO.address}
+            underline={false}
+          >
+            <span className="badge badge-blue">DINT = {encoderPulses} 脉冲</span>
+          </AddressHint>
           <span className="badge badge-slate">{ENCODER_DINT.TYPE} · 低字在前</span>
-          <span className="badge badge-slate">0.01 m / 脉冲</span>
+          <span className="badge badge-slate">{PULSE_LENGTH_MM.toFixed(4)} mm / 脉冲</span>
           <span className={`badge ${encoderDir > 0 ? 'badge-green' : encoderDir < 0 ? 'badge-yellow' : 'badge-slate'}`}>
             {encoderDir > 0 ? '↑ 前进 +' : encoderDir < 0 ? '↓ 后退 −' : '静止'}
           </span>
         </div>
         <div className="text-[0.55rem] text-slate-500 leading-relaxed">
-          {ENCODER_REG_LABEL} · 32 位有符号整数，一次原子写；随滑台前进递增、后退递减，回到原点传感器（Z 相）归零。
-          A/B 相接 X0/X1 与高速计数器 C0 由 PLC 程序处理，孪生不占用输入点。
+          32 位有符号整数，低字在前，一次原子写；随滑台前进递增、后退递减，回到原点传感器（Z 相）归零。
+          寄存器地址悬停上方数值查看，完整映射见「使用说明」。
+          A/B 两相接线与高速计数器 C0 由 PLC 程序处理，孪生不占用输入点。
         </div>
       </div>
 

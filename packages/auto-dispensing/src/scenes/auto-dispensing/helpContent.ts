@@ -5,6 +5,7 @@ import {
   MITSUBISHI_DISPLAY_VARS,
   ENCODER_DINT,
   ENCODER_REG_LABEL,
+  SCREW_DETAIL, ENCODER_PULSES_PER_REV, PULSES_PER_M, ENCODER_PULSES_MAX, PULSE_LENGTH_MM,
 } from './constants';
 
 interface SignalRow {
@@ -78,7 +79,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
     '空仓：空仓传感器置位。演示模式红灯闪烁 1.2s 后自动补满该仓并继续取药；手动/仿真模式不会自愈，需点「⊕ 补满四仓」人工加药。',
     '药仓容量每仓 10 粒；推空后伸缸不再出药。「复位」只回起点清状态，不补药，补药是独立操作。',
     '停止=暂停（位置保持），复位=回起点清状态，急停=立即全停+红灯。',
-    `位置反馈：原点/终点各一个接近开关；${ENCODER_REG_LABEL} 组成 32 位有符号 DINT（0.01m/脉冲），前进 +、后退 -，回原点传感器时归零，不占输入点。`,
+    `位置反馈：原点/终点各一个接近开关；${ENCODER_REG_LABEL} 组成 32 位有符号 DINT（${ENCODER_PULSES_PER_REV} 脉冲/转 × ${SCREW_DETAIL.LEAD * 1000}mm 导程 → 1 脉冲 ≈ ${PULSE_LENGTH_MM.toFixed(4)}mm），前进 +、后退 -，回原点传感器时归零，不占输入点。`,
   ],
   notes: [
     {
@@ -99,7 +100,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
       description: '32 位 DINT 位置反馈',
       details: [
         '原点、终点各装一个接近开关，滑台进入 ±5mm 窗口即触发（离开用 ±15mm，滞回防抖）。3D 机架上可见开关本体与状态 LED。',
-        `${ENCODER_REG_LABEL} 组成 32 位有符号 DINT：0.01m = 1 脉冲，教学量程 0~170；滑台前进递增、后退递减，不是绝对坐标直写。`,
+        `${ENCODER_REG_LABEL} 组成 32 位有符号 DINT：增量式编码器 ${ENCODER_PULSES_PER_REV} 脉冲/转 × 丝杆导程 ${SCREW_DETAIL.LEAD * 1000}mm/转 = ${PULSES_PER_M} 脉冲/m（1 脉冲 ≈ ${PULSE_LENGTH_MM.toFixed(4)}mm），1.70m 行程计数 0~${ENCODER_PULSES_MAX}（已跨 16 位，必须双字）；滑台前进递增、后退递减，不是绝对坐标直写。`,
         '增量式编码器没有绝对零点：只有回到原点传感器（Z 相）才把寄存器校准归零。',
         '真实设备侧：编码器 A/B 相两条线接 X0/X1、由高速计数器 C0 计数，PLC 程序把 C0 当前值映射/缩放到该 DINT 寄存器；数字孪生不绑定物理输入点，也不模拟高速脉冲。',
         '网关为数值变量单开 read-words / write-words 通道：Modbus 用 FC10 一次写两个字，S7 写 MDI120，三菱写 D120/D121；不会像逐位线圈那样出现撕裂值。',
@@ -162,7 +163,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
         rows: [{
           name: '增量式编码器当前值（DINT32）',
           addressCells: [ENCODER_DINT.MODBUS_LABEL, ENCODER_DINT.S7_LABEL, ENCODER_DINT.MITSUBISHI_LABEL],
-          description: '32 位有符号整数，低字在前。原点=0，前进 +、后退 -，回原点传感器（Z 相）归零；0.01m/脉冲，教学量程 0~170。不占用线圈或 X 输入点。',
+          description: `32 位有符号整数，低字在前。原点=0，前进 +、后退 -，回原点传感器（Z 相）归零；${ENCODER_PULSES_PER_REV} 脉冲/转 × ${SCREW_DETAIL.LEAD * 1000}mm 导程 = ${PULSES_PER_M} 脉冲/m，行程 0~${ENCODER_PULSES_MAX}。不占用线圈或 X 输入点。`,
         }],
         hint: 'A/B 相接线与高速计数器 C0 由 PLC 程序负责；三菱侧默认不使用高速计数器，只取 D 寄存器。虚拟 PLC 以该 DINT 作为位置闭环真值，独立运行时自动退回内部积分。',
       },

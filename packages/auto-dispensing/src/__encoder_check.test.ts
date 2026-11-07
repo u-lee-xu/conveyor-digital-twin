@@ -48,19 +48,21 @@ describe('位置反馈：传感器与寄存器地址', () => {
 describe('增量式计数：前进加、后退减', () => {
   it('前进递增、后退递减，方向与位移一致', () => {
     s().setSliderX(SLIDER_MIN_X + 0.5);
-    expect(s().encoderPulses).toBe(50);
+    expect(s().encoderPulses).toBe(Math.round(0.5 * PULSES_PER_M));
     expect(s().encoderDir).toBe(1);
     expect(s().sensors.limitStart).toBe(false);
 
     s().setSliderX(SLIDER_MIN_X + 0.2);
-    expect(s().encoderPulses).toBe(20);
+    expect(s().encoderPulses).toBe(Math.round(0.2 * PULSES_PER_M));
     expect(s().encoderDir).toBe(-1);
     expect(s().sliderX).toBeCloseTo(SLIDER_MIN_X + 0.2, 6);
   });
 
   it('每帧不足 1 脉冲的位移不会丢计数（浮点累计器）', () => {
-    // 0.32 m/s @60fps ≈ 0.005m/帧 = 0.5 脉冲，逐帧 round 会全丢
-    const step = 0.005;
+    // 按分辨率取「半脉冲/帧」：在高分辨率口径下逐帧 round 仍会全丢，
+    // 必须靠 encoderAccum 浮点累计器保住这 100 帧共 50 个脉冲。
+    const step = 0.5 / PULSES_PER_M;
+    const startPulse = Math.round(0.02 * PULSES_PER_M);
     let x = SLIDER_MIN_X + 0.02; // 先离开原点滞回区
     s().setSliderX(x);
     for (let i = 0; i < 100; i += 1) {
@@ -68,7 +70,7 @@ describe('增量式计数：前进加、后退减', () => {
       s().setSliderX(x);
     }
     expect(s().encoderPulses).toBe(Math.round((x - SLIDER_MIN_X) * PULSES_PER_M));
-    expect(s().encoderPulses).toBe(52);
+    expect(s().encoderPulses).toBe(startPulse + 50);
   });
 
   it('超行程被夹紧，寄存器不越界', () => {
@@ -120,8 +122,8 @@ describe('寄存器是唯一真值', () => {
     });
   });
 
-  it('教学量程内寄存器值同源对齐滑块与两个传感器', () => {
-    [0, 1, 55, 170, ENCODER_PULSES_MAX].forEach((p) => {
+  it('教学量程内寄存器值同源对齐滑块与两个传感器（含 16 位跨字边界）', () => {
+    [0, 1, 512, 65535, 65536, ENCODER_PULSES_MAX].forEach((p) => {
       s().setEncoderPulses(p);
       expect(s().encoderPulses).toBe(p);
       expect(s().sliderX).toBeCloseTo(SLIDER_MIN_X + p / PULSES_PER_M, 6);
