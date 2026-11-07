@@ -150,6 +150,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
         title: '输入信号（孪生 → PLC）',
         icon: '📥',
         rows: toRows(INPUT_SIGNALS),
+        hint: '面板上悬停（或键盘聚焦）「启动」「A 缸后」「滑台」等信号名称，浮框会一次给出该点的三菱 X/Y、Modbus 线圈号与 Siemens S7 M 区地址；本表是完整映射。',
       },
       {
         title: '输出信号（PLC → 孪生）',

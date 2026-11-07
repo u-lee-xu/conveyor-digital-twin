@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   MODBUS_READ_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS,
+  MITSUBISHI_DISPLAY_VARS, S7_VARS, ENCODER_DINT,
   LIGHT_POLE_Y, LIGHT_POLE_H, LIGHT_DOME_R, LIGHT_DOME_STEP, PART_STAGES,
   MANUAL_JOG, PULSES_PER_M, ENCODER_PULSES_PER_REV, HOPPER, MAGAZINE_X, SCREW_DETAIL,
   type MagazineId,
@@ -19,7 +20,7 @@ import {
 import {
   MANUAL_OUTPUT_POINTS, MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY,
   IO_GROUP_TITLES, ENCODER_REGISTER_INFO, DINT_ADDRESS_ROWS,
-  inputPointLevel, outputPointLevel,
+  inputPointLevel, outputPointLevel, ioAddressRows, pointAddressRow,
   type InputSnapshot, type OutputSnapshot,
 } from './scenes/auto-dispensing/manualIo';
 
@@ -260,7 +261,7 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
     expect(controlSource).toContain('outputPointLevel(point.key, outSnap)');
     // 双点行（滑台正/反转、三色灯塔）必须把每个点的地址都拼进浮框
     expect(controlSource).toContain('AddrLabel');
-    expect(controlSource).toContain('points.map');
+    expect(controlSource).toContain('ioAddressRows(points)');
     expect(controlSource).not.toContain('points[0].coil');
     // 只允许点位表引用，不允许任何具体 Y 地址 / 线圈号字面量（含注释示例）
     expect(controlSource).not.toMatch(/['"`]Y\d+['"`]/);
@@ -290,7 +291,7 @@ describe('手动面板：点位可见、单点控制、无重复渲染', () => {
 
   it('输入点地址改由信号名称悬停浮框提供，按组两列成对排布', () => {
     expect(statusSource).toContain('AddressHint');
-    expect(statusSource).toContain('point.addr');
+    expect(statusSource).toContain('ioAddressRows([point])');
     expect(statusSource).toContain('grid-cols-2');
     expect(statusSource).toContain('inputPointLevel(point.key, snapshot)');
     expect(statusSource).toContain('IO_GROUP_TITLES[group]');
@@ -397,13 +398,96 @@ describe('PLC 地址改为信号名称悬停浮框', () => {
   });
 
   it('位置寄存器三协议地址收进浮框，完整映射仍以使用说明为准', () => {
-    expect(DINT_ADDRESS_ROWS).toHaveLength(3);
-    expect(DINT_ADDRESS_ROWS.map((r) => r.addr)).toEqual([
-      'HR120 · HR121', 'MD120', 'D120 · D121',
-    ]);
+    expect(DINT_ADDRESS_ROWS).toHaveLength(1);
+    expect(DINT_ADDRESS_ROWS[0].s7).toBe('MD120');
     [controlSource, statusSource, simSource].forEach((src) => {
       expect(src).toContain('DINT_ADDRESS_ROWS');
     });
+  });
+});
+
+// ============================================================
+// 悬停浮框一次给出三协议地址：三菱 X/Y + Modbus 线圈 + Siemens S7 M 区
+//
+// 旧版手动面板只给「X/Y + C」，仿真面板更弱 —— getAddr() 按当前所选协议
+// 只返回一个地址（切到 Modbus 就只有 Coil 20）。现在浮框表头固定三协议，
+// 不管是哪个模式、当前连的是哪种协议，都一次列出全部三套地址。
+// ============================================================
+
+describe('悬停浮框三协议地址（防回退）', () => {
+  const allPoints = [...MANUAL_OUTPUT_POINTS, ...MANUAL_INPUT_POINTS];
+
+  it('32 个点位都带 S7 地址且与 S7_VARS 同源', () => {
+    expect(allPoints).toHaveLength(32);
+    allPoints.forEach((p) => {
+      expect(p.s7).toBe(S7_VARS[p.key as keyof typeof S7_VARS]);
+      expect(p.s7).toMatch(/^M\d+\.\d$/);
+    });
+  });
+
+  it('ioAddressRows 把点位转成三协议行，三列值全部来自地址表', () => {
+    const rows = ioAddressRows(allPoints);
+    expect(rows).toHaveLength(allPoints.length);
+    rows.forEach((r, i) => {
+      const p = allPoints[i];
+      expect(r.label).toBe(p.label);
+      expect(r.mitsubishi).toBe(MITSUBISHI_DISPLAY_VARS[p.key as keyof typeof MITSUBISHI_DISPLAY_VARS]);
+      expect(r.modbus).toBe(`C${MODBUS_READ_VARS[p.key as keyof typeof MODBUS_READ_VARS]}`);
+      expect(r.s7).toBe(S7_VARS[p.key as keyof typeof S7_VARS]);
+    });
+  });
+
+  it('pointAddressRow 对全部变量名返回三协议地址（仿真面板用）', () => {
+    Object.keys(MODBUS_READ_VARS).forEach((key) => {
+      const r = pointAddressRow(key, key);
+      expect(r.mitsubishi).toBe(MITSUBISHI_DISPLAY_VARS[key as keyof typeof MITSUBISHI_DISPLAY_VARS]);
+      expect(r.modbus).toMatch(/^C\d+$/);
+      expect(r.s7).toMatch(/^M\d+\.\d$/);
+    });
+  });
+
+  it('位置寄存器浮框也是三协议一行，双字地址紧凑写法不撑破列宽', () => {
+    const [r] = DINT_ADDRESS_ROWS;
+    expect(r.label).toBe('位置脉冲');
+    // 「·」两侧不留空格：宽松写法 'HR120 / HR121' 在浮框三等分列里会挤到 S7 列
+    expect(r.mitsubishi).toBe('D120·D121');
+    expect(r.modbus).toBe('HR120·HR121');
+    expect(r.s7).toBe('MD120');
+    expect(r.mitsubishi).not.toContain(' ');
+    expect(r.modbus).not.toContain(' ');
+    // 值仍必须由 ENCODER_DINT 派生，不允许在 manualIo 里回填地址字面量
+    expect(r.mitsubishi).toBe(ENCODER_DINT.MITSUBISHI_LABEL.replace(/\s+/g, ''));
+    expect(r.modbus).toBe(ENCODER_DINT.MODBUS_LABEL.replace(/\s+/g, ''));
+    expect(r.s7).toBe(ENCODER_DINT.S7_LABEL);
+  });
+
+  it('AddressHint 渲染三协议表头与三列地址，不再只显示 addr/coil 两列', () => {
+    expect(hintSource).toContain('三菱 FX');
+    expect(hintSource).toContain('Modbus TCP');
+    expect(hintSource).toContain('Siemens S7');
+    expect(hintSource).toContain('row.mitsubishi');
+    expect(hintSource).toContain('row.modbus');
+    expect(hintSource).toContain('row.s7');
+    expect(hintSource).not.toContain('row.coil');
+    expect(hintSource).not.toContain('row.addr');
+  });
+
+  it('浮框宽度与列模板容得下双字地址，地址单元格 nowrap', () => {
+    // 旧 310px 浮框 + 'HR120 / HR121' 会挤进 S7 列；加宽并改用紧凑写法
+    const boxW = Number(hintSource.match(/const BOX_W = (\d+)/)?.[1]);
+    expect(boxW).toBeGreaterThanOrEqual(330);
+    expect(hintSource).toContain("'62px 1fr 1fr 1fr'");
+    // 信号名 + 三协议地址共 4 个单元格都必须 nowrap，宽度才与地址位数无关
+    expect((hintSource.match(/whiteSpace: 'nowrap'/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('三个面板都走单一来源，仿真面板不再按当前协议只显示一个地址', () => {
+    expect(controlSource).toContain('ioAddressRows(points)');
+    expect(statusSource).toContain('ioAddressRows([point])');
+    expect(simSource).toContain('pointAddressRow(addrKey, label)');
+    expect(simSource).toContain('addrKey="MOTOR_FWD"');
+    expect(simSource).not.toContain('getAddr(');
+    expect(simSource).not.toContain('Coil ${map');
   });
 });
 

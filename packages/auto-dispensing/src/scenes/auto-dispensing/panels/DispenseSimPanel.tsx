@@ -5,20 +5,23 @@ import {
   MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS,
   ENCODER_DINT, PULSE_LENGTH_MM,
 } from '../constants';
-import { DINT_ADDRESS_ROWS, ENCODER_REGISTER_INFO } from '../manualIo';
+import { DINT_ADDRESS_ROWS, ENCODER_REGISTER_INFO, pointAddressRow } from '../manualIo';
 import { AddressHint } from './AddressHint';
 import { ReadoutNum, DIRECTION_BADGE_WIDE_CLS } from './ReadoutNum';
 import type { ProtocolType } from '../../../services/plc-websocket';
 import { plcService } from '../../../services/plc-websocket';
 
-/** 单个 IO 信号 LED：地址由信号名称悬停浮框提供，不直接铺在面板上 */
-function IOLed({ label, active, addr }: { label: string; active: boolean; addr: string }) {
+/**
+ * 单个 IO 信号 LED：悬停一次给出三菱 / Modbus / S7 三协议地址，
+ * 不再随当前连接的协议只显示其中一个，也不把地址直接铺在面板上。
+ */
+function IOLed({ label, active, addrKey }: { label: string; active: boolean; addrKey: string }) {
   return (
     <div className="flex items-center gap-1 py-0.5 flex-1 min-w-0" style={{ fontSize: '0.62rem' }}>
       <span className={`io-led ${active ? 'io-led-on' : 'io-led-off'}`} />
       <AddressHint
         title={label}
-        rows={[{ addr, label }]}
+        rows={[pointAddressRow(addrKey, label)]}
         className={`truncate min-w-0 flex-1 ${active ? 'text-green-300' : 'text-slate-500'}`}
       >
         {label}
@@ -169,12 +172,6 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
     try { await plcService.writeVar(varMap[key], value); } catch { /* 写入失败由轮询状态反馈 */ }
   }, [connected]);
 
-  const getAddr = (key: string) => {
-    const map = getReadVars(protocol);
-    if (protocol === 'modbus') return `Coil ${map[key as keyof typeof map]}`;
-    return map[key as keyof typeof map] as string;
-  };
-
   const sensors = useDispensingStore((s) => s.sensors);
   const encoderPulses = useDispensingStore((s) => s.encoderPulses);
   const encoderDir = useDispensingStore((s) => s.encoderDir);
@@ -299,23 +296,23 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
           <div>
             <div className="text-[0.5rem] text-slate-500 mb-0.5">输入信号（孪生 → PLC）</div>
             <div className="grid grid-cols-3 gap-x-1">
-              <IOLed label="原点传感器" active={sensors.limitStart} addr={getAddr('S_LIMIT_START')} />
-              <IOLed label="终点传感器" active={sensors.limitEnd} addr={getAddr('S_LIMIT_END')} />
-              <IOLed label="A空仓" active={sensors.magEmpty.A} addr={getAddr('S_MAG_A_EMPTY')} />
-              <IOLed label="B空仓" active={sensors.magEmpty.B} addr={getAddr('S_MAG_B_EMPTY')} />
-              <IOLed label="C空仓" active={sensors.magEmpty.C} addr={getAddr('S_MAG_C_EMPTY')} />
-              <IOLed label="D空仓" active={sensors.magEmpty.D} addr={getAddr('S_MAG_D_EMPTY')} />
-              <IOLed label="取药仓有药" active={sensors.binHasDrug} addr={getAddr('S_BIN_HAS_DRUG')} />
-              <IOLed label="A缸后" active={sensors.mscBack.A} addr={getAddr('MSC_A_BACK')} />
-              <IOLed label="A缸前" active={sensors.mscFront.A} addr={getAddr('MSC_A_FRONT')} />
-              <IOLed label="B缸后" active={sensors.mscBack.B} addr={getAddr('MSC_B_BACK')} />
-              <IOLed label="B缸前" active={sensors.mscFront.B} addr={getAddr('MSC_B_FRONT')} />
-              <IOLed label="C缸后" active={sensors.mscBack.C} addr={getAddr('MSC_C_BACK')} />
-              <IOLed label="C缸前" active={sensors.mscFront.C} addr={getAddr('MSC_C_FRONT')} />
-              <IOLed label="D缸后" active={sensors.mscBack.D} addr={getAddr('MSC_D_BACK')} />
-              <IOLed label="D缸前" active={sensors.mscFront.D} addr={getAddr('MSC_D_FRONT')} />
-              <IOLed label="翻转盛药位" active={sensors.mscTiltHold} addr={getAddr('MSC_TILT_HOLD')} />
-              <IOLed label="翻转倒药位" active={sensors.mscTiltDump} addr={getAddr('MSC_TILT_DUMP')} />
+              <IOLed label="原点传感器" active={sensors.limitStart} addrKey="S_LIMIT_START" />
+              <IOLed label="终点传感器" active={sensors.limitEnd} addrKey="S_LIMIT_END" />
+              <IOLed label="A空仓" active={sensors.magEmpty.A} addrKey="S_MAG_A_EMPTY" />
+              <IOLed label="B空仓" active={sensors.magEmpty.B} addrKey="S_MAG_B_EMPTY" />
+              <IOLed label="C空仓" active={sensors.magEmpty.C} addrKey="S_MAG_C_EMPTY" />
+              <IOLed label="D空仓" active={sensors.magEmpty.D} addrKey="S_MAG_D_EMPTY" />
+              <IOLed label="取药仓有药" active={sensors.binHasDrug} addrKey="S_BIN_HAS_DRUG" />
+              <IOLed label="A缸后" active={sensors.mscBack.A} addrKey="MSC_A_BACK" />
+              <IOLed label="A缸前" active={sensors.mscFront.A} addrKey="MSC_A_FRONT" />
+              <IOLed label="B缸后" active={sensors.mscBack.B} addrKey="MSC_B_BACK" />
+              <IOLed label="B缸前" active={sensors.mscFront.B} addrKey="MSC_B_FRONT" />
+              <IOLed label="C缸后" active={sensors.mscBack.C} addrKey="MSC_C_BACK" />
+              <IOLed label="C缸前" active={sensors.mscFront.C} addrKey="MSC_C_FRONT" />
+              <IOLed label="D缸后" active={sensors.mscBack.D} addrKey="MSC_D_BACK" />
+              <IOLed label="D缸前" active={sensors.mscFront.D} addrKey="MSC_D_FRONT" />
+              <IOLed label="翻转盛药位" active={sensors.mscTiltHold} addrKey="MSC_TILT_HOLD" />
+              <IOLed label="翻转倒药位" active={sensors.mscTiltDump} addrKey="MSC_TILT_DUMP" />
             </div>
           </div>
 
@@ -325,16 +322,16 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
           <div>
             <div className="text-[0.5rem] text-slate-500 mb-0.5">输出信号（PLC → 孪生）</div>
             <div className="grid grid-cols-3 gap-x-1">
-              <IOLed label="电机正转" active={!!ioSignals.motorFwd} addr={getAddr('MOTOR_FWD')} />
-              <IOLed label="电机反转" active={!!ioSignals.motorRev} addr={getAddr('MOTOR_REV')} />
-              <IOLed label="A送药缸" active={!!ioSignals.cylA} addr={getAddr('CYL_SEND_A')} />
-              <IOLed label="B送药缸" active={!!ioSignals.cylB} addr={getAddr('CYL_SEND_B')} />
-              <IOLed label="C送药缸" active={!!ioSignals.cylC} addr={getAddr('CYL_SEND_C')} />
-              <IOLed label="D送药缸" active={!!ioSignals.cylD} addr={getAddr('CYL_SEND_D')} />
-              <IOLed label="翻转缸" active={!!ioSignals.tilt} addr={getAddr('CYL_TILT')} />
-              <IOLed label="灯塔绿" active={!!ioSignals.lampGreen} addr={getAddr('LAMP_GREEN')} />
-              <IOLed label="灯塔黄" active={!!ioSignals.lampYellow} addr={getAddr('LAMP_YELLOW')} />
-              <IOLed label="灯塔红" active={!!ioSignals.lampRed} addr={getAddr('LAMP_RED')} />
+              <IOLed label="电机正转" active={!!ioSignals.motorFwd} addrKey="MOTOR_FWD" />
+              <IOLed label="电机反转" active={!!ioSignals.motorRev} addrKey="MOTOR_REV" />
+              <IOLed label="A送药缸" active={!!ioSignals.cylA} addrKey="CYL_SEND_A" />
+              <IOLed label="B送药缸" active={!!ioSignals.cylB} addrKey="CYL_SEND_B" />
+              <IOLed label="C送药缸" active={!!ioSignals.cylC} addrKey="CYL_SEND_C" />
+              <IOLed label="D送药缸" active={!!ioSignals.cylD} addrKey="CYL_SEND_D" />
+              <IOLed label="翻转缸" active={!!ioSignals.tilt} addrKey="CYL_TILT" />
+              <IOLed label="灯塔绿" active={!!ioSignals.lampGreen} addrKey="LAMP_GREEN" />
+              <IOLed label="灯塔黄" active={!!ioSignals.lampYellow} addrKey="LAMP_YELLOW" />
+              <IOLed label="灯塔红" active={!!ioSignals.lampRed} addrKey="LAMP_RED" />
             </div>
           </div>
         </div>

@@ -6,7 +6,7 @@ import {
 } from '../constants';
 import {
   MANUAL_OUTPUT_POINTS, MANUAL_IO_SUMMARY, ENCODER_REGISTER_INFO,
-  DINT_ADDRESS_ROWS, outputPointLevel,
+  DINT_ADDRESS_ROWS, outputPointLevel, ioAddressRows,
   type IoPoint, type OutputSnapshot,
 } from '../manualIo';
 import { AddressHint } from './AddressHint';
@@ -17,8 +17,9 @@ import { DispenseStatusPanel } from './DispenseStatusPanel';
  * 手动模式：PLC 单点 I/O 操作台。
  *
  * 面板按键等价于直接置位 / 复位输出线圈（Y），不跑自动流程；
- * X/Y/C 地址不直接铺在面板上，改为悬停信号名称时由 AddressHint 浮框显示，
- * 完整映射仍以「使用说明」为准；输入点（X）状态由下方 DispenseStatusPanel 回显。
+ * 三协议地址（三菱 X/Y、Modbus 线圈、S7 M 区）不直接铺在面板上，
+ * 改为悬停信号名称时由 AddressHint 浮框一次列出，完整映射仍以「使用说明」为准；
+ * 输入点（X）状态由下方 DispenseStatusPanel 回显。
  *
  * 紧凑化改造：旧版是「6 张控制卡片 + 6 张状态卡片」共 12 张卡，
  * 每张 20px padding + 逐行进度条，传感器状态要滚很久才看得到。
@@ -50,7 +51,7 @@ function AddrLabel({ title, points, className, children }: {
   className?: string;
   children?: ReactNode;
 }) {
-  const rows = points.map((p) => ({ label: p.label, addr: p.addr, coil: p.coil }));
+  const rows = ioAddressRows(points);
   return (
     <AddressHint title={title} rows={rows} className={className}>
       {children ?? title}
