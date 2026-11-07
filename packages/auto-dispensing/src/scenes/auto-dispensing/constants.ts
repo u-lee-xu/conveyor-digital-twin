@@ -195,8 +195,47 @@ export const MAG_TUBE_TOP_Y = CHUTE_Y + MAG_TUBE_H;
 
 /** 气缸主体尺寸（侧立后，X 宽 × Y 高 × Z 厚） */
 export const ROTARY_BODY = { W: 0.100, H: 0.070, D: 0.024 } as const;
-/** 输出法兰盘（盘面朝 +Z，轴线沿 Z）；盘径略小于放大后的斗宽，形成「斗包住盘」的观感 */
-export const ROTARY_DISC = { R: 0.046, TH: 0.008 } as const;
+
+/**
+ * 旋转气缸顶面细节的唯一尺寸来源（2026-11-07 近景视觉修复）。
+ *
+ * 旧版 4 个顶面安装孔是纯黑（#161c24）凸出小圆柱，2 只磁性开关沿 ±Z
+ * 并排贴在 +X 同一处：斜俯视时两只开关几乎重叠、连着孔一起合成一大块
+ * 纯黑硬边多边形，投影到灰色台面上就像「台面破了个 L 形洞」。
+ * 现在安装孔改成「暗孔 + 亮银沉孔环」的真实沉头孔，开关沿 X 分列，
+ * 并用深灰外壳 + 黄铜指示点，读起来是传感器而不是黑洞。
+ */
+export const ROTARY_TOP_DETAIL = {
+  HOLE_X_RATIO: 0.34,
+  HOLE_Z_RATIO: 0.28,
+  HOLE_R: 0.0045,
+  HOLE_RING_R: 0.006,
+  HOLE_SEGMENTS: 12,
+  /** 磁性开关沿 ±X 分列（旧版 ±Z 并排会在斜俯视重叠成一整块黑补丁） */
+  SWITCH_X_RATIO: 0.28,
+  SWITCH_W: 0.020,
+  SWITCH_H: 0.007,
+  SWITCH_D: 0.010,
+  SWITCH_RISE: 0.004,
+  SWITCH_LED_R: 0.0025,
+  SWITCH_LED_H: 0.0015,
+} as const;
+/**
+ * 输出法兰盘（盘面朝 +Z，轴线沿 Z）。
+ *
+ * 【2026-11-07 穿模修复】旧版 R=0.046（Ø92）比斗后壁的半高还大：
+ *   wallZ- 板的 Y 范围是 [-H/2+T, +H/2] = [-0.0325, +0.0375]，
+ *   盘缘却能伸到 ±0.046，从斜上方俯视就会越过斗口沿、把一圈银色弧线
+ *   投进黄色斗内；再加上刻度环/刻线/螺栓孔都放在 pivot z>0，
+ *   正好插进 wallZ- 的板厚 [0, T]，是实实在在的三轴体积穿插。
+ *
+ * 现在把盘径收到 Ø56（约为气缸主体宽度的 56%，与 ATEC HRQ 系列实物
+ * 「输出法兰 ≈ 主体宽度一半」的比例一致），并让盘缘所有细节都满足
+ *   R + 外扩量 < min(H/2 - T, W/2 - T) = 0.0325
+ * 于是整片法兰在任何机位都被斗后壁完全遮住，斗口里再也看不到盘缘。
+ * 装配基准、斗心、落点、倒药点全部不动：R 不参与任何位置推导。
+ */
+export const ROTARY_DISC = { R: 0.028, TH: 0.008 } as const;
 /** 气缸贴滑块 +Z 侧面的安装间隙（旧装配链尺寸，用于复现既有料斗基准） */
 export const ROTARY_MOUNT_GAP = 0.004;
 /** 料斗与法兰盘之间连接法兰的可见厚度（沿 Z；不再参与中心定位） */
@@ -204,11 +243,35 @@ export const HOPPER_BRACKET_TH = 0.006;
 /**
  * 取药料斗外形尺寸（X 宽 × Y 高 × Z 深）；开口朝 +Y。
  * 按参考实物比例放大到约 1.35 倍：斗宽 W=0.098 已超过料筒外径 0.060 的 1.6 倍，
- * 也略大于圆盘直径 0.092，不再是「挂在气缸上的小方块」。
+ * 也明显大于输出法兰直径 0.056，形成「斗把法兰整个包住」的真实装配观感。
  * 斗深 D=0.092 是特意再放宽的一档：内腔 0.082 足够按药片真实 φ0.040 排 2 排，
  * 顶层可同时露出 2×2 共 4 粒，装药容量 2 列 × 2 排 × 4 层 = 16 粒（> 单仓 10 粒）。
  */
 export const HOPPER = { W: 0.098, H: 0.075, D: 0.092, T: 0.005 } as const;
+
+/**
+ * 法兰外缘细节的唯一尺寸来源（组件里不得再写死坐标 / 半径）。
+ *
+ * 旧版把刻度环、12 条刻线、8 个螺栓孔、4 颗夹紧螺栓全部放在 pivot z>0，
+ * 而斗后壁 wallZ- 的板厚正是 [0, T]：这些贴片不是「贴」在盘上，
+ * 而是插进斗壁里，AABB 三轴都有正体积叠加，近景里就成了银色弧线穿模。
+ * 现在所有盘缘细节都落在盘厚中面（pivot z = -TH/2 < 0），且半径受 MAX_R 约束，
+ * 整片法兰被斗后壁完全遮住；clone 出的贴片一个都不进入 z>0 半空间。
+ */
+export const ROTARY_DISC_RIM = {
+  /** 盘缘机加工亮边的半管径 */
+  BAND_TUBE: 0.0012,
+  /** 径向紧定螺钉 */
+  SCREW_N: 6,
+  SCREW_R: 0.0022,
+  SCREW_LEN: 0.003,
+  /**
+   * 允许的最大外缘半径：取斗后壁内轮廓在两个方向上的较小半尺寸
+   * min(H/2 - T, W/2 - T) = min(0.0325, 0.044) = 0.0325。
+   * 组件里任何盘缘细节都不得越过它，否则又会在斗口露出银色弧线。
+   */
+  MAX_R: Math.min(HOPPER.H / 2 - HOPPER.T, HOPPER.W / 2 - HOPPER.T),
+} as const;
 /** 料斗底部托板的可见厚度（不再参与中心定位） */
 export const HOPPER_FOOT_GAP = 0.006;
 /**
@@ -722,6 +785,13 @@ export const MANUAL_JOG = {
  *
  * 关键接口：方轨半高 = TRACK_R，因此导轨下沿仍是 FRAME.TRACK_H - TRACK_R，
  * 与 SENSOR.BRACKET_TOP_Y（原点/终点传感器 L 形吊架夹持面）严格闭合。
+ *
+ * 【2026-11-07 驱动端重写】按真实安装链把这一端重新拆成
+ *   编码器后罩（集成在电机尾部）→ 伺服电机机身（同色散热筋）
+ *   → 前端止口/法兰 → 电机安装支架（兼联轴器保护罩）
+ *   → 三段式梅花联轴器（铝毂 / 聚氨酯弹性体 / 铝毂）
+ *   → 固定端方形支撑单元（角接触轴承 + 压盖 + 锁紧螺母）→ 丝杆轴端。
+ * 所有轴向站位由 DRIVE_STATIONS 从本表派生，组件里不得再写死坐标。
  */
 export const FRAME_DETAIL = {
   // 铝挤型底座：侧面 T 槽、端盖、顶面安装螺栓
@@ -757,6 +827,58 @@ export const FRAME_DETAIL = {
   // 固定端 / 支撑端轴承座端盖螺栓
   BEARING_BOLT_R: 0.004,
   BEARING_BOLT_OFFSET: 0.036,
+
+  // ---- 伺服电机：机身、前端止口、输出轴、同色散热筋 ----
+  /** 前端定位止口（凸台）半径：插进电机座定位孔，真实伺服靠它定心 */
+  MOTOR_PILOT_R: 0.020,
+  /** 机身散热筋数量 / 厚度 / 外扩 / 节距：与机身同色，不再是异色薄片 */
+  MOTOR_RIB_N: 7,
+  MOTOR_RIB_T: 0.003,
+  MOTOR_RIB_OUT: 0.0025,
+  MOTOR_RIB_PITCH: 0.008,
+  /** 输出轴半径：穿过电机座进入联轴器电机侧铝毂 */
+  MOTOR_SHAFT_R: 0.007,
+
+  // ---- 电机安装支架 / 联轴器保护罩：上下板 + 四角立柱的开放框架 ----
+  /** 罩体内腔半宽 / 半高（Z / Y），比联轴器最大半径大一圈 */
+  GUARD_HALF_W: 0.042,
+  GUARD_HALF_H: 0.042,
+  /** 上下板 / 立柱壁厚 */
+  GUARD_T: 0.006,
+  /** 四角立柱沿 X 的宽度（中间敞开，能看见三段式联轴器） */
+  GUARD_POST_W: 0.010,
+
+  // ---- 三段式梅花联轴器：两个铝毂 + 中间 6 瓣聚氨酯弹性体 ----
+  COUPLING_HUB_LEN: 0.015,
+  COUPLING_SPIDER_LEN: 0.012,
+  COUPLING_JAW_N: 6,
+  COUPLING_SET_R: 0.003,
+
+  // ---- 固定端方形支撑单元（BK 型：角接触轴承 + 压盖 + 锁紧螺母） ----
+  /** 方形本体 Y/Z 边长；沿 X 长度沿用旧圆柱座 0.08，保证装配接口零漂移 */
+  SUPPORT_UNIT_W: 0.088,
+  SUPPORT_UNIT_LEN: 0.080,
+  /** 底座法兰：把支撑单元锁到型材支撑柱上 */
+  SUPPORT_FOOT_T: 0.008,
+  SUPPORT_FOOT_W: 0.100,
+  /** 丝杆穿过孔 / 轴承外圈可见环 / 压盖 */
+  SUPPORT_BORE_R: 0.017,
+  SUPPORT_RING_R: 0.030,
+  SUPPORT_CAP_T: 0.006,
+  SUPPORT_BOLT_N: 4,
+  SUPPORT_BOLT_PITCH: 0.034,
+  /** 锁紧螺母（六角），拧在丝杆上压住轴承内圈 */
+  LOCK_NUT_R: 0.021,
+  LOCK_NUT_LEN: 0.010,
+
+  // ---- 编码器：电机尾部集成后罩 + 动力/编码器两根线缆（径向外伸，不越出 MOTOR_MIN_X） ----
+  ENCODER_CABLE_R: 0.004,
+  ENCODER_CABLE_LEN: 0.018,
+  ENCODER_CONN_W: 0.014,
+  ENCODER_CONN_H: 0.012,
+  ENCODER_CONN_D: 0.010,
+  ENCODER_CONN_Z: 0.030,
+
   // 侧面拖链铝槽（真实模组的静态部件；动态链带留待后续）
   CARRIER_Z: -(FRAME.TRACK_Z + 0.075),
   CARRIER_Y: FRAME.SCREW_H - 0.10,
@@ -764,6 +886,32 @@ export const FRAME_DETAIL = {
   CARRIER_CHANNEL_H: 0.012,
   CARRIER_CHANNEL_LEN: FRAME_LEN * 0.62,
   CARRIER_END_T: 0.010,
+} as const;
+
+/**
+ * 驱动端轴向站位：沿局部 +X 从电机尾端排到丝杆轴端，全部由 FRAME_DETAIL 派生。
+ * 组件只读这张表，不再自己写 -0.0xx 之类的坐标；自检也用它验证
+ * 「编码器 ↔ 机身 ↔ 法兰 ↔ 罩 ↔ 联轴器 ↔ 支撑单元」首尾相接、无空隙无穿插。
+ */
+export const DRIVE_STATIONS = {
+  ENCODER_MIN: FRAME_DETAIL.MOTOR_MIN_X,
+  ENCODER_MAX: FRAME_DETAIL.MOTOR_MIN_X + FRAME_DETAIL.ENCODER_LEN,
+  BODY_MIN: FRAME_DETAIL.MOTOR_X0 - FRAME_DETAIL.MOTOR_BODY_LEN,
+  BODY_MAX: FRAME_DETAIL.MOTOR_X0,
+  FLANGE_MIN: FRAME_DETAIL.MOTOR_FLANGE_X - FRAME_DETAIL.MOTOR_FLANGE_T / 2,
+  FLANGE_MAX: FRAME_DETAIL.MOTOR_FLANGE_X + FRAME_DETAIL.MOTOR_FLANGE_T / 2,
+  GUARD_MIN: FRAME_DETAIL.MOTOR_FLANGE_X + FRAME_DETAIL.MOTOR_FLANGE_T / 2,
+  GUARD_MAX: -FRAME_DETAIL.SUPPORT_UNIT_LEN / 2,
+  COUPLING_MIN: FRAME_DETAIL.COUPLING_X - FRAME_DETAIL.COUPLING_LEN / 2,
+  COUPLING_MAX: FRAME_DETAIL.COUPLING_X + FRAME_DETAIL.COUPLING_LEN / 2,
+  SUPPORT_MIN: -FRAME_DETAIL.SUPPORT_UNIT_LEN / 2,
+  SUPPORT_MAX: FRAME_DETAIL.SUPPORT_UNIT_LEN / 2,
+  /** 三段式联轴器的三个分段中心 X */
+  HUB_L: FRAME_DETAIL.COUPLING_X - FRAME_DETAIL.COUPLING_LEN / 2
+    + FRAME_DETAIL.COUPLING_HUB_LEN / 2,
+  HUB_R: FRAME_DETAIL.COUPLING_X + FRAME_DETAIL.COUPLING_LEN / 2
+    - FRAME_DETAIL.COUPLING_HUB_LEN / 2,
+  SPIDER: FRAME_DETAIL.COUPLING_X,
 } as const;
 
 /**
@@ -1021,6 +1169,12 @@ export const VISUAL = {
   MAG_COLOR: { A: '#d96666', B: '#4f9e72', C: '#5b87c4', D: '#9a76bd' }, // 四药仓标识色（降饱和）
   PILL_COLOR: { A: '#b3382f', B: '#2e8b57', C: '#2563a8', D: '#7d54a8' }, // 药片色（比料筒更深）
   BIN_COLOR: '#d45f24',          // 取药仓（砖橙红，与琥珀拉开）
+
+  // —— 驱动端真实安装链专用配色（2026-11-07 起）——
+  MOTOR_BODY_COLOR: '#303a46',   // 伺服电机机身：石墨灰，与结构件同族但更深
+  MOTOR_RIB_COLOR: '#3d4957',    // 散热筋：同色系略亮一档，不再是「黑底灰条纹」斑马
+  ENCODER_CAP_COLOR: '#232b35',  // 编码器后罩：深色塑料，集成在电机尾部
+  COUPLING_SPIDER_COLOR: '#c2552f', // 梅花联轴器聚氨酯弹性体（工业常用砖红/绿）
 } as const;
 
 // ============================================================

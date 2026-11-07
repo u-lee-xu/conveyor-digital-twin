@@ -1,8 +1,9 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
   SLIDER_SIZE, SLIDER_DETAIL, SURFACE_GAP,
-  ROTARY_BODY, ROTARY_DISC, ROTARY_CENTER, ROTARY_STANDOFF,
-  HOPPER, HOPPER_BRACKET_TH, HOPPER_FOOT_GAP,
+  ROTARY_BODY, ROTARY_DISC, ROTARY_DISC_RIM, ROTARY_TOP_DETAIL,
+  ROTARY_CENTER, ROTARY_STANDOFF,
+  HOPPER, HOPPER_FOOT_GAP,
   HOPPER_INNER_W, HOPPER_INNER_D,
 } from '../constants';
 import {
@@ -13,6 +14,8 @@ import { materials } from '../../../components/scene/shared/materials';
 import { Hopper } from './Hopper';
 
 const SD = SLIDER_DETAIL;
+const RIM = ROTARY_DISC_RIM;
+const TOP = ROTARY_TOP_DETAIL;
 /** 丝杆 / 导轨轴线相对滑块底面的高度（滑块局部坐标） */
 const AXLE_Y = SLIDER_SIZE[1] / 2;
 /** 滑块座贴在 ±X 端面外侧，中心 X */
@@ -183,8 +186,9 @@ function SideNameplate() {
  * 滑块 + 旋转气缸 + 取药料斗
  *
  * 参考件 ATEC HRQ10（包内 旋转气缸.png）：扁平铝主体，输出法兰盘直径约主体宽度 48%，
- * 气管接头在 -X 侧。本设备为承托放大后的取药料斗，把盘径放宽到主体宽度的 92%
- * （见 constants.ts），仍保持「斗略大于盘」的装配观感。
+ * 气管接头在 -X 侧。本设备为承托放大后的取药料斗，把盘径放宽到主体宽度的 56%
+ * （Ø56，见 constants.ts 的 ROTARY_DISC / ROTARY_DISC_RIM），保持「斗把法兰整个包住」。
+ * 盘径必须小于斗后壁内轮廓半高，否则盘缘会越过斗口沿、在斗内露出一圈银色弧线。
  * 参考件平放时盘朝 +Y；本设备把气缸**侧立**安装，
  * 使盘面朝观众(+Z)、输出轴沿 Z，料斗才能绕水平轴翻转 90° 倒药。
  *
@@ -286,15 +290,25 @@ export function SliderHopper() {
           </mesh>
         ))}
 
-        {/* 顶面安装孔 ×4（侧立后顶面 = +Y，圆柱轴默认沿 Y，无需旋转） */}
+        {/* 顶面沉头安装孔 ×4：暗孔 + 亮银沉孔环，不是纯黑凸出小圆柱。
+            旧版 4 个纯黑圆盘与磁性开关一起在斜俯视下连成一块黑补丁，
+            投影到灰色台面上看着像「台面破了个 L 形洞」。 */}
         {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
-          <mesh
+          <group
             key={`mount_${sx}_${sz}`}
-            position={[sx * BODY_W * 0.34, BODY_H / 2 + SURFACE_GAP, sz * BODY_D * 0.28]}
-            material={materials.magSwitch}
+            position={[
+              sx * BODY_W * TOP.HOLE_X_RATIO,
+              BODY_H / 2 + SURFACE_GAP,
+              sz * BODY_D * TOP.HOLE_Z_RATIO,
+            ]}
           >
-            <cylinderGeometry args={[0.005, 0.005, 0.0015, 10]} />
-          </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} material={materials.profileSlot}>
+              <circleGeometry args={[TOP.HOLE_R, TOP.HOLE_SEGMENTS]} />
+            </mesh>
+            <mesh position={[0, SURFACE_GAP, 0]} rotation={[-Math.PI / 2, 0, 0]} material={materials.decal}>
+              <ringGeometry args={[TOP.HOLE_R, TOP.HOLE_RING_R, TOP.HOLE_SEGMENTS]} />
+            </mesh>
+          </group>
         )))}
 
         {/* 气管接头 ×2（-X 侧，沿 X 伸出；侧立不改变 X 方向） */}
@@ -312,75 +326,57 @@ export function SliderHopper() {
           </group>
         ))}
 
-        {/* 磁性开关 ×2（顶面 +Y，靠近输出盘一侧） */}
-        {[-1, 1].map((sz) => (
-          <mesh key={`mag_${sz}`} position={[BODY_W * 0.22, BODY_H / 2 + 0.004, sz * BODY_D * 0.25]} material={materials.magSwitch}>
-            <boxGeometry args={[0.020, 0.007, 0.010]} />
-          </mesh>
+        {/* 磁性开关 ×2：沿 ±X 分列（旧版沿 ±Z 并排，斜俯视会重叠成一整块纯黑
+            硬边多边形，看着像台面破洞）。深灰外壳 + 黄铜状态指示点，读起来是传感器。 */}
+        {[-1, 1].map((sx) => (
+          <group
+            key={`mag_${sx}`}
+            position={[sx * BODY_W * TOP.SWITCH_X_RATIO, BODY_H / 2 + TOP.SWITCH_RISE, 0]}
+          >
+            <mesh material={materials.darkMetal}>
+              <boxGeometry args={[TOP.SWITCH_W, TOP.SWITCH_H, TOP.SWITCH_D]} />
+            </mesh>
+            <mesh position={[0, TOP.SWITCH_H / 2, 0]} material={materials.brass}>
+              <cylinderGeometry args={[TOP.SWITCH_LED_R, TOP.SWITCH_LED_R, TOP.SWITCH_LED_H, 8]} />
+            </mesh>
+          </group>
         ))}
 
         {/* ===== 共同旋转基准：盘端面中心 = 料斗 -Z 侧面中心 =====
             圆盘与料斗共用这一个 group、这一个角度；料斗不再相对盘心挂到 Y 偏移上 */}
         <group position={PIVOT_LOCAL} rotation={[0, 0, rotaryAngleRad(angle)]}>
-          {/* 盘体：整体沿 -Z 让位半盘厚，使盘「前端面」精确落在基准点上 */}
+          {/* 输出法兰盘：整片都落在 pivot z ≤ 0（斗后壁之外），被斗后壁完全遮住。
+              旧版把刻度环 / 12 条刻线 / 8 个螺栓孔 / 4 颗夹紧螺栓放在 pivot z>0，
+              而 wallZ- 板厚正是 [0, T]，等于把贴片插进斗壁；再加上盘半径 0.046
+              大于斗后壁半高 0.0325，盘缘越过斗口沿，斜俯视就是「银色弧线插进黄色斗内」。
+              现在盘缘细节一律放在盘厚中面（局部 z=0 → pivot z=-TH/2），
+              半径受 RIM.MAX_R 约束，且不再投影到台面上产生硬边黑影。 */}
           <group position={DISC_BODY_OFFSET}>
             {/* cylinder 默认轴沿 Y，转 90° 后轴沿 Z（盘面朝 +Z） */}
-            <mesh rotation={[Math.PI / 2, 0, 0]} castShadow material={materials.endCap}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} material={materials.endCap}>
               <cylinderGeometry args={[DISC_R, DISC_R, DISC_TH, 32]} />
             </mesh>
-
-            {/* 盘缘刻度环：torus 法线默认 +Z；贴面错开并用 decal 兜底 */}
-            <mesh position={[0, 0, DISC_TH / 2 + SURFACE_GAP]} material={materials.decal}>
-              <torusGeometry args={[DISC_R - 0.002, 0.0015, 8, 48]} />
+            {/* 盘缘机加工亮边：torus 落在盘厚中面，只从侧面露出半个管径 */}
+            <mesh material={materials.decal}>
+              <torusGeometry args={[DISC_R, RIM.BAND_TUBE, 8, 48]} />
             </mesh>
-
-            {/* 刻度线 ×12（贴在盘面、位于料斗侧壁投影之后，不产生共面竞争） */}
-            {Array.from({ length: 12 }, (_, i) => {
-              const a = (i / 12) * Math.PI * 2;
+            {/* 法兰径向紧定螺钉 ×6：轴沿半径方向，从盘缘往外顶住轴套 */}
+            {Array.from({ length: RIM.SCREW_N }, (_, i) => {
+              const a = (i / RIM.SCREW_N) * Math.PI * 2;
+              // 螺钉外缘不得超过 MAX_R，否则又会在斗口沿露出金属弧线
+              const r = Math.min(DISC_R + RIM.SCREW_LEN / 2, RIM.MAX_R - RIM.SCREW_LEN / 2);
               return (
                 <mesh
-                  key={`scl_${i}`}
-                  position={[Math.cos(a) * (DISC_R - 0.006), Math.sin(a) * (DISC_R - 0.006), DISC_TH / 2 + SURFACE_GAP]}
-                  rotation={[0, 0, a]}
-                  material={materials.decalDark}
+                  key={`rim_screw_${i}`}
+                  position={[Math.cos(a) * r, Math.sin(a) * r, 0]}
+                  rotation={[0, 0, a - Math.PI / 2]}
+                  material={materials.darkMetal}
                 >
-                  <boxGeometry args={[0.001, 0.005, 0.0015]} />
-                </mesh>
-              );
-            })}
-
-            {/* 盘面螺栓孔 ×8 */}
-            {Array.from({ length: 8 }, (_, i) => {
-              const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-              const r = DISC_R * 0.66;
-              return (
-                <mesh
-                  key={`bolt_${i}`}
-                  position={[Math.cos(a) * r, Math.sin(a) * r, DISC_TH / 2 + SURFACE_GAP]}
-                  material={materials.decalDark}
-                >
-                  <circleGeometry args={[0.0035, 12]} />
+                  <cylinderGeometry args={[RIM.SCREW_R, RIM.SCREW_R, RIM.SCREW_LEN, 8]} />
                 </mesh>
               );
             })}
           </group>
-
-          {/* 四颗夹紧螺栓：斗放大后投影会盖住盘心区域，故移到盘缘上下各两颗，
-              角度/半径保证 |y| 大于斗半高、r 仍在盘径内，既可见又不越出盘面 */}
-          {[75, 105, 255, 285].map((deg) => {
-            const a = (deg * Math.PI) / 180;
-            const r = DISC_R * 0.94;
-            return (
-              <mesh
-                key={`brk_${deg}`}
-                position={[Math.cos(a) * r, Math.sin(a) * r, HOPPER_BRACKET_TH / 4]}
-                rotation={[Math.PI / 2, 0, 0]}
-                material={materials.darkMetal}
-              >
-                <cylinderGeometry args={[0.0035, 0.0035, HOPPER_BRACKET_TH / 2, 8]} />
-              </mesh>
-            );
-          })}
 
           {/* 斗底托板：顶面嵌入斗底 SURFACE_GAP（贴合面藏在实体内，不留悬空缝也不共面闪烁），
               四周按内腔尺寸缩进，外表面不与斗底 / 斗壁外表面同向共面 */}
