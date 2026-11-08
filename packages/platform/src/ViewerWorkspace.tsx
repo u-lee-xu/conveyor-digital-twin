@@ -1,59 +1,71 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene } from '@digital-twin/shared';
+import { PhysicsScene, relayWsUrl } from '@digital-twin/shared';
 import { devices } from './registry';
-import type { DeviceDefinition } from './types';
 
 export type BridgeLink = 'connecting' | 'online' | 'offline';
 
 interface Snapshot {
   deviceId: string | null;
+  mode?: string | null;
   ts: number;
   connected: boolean;
   protocol: string;
-  vars: Record<string, boolean>;
+  vars: Record<string, boolean | number>;
   error?: string;
 }
 
 /**
- * 观众工作区：只读 3D 镜像。
- * - 默认跟随主控：主控进入设备 → 广播 deviceId → 自动切换对应场景；主控未进入 → 等待页
- * - 也可自选设备（自选同样向广播请求切换，所有观众同步）
+ * 观众工作区：只读跟随主控的 3D 镜像。
+ *
+ * 设计口径（2026-11-08 定稿）：装了软件的机器打开就是主控，其余设备
+ * （智能电视 / 手机 / 学生机浏览器，均无软件）打开 http://<教师机IP>:5201/
+ * 直接就是观众，不需要角色页、不需要参数、不需要点任何按钮。
+ *
+ * 观众端：零上行消息（不发 set-device、不切换设备）、无操作面板、
+ * 自动重连、首次交互尝试全屏；连接失败必须给出可见原因，禁止无限停在
+ * 「连接服务中…」（旧版 CSP 拦截 + 构造异常未捕获曾导致这个现象）。
  */
-export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
+export function ViewerWorkspace() {
   const [link, setLink] = useState<BridgeLink>('connecting');
+  const [linkError, setLinkError] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [follow, setFollow] = useState(true);
-  const [manualDeviceId, setManualDeviceId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const sendSetDevice = (deviceId: string | null) => {
-    const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
-    try {
-      const ws = new WebSocket(`ws://${host}:8082`);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'set-device', deviceId }));
-        ws.close();
-      };
-      ws.onerror = () => ws.close();
-    } catch {
-      // 非边缘环境无广播服务，静默
-    }
-  };
-
   useEffect(() => {
-    const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
     let closed = false;
-    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connect = () => {
       if (closed) return;
-      const ws = new WebSocket(`ws://${host}:8082`);
-      wsRef.current = ws;
       setLink('connecting');
-      ws.onopen = () => setLink('online');
+      setLinkError('');
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(relayWsUrl());
+      } catch (e) {
+        setLink('offline');
+        setLinkError(`连接被拒绝：${String(e)}`);
+        reconnectTimer = setTimeout(connect, 3000);
+        return;
+      }
+      wsRef.current = ws;
+      timeoutTimer = setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          setLink('offline');
+          setLinkError('连接超时（5 秒），请确认教师机已启动');
+          try { ws.close(); } catch { /* 已关闭 */ }
+        }
+      }, 5000);
+
+      ws.onopen = () => {
+        clearTimeout(timeoutTimer);
+        setLink('online');
+        setLinkError('');
+      };
       ws.onmessage = (ev) => {
         try {
-          const msg = JSON.parse(ev.data);
+          const msg = JSON.parse(ev.data) as Snapshot & { type?: string };
           if (msg.type !== 'snapshot') return;
           setSnapshot(msg);
           const device = msg.deviceId ? devices.find((d) => d.id === msg.deviceId) : undefined;
@@ -67,99 +79,78 @@ export function ViewerWorkspace({ onBack }: { onBack: () => void }) {
         }
       };
       ws.onclose = () => {
+        clearTimeout(timeoutTimer);
         if (closed) return;
         setLink('offline');
+        setLinkError((prev) => prev || '教师机中继未响应，正在重试');
         reconnectTimer = setTimeout(connect, 3000);
       };
-      ws.onerror = () => ws.close();
+      ws.onerror = () => setLinkError('无法连接教师机的状态中继');
     };
 
     connect();
     return () => {
       closed = true;
       clearTimeout(reconnectTimer);
+      clearTimeout(timeoutTimer);
       wsRef.current?.close();
     };
   }, []);
 
-  // 激活设备：跟随主控（快照 deviceId）或观众自选
-  const activeDeviceId = follow ? snapshot?.deviceId ?? null : manualDeviceId;
-  const activeDevice: DeviceDefinition | undefined = activeDeviceId
-    ? devices.find((d) => d.id === activeDeviceId)
-    : undefined;
+  // 智能电视 / 大屏：浏览器通常要求用户手势才能全屏，首次交互时补一次
+  useEffect(() => {
+    const tryFullscreen = () => {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && el.requestFullscreen) {
+        void el.requestFullscreen().catch(() => undefined);
+      }
+    };
+    window.addEventListener('pointerdown', tryFullscreen, { once: true });
+    return () => window.removeEventListener('pointerdown', tryFullscreen);
+  }, []);
 
+  // 只跟随主控：设备完全由快照决定，观众端没有任何切换入口
+  const activeDeviceId = snapshot?.deviceId ?? null;
+  const activeDevice = activeDeviceId ? devices.find((d) => d.id === activeDeviceId) : undefined;
   const Scene = activeDevice?.SceneWrapper ?? PhysicsScene;
-  const waiting = !activeDevice;
   const badge =
     link === 'online'
-      ? snapshot?.connected
-        ? { text: `${activeDevice?.name ?? '设备'} · PLC 在线`, cls: 'border-green-500/40 text-green-400 bg-green-500/10' }
-        : { text: `${activeDevice?.name ?? '设备'} · PLC 未连`, cls: 'border-yellow-500/40 text-yellow-400 bg-yellow-500/10' }
+      ? { text: activeDevice ? `跟随主控 · ${activeDevice.name}` : '已连接 · 等待主控', cls: 'border-green-500/40 text-green-400 bg-green-500/10' }
       : link === 'connecting'
-        ? { text: '连接中…', cls: 'border-slate-500/40 text-slate-300 bg-slate-500/10' }
-        : { text: '连接断开，重试中…', cls: 'border-red-500/40 text-red-400 bg-red-500/10' };
+        ? { text: '连接服务中…', cls: 'border-slate-500/40 text-slate-300 bg-slate-500/10' }
+        : { text: `连接失败 · 重试中…`, cls: 'border-red-500/40 text-red-400 bg-red-500/10' };
 
   return (
-    <div className="relative w-screen h-screen bg-slate-900 overflow-hidden">
-      {waiting ? (
-        /* 主控未进入设备：黑屏等待 */
-        <div className="flex flex-col items-center justify-center h-full gap-4">
+    <div
+      className="relative w-screen h-screen bg-slate-900 overflow-hidden"
+      data-viewer-link={link}
+      data-viewer-device={activeDeviceId ?? ''}
+      data-viewer-error={linkError}
+      data-viewer-mode={snapshot?.mode ?? ''}
+    >
+      {!activeDevice ? (
+        <div className="flex flex-col items-center justify-center h-full gap-4 px-8 text-center">
           <div className="w-10 h-10 rounded-full border-2 border-slate-700 border-t-blue-500 animate-spin" />
-          <div className="text-slate-500 text-sm">
-            {link === 'online' ? '等待主控进入设备…' : '连接服务中…'}
+          <div className="text-slate-300 text-sm">
+            {link === 'online'
+              ? '等待主控进入设备…'
+              : link === 'connecting'
+                ? '连接服务中…'
+                : `连接失败：${linkError || '教师机未启动'} · 正在重试`}
           </div>
-          <button
-            onClick={() => { setFollow(false); setManualDeviceId(devices[0].id); sendSetDevice(devices[0].id); }}
-            className="text-xs px-3 py-1.5 rounded-full border border-slate-600/40 text-slate-300 bg-slate-800/60 hover:bg-slate-700/60 transition-colors"
-          >
-            直接查看 {devices[0].icon} {devices[0].name}
-          </button>
+          <div className="text-slate-500 text-xs">
+            本页为只读跟随模式 · 请在教师机上打开软件并进入设备
+          </div>
         </div>
       ) : (
         <Scene key={activeDeviceId} SceneContent={activeDevice.SceneContent} cameraPosition={activeDevice.cameraPosition} />
       )}
 
-      {/* 顶部：返回入口 + 设备选择条（默认跟随主控，可自选） */}
-      <div className="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center gap-2">
-        <button
-          onClick={onBack}
-          aria-label="返回入口页"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-900/60 backdrop-blur border border-slate-600/40 text-slate-300 hover:text-white transition-colors"
-        >
-          ←
-        </button>
-        <button
-          onClick={() => setFollow(true)}
-          className={`text-xs px-2.5 py-1 rounded-full border backdrop-blur transition-colors ${
-            follow
-              ? 'border-blue-500/50 text-blue-300 bg-blue-500/10'
-              : 'border-slate-600/40 text-slate-300 bg-slate-900/60'
-          }`}
-        >
-          {follow ? (snapshot?.deviceId ? '跟随：' + (devices.find((d) => d.id === snapshot.deviceId)?.name ?? snapshot.deviceId) : '跟随主控') : '跟随主控'}
-        </button>
-        {devices.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => {
-              setManualDeviceId(d.id);
-              setFollow(false);
-              sendSetDevice(d.id);
-            }}
-            className={`text-xs px-2.5 py-1 rounded-full border backdrop-blur transition-colors ${
-              !follow && manualDeviceId === d.id
-                ? 'border-blue-500/50 text-blue-300 bg-blue-500/10'
-                : 'border-slate-600/40 text-slate-300 bg-slate-900/60'
-            }`}
-          >
-            {d.icon} {d.name}
-          </button>
-        ))}
-        <span className={`ml-auto text-xs px-2.5 py-1 rounded-full border backdrop-blur ${badge.cls}`}>{badge.text}</span>
+      {/* 观众端无返回、无设备切换、无模式按钮：只剩状态角标 */}
+      <div className="absolute top-3 right-3 z-10 pointer-events-none">
+        <span className={`text-xs px-2.5 py-1 rounded-full border backdrop-blur ${badge.cls}`}>{badge.text}</span>
       </div>
-
-      {/* 底部状态条 */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 px-4 py-1.5 rounded-full border border-slate-600/40 bg-slate-900/70 backdrop-blur">
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none px-4 py-1.5 rounded-full border border-slate-600/40 bg-slate-900/70 backdrop-blur">
         <span className="text-[0.7rem] font-mono text-slate-400">
           {snapshot
             ? `${snapshot.deviceId ?? '—'} · ${snapshot.protocol} · 更新于 ${new Date(snapshot.ts).toLocaleTimeString()}${snapshot.error ? ` · ${snapshot.error}` : ''}`

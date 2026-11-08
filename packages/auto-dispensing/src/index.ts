@@ -68,6 +68,28 @@ function applyBroadcast(v: Record<string, boolean | number>) {
   });
 }
 
+/**
+ * 主控上报：与 applyBroadcast 键名一一对应。
+ * 位置取 32 位 DINT 脉冲真值（不是滑块浮点位置），观众端由 setEncoderPulses
+ * 同源对齐滑台位置、寄存器读数与两个位置传感器。
+ */
+function exportSnapshot(): Record<string, boolean | number> {
+  const s = useDispensingStore.getState();
+  return {
+    ENCODER_PULSES: s.encoderPulses,
+    MOTOR_FWD: s.motorFwd,
+    MOTOR_REV: s.motorRev,
+    CYL_SEND_A: s.sendCyl.A.extended,
+    CYL_SEND_B: s.sendCyl.B.extended,
+    CYL_SEND_C: s.sendCyl.C.extended,
+    CYL_SEND_D: s.sendCyl.D.extended,
+    CYL_TILT: s.tiltCyl.tilted,
+    LAMP_GREEN: s.lamp.green,
+    LAMP_YELLOW: s.lamp.yellow,
+    LAMP_RED: s.lamp.red,
+  };
+}
+
 export const dispensingDevice: DeviceDefinition = {
   id: 'auto-dispensing',
   name: '自动配药',
@@ -86,4 +108,5 @@ export const dispensingDevice: DeviceDefinition = {
   onModeChange: stopAndDisconnect,
   onCleanup: stopAndDisconnect,
   applyBroadcast,
+  exportSnapshot,
 };

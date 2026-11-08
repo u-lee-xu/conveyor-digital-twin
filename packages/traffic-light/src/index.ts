@@ -60,4 +60,16 @@ export const trafficLightDevice: DeviceDefinition = {
       ns_red: !!v['LIGHT_NS_RED'],
     });
   },
+  /** 主控上报：与 applyBroadcast 键名一一对应，演示模式同样可同步 */
+  exportSnapshot: () => {
+    const s = useTrafficStore.getState();
+    return {
+      LIGHT_EW_GREEN: s.lamps.ew_green,
+      LIGHT_EW_YELLOW: s.lamps.ew_yellow,
+      LIGHT_EW_RED: s.lamps.ew_red,
+      LIGHT_NS_GREEN: s.lamps.ns_green,
+      LIGHT_NS_YELLOW: s.lamps.ns_yellow,
+      LIGHT_NS_RED: s.lamps.ns_red,
+    };
+  },
 };

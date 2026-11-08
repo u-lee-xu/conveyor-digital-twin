@@ -37,7 +37,10 @@ type WSMessage = {
   [key: string]: unknown;
 };
 
-const WS_URL = 'ws://localhost:8081';
+import { plcWsUrl, canOpenPlcChannel } from '@digital-twin/shared';
+
+/** WebSocket 端点统一由 shared 推导：同源 /ws/plc 代理，file:// 回退本机 */
+const WS_URL = plcWsUrl();
 
 export class PlcWebSocketService {
   private ws: WebSocket | null = null;
@@ -116,6 +119,8 @@ export class PlcWebSocketService {
   constructor() { /* lazy: connect on demand */ }
 
   private _connectWS() {
+    // 观众端只读镜像：绝不建立 PLC 控制通道（主控是唯一 PLC 客户端）
+    if (!canOpenPlcChannel()) return;
     if (this._disposed) return;
     if (this.reconnecting) return;
     this.reconnecting = true;

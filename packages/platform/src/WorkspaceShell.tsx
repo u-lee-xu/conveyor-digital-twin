@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene, ModeSelector, HelpPanel, useMobile } from '@digital-twin/shared';
+import { PhysicsScene, ModeSelector, HelpPanel, useMobile, relayWsUrl } from '@digital-twin/shared';
 import type { DeviceDefinition } from './types';
 
 interface WorkspaceShellProps {
@@ -30,32 +30,70 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
     return () => { onCleanupRef.current?.(); };
   }, [device.id]);
 
-  // 边缘部署：进入设备工作区时向广播服务上报激活设备（观众端自动跟随）；离开时上报 null（观众等待）
+  /** 给观众的地址：由一键启动脚本写入 dist/lab-info.json；开发态退回 location.host */
+  const [viewerUrl, setViewerUrl] = useState('');
   useEffect(() => {
-    const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost';
+    const fallback = typeof location !== 'undefined' && location.host ? `http://${location.host}/` : '';
+    fetch('/lab-info.json')
+      .then((r) => (r.ok ? r.json() as Promise<{ viewerUrl?: string }> : null))
+      .then((info) => setViewerUrl(info?.viewerUrl || fallback))
+      .catch(() => setViewerUrl(fallback));
+  }, []);
+
+  /**
+   * 主控上报：把设备 store 的渲染态单向推给中继，观众端做只读镜像。
+   * 中继不连 PLC，因此演示 / 手动模式（未连 PLC）观众同样能看到画面。
+   * 中继未启动时主控仍可单机练习，连接失败静默重试，不影响本地功能。
+   */
+  useEffect(() => {
+    let closed = false;
     let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(`ws://${host}:8082`);
-      ws.onopen = () => ws?.send(JSON.stringify({ type: 'set-device', deviceId: device.id }));
-      ws.onerror = () => ws?.close();
-    } catch {
-      ws = null;
-    }
-    return () => {
-      // 主控离开工作区：通知广播清空激活设备（观众端黑屏等待）
+    let reportTimer: ReturnType<typeof setInterval> | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const open = () => {
+      if (closed) return;
       try {
-        const bye = new WebSocket(`ws://${host}:8082`);
-        bye.onopen = () => {
-          bye.send(JSON.stringify({ type: 'set-device', deviceId: null }));
-          bye.close();
-        };
-        bye.onerror = () => bye.close();
+        ws = new WebSocket(relayWsUrl());
       } catch {
-        // 非边缘环境无广播服务，静默
+        reconnectTimer = setTimeout(open, 3000);
+        return;
       }
-      ws?.close();
+      ws.onopen = () => {
+        const report = () => {
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          ws.send(JSON.stringify({
+            type: 'report',
+            deviceId: device.id,
+            mode: String(mode),
+            vars: device.exportSnapshot?.() ?? {},
+          }));
+        };
+        report();
+        reportTimer = setInterval(report, 100);
+      };
+      ws.onclose = () => {
+        clearInterval(reportTimer);
+        if (!closed) reconnectTimer = setTimeout(open, 3000);
+      };
+      ws.onerror = () => ws?.close();
     };
-  }, [device.id]);
+
+    open();
+    return () => {
+      closed = true;
+      clearTimeout(reconnectTimer);
+      clearInterval(reportTimer);
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'leave' }));
+        }
+        ws?.close();
+      } catch {
+        // 连接已关闭
+      }
+    };
+  }, [device, mode]);
 
   const activeMode = device.modes.find((m) => m.id === mode) ?? device.modes[0];
   const ModePanel = activeMode?.panel;
@@ -210,6 +248,19 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
         </>
       )}
 
+      {viewerUrl && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-600/40 bg-slate-900/80 backdrop-blur text-[0.7rem] text-slate-300">
+          <span className="shrink-0">观众访问</span>
+          <button
+            type="button"
+            title="点击复制观众地址"
+            onClick={() => { void navigator.clipboard?.writeText(viewerUrl); }}
+            className="font-mono text-blue-300 hover:text-white transition-colors"
+          >
+            {viewerUrl}
+          </button>
+        </div>
+      )}
       <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
 
       {device.helpContent && showHelp && (

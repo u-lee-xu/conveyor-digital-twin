@@ -63,4 +63,10 @@ export interface DeviceDefinition {
    * 观众端/边缘广播服务不感知设备内部实现，由设备包自包含。
    */
   applyBroadcast?: (vars: Record<string, boolean | number>) => void;
+  /**
+   * 主控上报：把当前设备 store 的渲染态导出成状态快照，供观众端做只读镜像。
+   * 与 applyBroadcast 成对，键名必须一致。快照来自主控 UI store 而不是 PLC，
+   * 因此演示 / 手动模式（未连 PLC）也能同步；广播服务只做扇出，不自行轮询 PLC。
+   */
+  exportSnapshot?: () => Record<string, boolean | number>;
 }

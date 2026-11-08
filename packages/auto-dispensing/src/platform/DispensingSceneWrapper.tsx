@@ -1,6 +1,7 @@
 import { Suspense, type ComponentType } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { isViewerRuntime } from '@digital-twin/shared';
 import { SCENE_CAMERA, PART_STAGES, VISUAL } from '../scenes/auto-dispensing/constants';
 import { resolveViewTuples } from '../scenes/auto-dispensing/viewGoals';
 import { useAppStore } from '../stores/useAppStore';
@@ -27,8 +28,8 @@ export function DispensingSceneWrapper({
   cameraPosition?: [number, number, number];
 }) {
   const activeStage = useAppStore((s) => s.activeStage);
-  // 观众工作区把角色写在 history.state，只读镜像不该出现视图切换工具栏
-  const isViewer = typeof window !== 'undefined' && window.history.state === 'viewer';
+  // 角色判据统一来自 shared（软件=主控 / 浏览器+IP=观众），不再读 history.state
+  const isViewer = isViewerRuntime();
   // 展台相机只有 0.5~2m：整机 minDistance=2 会把近景强行推远，故展台单独放宽到 0.2m
   const stageDistance = activeStage && PART_STAGES[activeStage] ? 0.2 : 2;
 
@@ -36,7 +37,8 @@ export function DispensingSceneWrapper({
     <>
       <Canvas
         style={{ position: 'absolute', inset: 0 }}
-        shadows
+        shadows={!isViewer}
+        dpr={isViewer ? 1 : undefined}
         camera={{
           position: initialView.camera ?? cameraPosition,
           fov: initialView.fov,

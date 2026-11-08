@@ -76,4 +76,20 @@ export const conveyorDevice: DeviceDefinition = {
       yellow: !!v['SIGNAL_TOWER_YELLOW'],
     });
   },
+  /** 主控上报：与 applyBroadcast 键名一一对应，演示模式同样可同步 */
+  exportSnapshot: () => {
+    const s = useDeviceStore.getState();
+    return {
+      CONVEYOR: s.conveyorRunning,
+      FEED_CYLINDER_VALVE: s.cylinders.feed.extended,
+      SORTING1_CYLINDER_VALVE: s.cylinders.sorting1.extended,
+      SORTING2_CYLINDER_VALVE: s.cylinders.sorting2.extended,
+      SENSOR_FEED: s.sensors.feed,
+      SENSOR_COLOR: s.sensors.color,
+      SENSOR_MATERIAL: s.sensors.material,
+      SIGNAL_TOWER_RED: s.signalTower.red,
+      SIGNAL_TOWER_GREEN: s.signalTower.green,
+      SIGNAL_TOWER_YELLOW: s.signalTower.yellow,
+    };
+  },
 };
