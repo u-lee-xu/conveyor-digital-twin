@@ -182,6 +182,19 @@ export const materials = {
     metalness: 0.16,
     roughness: 0.5,
   }),
+  /** 编码器侧波纹管联轴器的铝合金夹紧轮毂 / 带中心孔的夹紧法兰；
+   *  与卡环铭牌分开一档灰度，避免整机里所有银件糊成一片 */
+  encoderHub: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_HUB_COLOR,
+    metalness: 0.26,
+    roughness: 0.42,
+  }),
+  /** 不锈钢薄壁波纹管：中灰蓝，靠环向褶皱的明暗起伏读出「弹性元件」 */
+  encoderBellows: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_BELLOWS_COLOR,
+    metalness: 0.38,
+    roughness: 0.38,
+  }),
   /** Z 相零位标记：小面积亮点，靠自检定的 emissive 而不是 ACES 削顶的过曝白点 */
   encoderZMark: new THREE.MeshStandardMaterial({
     color: VISUAL.ENCODER_Z_MARK_COLOR,

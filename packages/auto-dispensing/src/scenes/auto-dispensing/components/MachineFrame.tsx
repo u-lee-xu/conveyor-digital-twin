@@ -459,17 +459,27 @@ function DriveEnd() {
 }
 
 /**
- * 随丝杆自转的部分：+X 轴伸 + 编码器侧弹性联轴器。
- * 放在 MachineFrame 的 screwRef 旋转组里，因此与丝杆严格同步；
- * 编码器本体是静止件，见 ShaftEndEncoder。
+ * 随丝杆自转的部分：+X 轴伸 + 波纹管弹性联轴器 + 编码器输入轴。
+ *
+ * 编码器反馈轴只测角度、不传扭矩，所以这里不是电机侧那种大号梅花联轴器：
+ * 两端是铝合金夹紧轮毂（各带一颗径向夹紧螺钉），中间是一段不锈钢薄壁波纹管，
+ * 芯筒外加环向褶皱，零背隙且能吸收两轴的径向 / 角向 / 轴向偏差。
+ * 编码器输入轴从联轴器末端一直伸到本体前端面，穿过夹紧法兰的中心孔。
+ * 全部挂在 MachineFrame 的 screwRef 旋转组里，与丝杆严格同步；
+ * 环形法兰和编码器本体是静止件，见 ShaftEndEncoder。
  */
 function EncoderRotatingParts() {
   const E = SHAFT_END_ENCODER;
   const S = ENCODER_STATIONS;
-  const couplingCx = (S.COUPLING_MIN + S.COUPLING_MAX) / 2;
-  const third = E.COUPLING_LEN / 3;
+  const hubCxL = S.COUPLING_MIN + E.HUB_LEN / 2;
+  const hubCxR = S.COUPLING_MAX - E.HUB_LEN / 2;
+  const bellowsMin = S.COUPLING_MIN + E.HUB_LEN;
+  const bellowsMax = S.COUPLING_MAX - E.HUB_LEN;
+  const bellowsLen = bellowsMax - bellowsMin;
+  const foldW = bellowsLen / E.BELLOWS_N;
   return (
     <group>
+      {/* 丝杆轴伸 */}
       <mesh
         position={[(S.SHAFT_MIN + S.SHAFT_MAX) / 2, 0, 0]}
         rotation={[0, 0, Math.PI / 2]}
@@ -477,21 +487,56 @@ function EncoderRotatingParts() {
       >
         <cylinderGeometry args={[E.SHAFT_STUB_R, E.SHAFT_STUB_R, E.SHAFT_STUB_LEN, 12]} />
       </mesh>
-      {[-1, 0, 1].map((k) => (
+      {/* 两端铝合金夹紧轮毂 */}
+      {[hubCxL, hubCxR].map((cx, i) => (
         <mesh
-          key={`enc-cpl-${k}`}
-          position={[couplingCx + k * third, 0, 0]}
+          key={`enc-hub-${i}`}
+          position={[cx, 0, 0]}
           rotation={[0, 0, Math.PI / 2]}
-          material={k === 0 ? materials.couplingSpider : materials.brightSilver}
+          castShadow
+          material={materials.encoderHub}
+        >
+          <cylinderGeometry args={[E.COUPLING_R, E.COUPLING_R, E.HUB_LEN, 16]} />
+        </mesh>
+      ))}
+      {/* 不锈钢薄壁波纹管：芯筒 + 环向褶皱（褶顶略低于轮毂外径） */}
+      <mesh
+        position={[(bellowsMin + bellowsMax) / 2, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        material={materials.encoderBellows}
+      >
+        <cylinderGeometry args={[E.BELLOWS_R, E.BELLOWS_R, bellowsLen, 16]} />
+      </mesh>
+      {Array.from({ length: E.BELLOWS_N }, (_, i) => (
+        <mesh
+          key={`enc-bellows-${i}`}
+          position={[bellowsMin + foldW * (i + 0.5), 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+          material={materials.encoderBellows}
         >
           <cylinderGeometry args={[
-            k === 0 ? E.SPIDER_R : E.COUPLING_R,
-            k === 0 ? E.SPIDER_R : E.COUPLING_R,
-            third - SURFACE_GAP / 2,
-            k === 0 ? 6 : 16,
+            E.COUPLING_R * 0.98, E.COUPLING_R * 0.98, foldW * 0.55, 16,
           ]} />
         </mesh>
       ))}
+      {/* 两颗径向夹紧螺钉：实物为 M3/M4 内六角，从轮毂外圆凸出一点 */}
+      {[hubCxL, hubCxR].map((cx, i) => (
+        <mesh
+          key={`enc-clamp-${i}`}
+          position={[cx, E.COUPLING_R + E.CLAMP_SCREW_H / 2 - SURFACE_GAP, 0]}
+          material={materials.darkMetal}
+        >
+          <cylinderGeometry args={[E.CLAMP_SCREW_R, E.CLAMP_SCREW_R, E.CLAMP_SCREW_H, 8]} />
+        </mesh>
+      ))}
+      {/* 编码器输入轴：从联轴器末端穿过带孔法兰，止于本体前端面 */}
+      <mesh
+        position={[(S.INPUT_MIN + S.INPUT_MAX) / 2, 0, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+        material={materials.axle}
+      >
+        <cylinderGeometry args={[E.INPUT_SHAFT_R, E.INPUT_SHAFT_R, E.INPUT_SHAFT_LEN, 12]} />
+      </mesh>
     </group>
   );
 }
@@ -499,9 +544,10 @@ function EncoderRotatingParts() {
 /**
  * +X 轴末端独立增量式编码器（需求原文：「安装于轴末端，连续检测料斗位置」）。
  *
- * 编码器本体由前端夹紧法兰锁在 L 型支架上，支架贴浮动轴承座端面，
- * 本体不随丝杆转；A/B 相出线 → PLC X0/X1 高速计数器 C0 → DINT 位置寄存器。
- * 与 -X 电机侧完全独立，不是伺服电机尾部集成件。
+ * 实心轴编码器标准装法：编码器输入轴 ← 波纹管弹性联轴器 ← 丝杆轴伸；
+ * 本体由带中心孔的夹紧法兰锁在 L 型支架上（输入轴从孔中穿过），法兰贴
+ * 浮动轴承座端面一侧，本体不随丝杆转；A/B 相出线 → PLC X0/X1 高速
+ * 计数器 C0 → DINT 位置寄存器。与 -X 电机侧完全独立，不是伺服电机尾部集成件。
  */
 function ShaftEndEncoder() {
   const E = SHAFT_END_ENCODER;
@@ -510,29 +556,50 @@ function ShaftEndEncoder() {
   // 铭牌底板坐在圆柱面外侧；印刷条再坐在底板前表面之上，两层都不与宿主精确共面
   const plateZ = E.BODY_R + SURFACE_GAP;
   const printZ = plateZ + 2 * E.PLATE_PRINT_T;
+  // 夹紧法兰必须是「带中心孔的环」而不是实心圆盘：编码器输入轴要穿过这个孔。
+  // Lathe 剖面按「孔壁下沿 → 外圆下沿 → 外圆上沿 → 孔壁上沿 → 闭合」排列，
+  // 旋转后六个面法线分别朝外 / 朝孔内，FrontSide 下不会缺面。
+  const flangeProfile = useMemo(() => {
+    const h = E.FLANGE_T / 2;
+    return [
+      new THREE.Vector2(E.FLANGE_BORE_R, -h),
+      new THREE.Vector2(E.FLANGE_R, -h),
+      new THREE.Vector2(E.FLANGE_R, h),
+      new THREE.Vector2(E.FLANGE_BORE_R, h),
+      new THREE.Vector2(E.FLANGE_BORE_R, -h),
+    ];
+  }, [E]);
   return (
     <group position={[0, FRAME.SCREW_H, 0]}>
-      {/* L 型安装支架：立柱贴浮动轴承座端面下沿（不悬空），托板水平伸出托住法兰底面 */}
+      {/* L 型安装支架：立柱贴浮动轴承座端面下沿（不悬空），两条窄托板托住法兰底面。
+          中间镂空，联轴器下方不再被整片灰板铺满。 */}
       <mesh
         position={[E.BEARING_FACE_X + E.BRACKET_T / 2, -E.BRACKET_DROP / 2, 0]}
         material={materials.base}
       >
         <boxGeometry args={[E.BRACKET_T, E.BRACKET_DROP, E.BRACKET_W]} />
       </mesh>
-      <mesh
-        position={[(E.BEARING_FACE_X + S.FLANGE_MAX) / 2, -E.FLANGE_R - E.BRACKET_T / 2, 0]}
-        material={materials.base}
-      >
-        <boxGeometry args={[S.FLANGE_MAX - E.BEARING_FACE_X, E.BRACKET_T, E.BRACKET_W]} />
-      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={`enc-bracket-strip-${side}`}
+          position={[
+            (E.BEARING_FACE_X + S.FLANGE_MAX) / 2,
+            -E.FLANGE_R - E.BRACKET_T / 2,
+            side * (E.BRACKET_W / 2 - E.BRACKET_STRIP_W / 2),
+          ]}
+          material={materials.base}
+        >
+          <boxGeometry args={[S.FLANGE_MAX - E.BEARING_FACE_X, E.BRACKET_T, E.BRACKET_STRIP_W]} />
+        </mesh>
+      ))}
 
-      {/* 前端夹紧法兰 + 环向螺钉 */}
+      {/* 前端夹紧法兰：环形带中心孔 + 环向螺钉（编码器输入轴从孔中穿过） */}
       <mesh
         position={[(S.FLANGE_MIN + S.FLANGE_MAX) / 2, 0, 0]}
         rotation={[0, 0, Math.PI / 2]}
-        material={materials.brightSilver}
+        material={materials.encoderHub}
       >
-        <cylinderGeometry args={[E.FLANGE_R, E.FLANGE_R, E.FLANGE_T, 24]} />
+        <latheGeometry args={[flangeProfile, 24]} />
       </mesh>
       {Array.from({ length: E.FLANGE_BOLT_N }, (_, i) => {
         const a = (i / E.FLANGE_BOLT_N) * Math.PI * 2;
