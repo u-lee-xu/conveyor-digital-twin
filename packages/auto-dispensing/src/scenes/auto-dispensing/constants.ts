@@ -931,8 +931,15 @@ export const DRIVE_STATIONS = {
  *
  * 需求原文：「增量式编码器 1，安装于轴末端，连续检测料斗位置」，且
  * 「终点限位 + 翻转位 + 编码器同侧」。它不是伺服电机附件，而是另一套安装链：
- *   丝杆轴伸（随丝杆转）→ 小型弹性联轴器 → 编码器轴
- *   编码器本体由前端夹紧法兰锁在 L 型支架上，支架贴浮动轴承座端面，本体不转。
+ *   丝杆轴伸（随丝杆转）→ 波纹管弹性联轴器 → 编码器输入轴（随轴转）
+ *   → 带中心孔的夹紧法兰 → 静止编码器本体 → A/B 相出线。
+ *
+ * 实心轴编码器的标准装法就是「编码器实心轴 ↔ 弹性联轴器 ↔ 被测轴」，明确禁止
+ * 刚性硬连接；编码器本体靠带 2/3/4 安装孔、中心开孔的夹紧法兰固定在支架上，
+ * 编码器输入轴必须穿过该中心孔，外壳不随轴转。编码器反馈轴只传角度、不传扭矩，
+ * 因此用「两端铝合金夹紧轮毂 + 不锈钢薄壁波纹管 + 径向夹紧螺钉」的小型零背隙
+ * 联轴器（实物量级 φ15~32 × 31~46mm），而不是把电机侧传扭矩的大号梅花联轴器缩小。
+ *
  * A/B 相出线 → PLC X0/X1 高速计数器 C0 → 32 位 DINT 位置寄存器。
  * 测的是丝杆转角，因此 1024 脉冲/转 × 20mm 导程的换算不受联轴器间隙影响。
  */
@@ -940,24 +947,37 @@ export const SHAFT_END_ENCODER = {
   /** 浮动端轴承座外端面（机架局部 X）= 轴承座半长 + 端盖厚 */
   BEARING_FACE_X: FRAME.AXLE_TO + FRAME_DETAIL.SUPPORT_UNIT_LEN / 2 + 0.006,
   /** 丝杆轴伸出段（随丝杆转） */
-  SHAFT_STUB_LEN: 0.028,
+  SHAFT_STUB_LEN: 0.020,
   SHAFT_STUB_R: 0.008,
-  /** 小型弹性联轴器：两铝毂 + 中间弹性体 */
-  COUPLING_LEN: 0.018,
-  COUPLING_R: 0.011,
-  SPIDER_R: 0.013,
-  /** 前端夹紧法兰 + 环向螺钉 */
-  FLANGE_R: 0.030,
+  /** 波纹管弹性联轴器：两端铝合金夹紧轮毂 + 中间不锈钢薄壁波纹管 */
+  COUPLING_LEN: 0.030,
+  COUPLING_R: 0.013,
+  HUB_LEN: 0.009,
+  BELLOWS_R: 0.0115,
+  BELLOWS_N: 7,
+  /** 两端径向夹紧螺钉（实物为 M3/M4 内六角，可见螺钉帽） */
+  CLAMP_SCREW_R: 0.0018,
+  CLAMP_SCREW_H: 0.0025,
+  /** 编码器输入轴：从联轴器末端外露一段，穿过夹紧法兰中心孔止于本体前端面。
+   *  刻意留足长度，让「右铝毂 → 细轴 → 环形法兰」在斜侧机位下不被法兰投影吞掉 */
+  INPUT_SHAFT_LEN: 0.026,
+  INPUT_SHAFT_R: 0.004,
+  /** 前端夹紧法兰：环形带中心孔（不是实心圆盘），3 孔固定在 L 型支架上。
+   *  外径只比本体略大（Ø52 vs Ø50）：旧版 Ø60 会从斜侧把整段输入轴遮住 */
+  FLANGE_R: 0.026,
   FLANGE_T: 0.006,
+  FLANGE_BORE_R: 0.0075,
   FLANGE_BOLT_N: 3,
   FLANGE_BOLT_R: 0.0025,
   /** 编码器本体：φ50 × 44 的圆柱形金属外壳 */
   BODY_R: 0.025,
   BODY_LEN: 0.044,
-  /** L 型安装支架：立柱贴浮动轴承座端面下沿，托板水平伸出承托法兰 */
+  /** L 型安装支架：立柱贴浮动轴承座端面下沿，两条窄托板水平伸出承托法兰，
+   *  中间镂空，避免整片灰板铺在联轴器下方把它挡住 */
   BRACKET_T: 0.006,
   BRACKET_W: 0.060,
   BRACKET_DROP: 0.030,
+  BRACKET_STRIP_W: 0.010,
   /** 尾部出线插头（朝 +X） */
   CONN_R: 0.009,
   CONN_LEN: 0.012,
@@ -984,18 +1004,26 @@ export const SHAFT_END_ENCODER = {
 const encX0 = SHAFT_END_ENCODER.BEARING_FACE_X;
 const encShaftEnd = encX0 + SHAFT_END_ENCODER.SHAFT_STUB_LEN;
 const encCouplingEnd = encShaftEnd + SHAFT_END_ENCODER.COUPLING_LEN;
-const encFlangeEnd = encCouplingEnd + SHAFT_END_ENCODER.FLANGE_T;
-const encBodyEnd = encFlangeEnd + SHAFT_END_ENCODER.BODY_LEN;
+const encInputEnd = encCouplingEnd + SHAFT_END_ENCODER.INPUT_SHAFT_LEN;
+const encBodyEnd = encInputEnd + SHAFT_END_ENCODER.BODY_LEN;
 
-/** 轴末端编码器轴向站位：全部由 SHAFT_END_ENCODER 派生，组件不写死坐标 */
+/**
+ * 轴末端编码器轴向站位：全部由 SHAFT_END_ENCODER 派生，组件不写死坐标。
+ *
+ * 夹紧法兰套在编码器输入轴的末段（FLANGE_MIN = INPUT_MAX − FLANGE_T），
+ * 因此「外露轴段 → 环形法兰 → 本体」在轴向连续且互不打断；法兰中心孔半径
+ * 大于输入轴半径，两者同轴但不同半径，不构成体积穿插。
+ */
 export const ENCODER_STATIONS = {
   SHAFT_MIN: encX0,
   SHAFT_MAX: encShaftEnd,
   COUPLING_MIN: encShaftEnd,
   COUPLING_MAX: encCouplingEnd,
-  FLANGE_MIN: encCouplingEnd,
-  FLANGE_MAX: encFlangeEnd,
-  BODY_MIN: encFlangeEnd,
+  INPUT_MIN: encCouplingEnd,
+  INPUT_MAX: encInputEnd,
+  FLANGE_MIN: encInputEnd - SHAFT_END_ENCODER.FLANGE_T,
+  FLANGE_MAX: encInputEnd,
+  BODY_MIN: encInputEnd,
   BODY_MAX: encBodyEnd,
   CONN_MAX: encBodyEnd + SHAFT_END_ENCODER.CONN_LEN,
   CABLE_MAX: encBodyEnd + SHAFT_END_ENCODER.CONN_LEN + SHAFT_END_ENCODER.CABLE_LEN,
@@ -1130,11 +1158,12 @@ export const PART_STAGES: Record<string, PartStage> = {
   // 灯塔抬高后总高 1.685m，展台相机需覆盖 y ∈ [0, 1.685]（自检 covers() 断言）
   // 视点上移、稍退并放宽 fov 到 41°：竖向视野 [-0.16, 1.88]，上下各留约 8% 余量，灯头不再贴边
   tower: { label: '信号灯塔', camera: [0.80, 1.44, 2.55], target: [0, 0.86, 0], fov: 41, grid: 1.6, gridY: 0 },
-  // 轴末端编码器：1:1 近景把「浮动轴承座 → 轴伸 → 弹性联轴器 → 夹紧法兰 →
-  // 静止本体 → A/B 相出线」整条安装链收进画面；与整机共用 EncoderStage 的同一批几何。
+  // 轴末端编码器：1:1 近景把「浮动轴承座 → 轴伸 → 波纹管联轴器 → 编码器输入轴
+  // → 带孔夹紧法兰 → 静止本体 → A/B 相出线」整条安装链收进画面；
+  // 与整机共用 EncoderStage 的同一批几何（链变长后 target 右移，保证尾部不裁切）。
   encoder: {
     label: '轴末端编码器',
-    camera: [0.18, 0.13, 0.30], target: [0.02, -0.005, 0], fov: 36,
+    camera: [0.20, 0.13, 0.34], target: [0.042, -0.005, 0], fov: 36,
     grid: 0.3, gridY: -0.040,
   },
 };
@@ -1281,7 +1310,9 @@ export const VISUAL = {
   MOTOR_FAN_COLOR: '#232b35',    // 尾部风扇罩：深色冲压件
   TERMINAL_BOX_COLOR: '#46525f', // 顶部接线盒：铸件灰
   ENCODER_BODY_COLOR: '#2b3440', // 轴末端独立编码器金属外壳
-  COUPLING_SPIDER_COLOR: '#c2552f', // 梅花联轴器聚氨酯弹性体（工业常用砖红/绿）
+  COUPLING_SPIDER_COLOR: '#c2552f', // -X 电机侧梅花联轴器聚氨酯弹性体（工业常用砖红/绿）
+  ENCODER_HUB_COLOR: '#c3ced9', // +X 编码器侧波纹管联轴器铝合金轮毂 / 带孔夹紧法兰
+  ENCODER_BELLOWS_COLOR: '#8795a5', // +X 编码器侧不锈钢薄壁波纹管（比铝毂深一档，褶皱可读）
   ENCODER_Z_MARK_COLOR: '#fbbf24',  // Z 相零位标记：琥珀亮点
   ENCODER_PHASE_A_COLOR: '#e07b39', // A 相芯线：橙棕
   ENCODER_PHASE_B_COLOR: '#4fb3a5', // B 相芯线：青绿

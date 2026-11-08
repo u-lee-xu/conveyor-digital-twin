@@ -633,17 +633,55 @@ describe('驱动端口径：普通正反转电机 + 轴末端独立增量编码�
     expect(frame).not.toContain('materials.encoderCap');
   });
 
-  it('编码器安装链首尾相接，本体静止、轴与弹性联轴器随丝杆转', () => {
+  it('编码器安装链首尾相接：轴伸 → 波纹管联轴器 → 输入轴 → 带孔法兰 → 静止本体', () => {
     expect(ES.SHAFT_MAX).toBeCloseTo(ES.COUPLING_MIN, 9);
-    expect(ES.COUPLING_MAX).toBeCloseTo(ES.FLANGE_MIN, 9);
+    expect(ES.COUPLING_MAX).toBeCloseTo(ES.INPUT_MIN, 9);
+    expect(ES.INPUT_MAX).toBeCloseTo(ES.FLANGE_MAX, 9);
     expect(ES.FLANGE_MAX).toBeCloseTo(ES.BODY_MIN, 9);
+    expect(ES.FLANGE_MIN).toBeGreaterThan(ES.INPUT_MIN); // 法兰套在输入轴末段，不是堵在联轴器前面
+    expect(E.INPUT_SHAFT_LEN - E.FLANGE_T).toBeGreaterThan(0.016); // 细轴外露足够长，斜侧能读出穿孔关系
     expect(E.FLANGE_R).toBeGreaterThan(E.BODY_R);
-    expect(E.SPIDER_R).toBeGreaterThan(E.COUPLING_R);
+    expect(E.FLANGE_R - E.BODY_R).toBeLessThan(0.004); // 法兰只比本体略大，Ø60 会遮住整段输入轴
+    expect(E.BELLOWS_R).toBeLessThan(E.COUPLING_R); // 波纹管外径略小于铝毂
+    expect(2 * E.HUB_LEN).toBeLessThan(E.COUPLING_LEN); // 中间必须留给波纹管
+    expect(E.BELLOWS_N).toBeGreaterThanOrEqual(6);
+    expect(E).not.toHaveProperty('SPIDER_R'); // 不再把电机侧梅花联轴器缩小复制
     const rotIdx = frame.indexOf('<EncoderRotatingParts />');
     const rotGroupEnd = frame.indexOf('</group>', rotIdx);
     expect(rotIdx).toBeGreaterThan(-1);
     expect(rotGroupEnd).toBeGreaterThan(rotIdx);
     expect(frame.indexOf('<ShaftEndEncoder />')).toBeGreaterThan(rotGroupEnd);
+  });
+
+  it('夹紧法兰带中心孔、输入轴穿孔而过，联轴器本体外露且带夹紧螺钉', () => {
+    expect(E.FLANGE_BORE_R).toBeGreaterThan(E.INPUT_SHAFT_R + SURFACE_GAP);
+    expect(E.FLANGE_BORE_R).toBeLessThan(E.FLANGE_R * 0.5);
+    expect(E.INPUT_SHAFT_R).toBeLessThan(E.SHAFT_STUB_R); // 编码器轴比丝杆轴细
+    expect(E.CLAMP_SCREW_R).toBeGreaterThan(0);
+    expect(E.BRACKET_STRIP_W * 2).toBeLessThan(E.BRACKET_W); // 托板中间镂空
+    expect(frame).toContain('latheGeometry');
+    expect(frame).toContain('E.FLANGE_BORE_R');
+    expect(frame).toContain('enc-bellows-');
+    expect(frame).toContain('enc-clamp-');
+    expect(frame).toContain('enc-hub-');
+    expect(frame).toContain('enc-bracket-strip-');
+    expect(frame).toContain('materials.encoderHub');
+    expect(frame).toContain('materials.encoderBellows');
+    // 防回退：法兰不得变回实心圆柱，联轴器不得变回三段式梅花弹性体
+    expect(frame).not.toContain('enc-cpl-');
+    expect(frame).not.toContain('E.FLANGE_R, E.FLANGE_R, E.FLANGE_T');
+  });
+
+  it('编码器侧新材质颜色只来自 VISUAL，且与电机侧梅花弹性体不同色', () => {
+    expect(VISUAL.ENCODER_HUB_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.ENCODER_BELLOWS_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.ENCODER_BELLOWS_COLOR).not.toBe(VISUAL.ENCODER_HUB_COLOR);
+    expect(VISUAL.ENCODER_BELLOWS_COLOR).not.toBe(VISUAL.COUPLING_SPIDER_COLOR);
+    ['encoderHub:', 'encoderBellows:'].forEach((key) => {
+      const i = materialsSource.indexOf(key);
+      expect(i, `${key} 缺失`).toBeGreaterThan(-1);
+      expect(materialsSource.slice(i, i + 220)).toContain('VISUAL.');
+    });
   });
 
   it('普通异步电机外形：风扇罩 / 接线盒 / 底脚 / 环向散热筋，无伺服后罩与止口', () => {
