@@ -33,7 +33,10 @@ const selectStyle: CSSProperties = {
  * 独立 App 与平台壳共用（由 DispensingSceneWrapper 与 App 各自渲染）。
  * 所有切换都是 store 驱动的运行时切换，不刷新页面；CameraRig 负责相机阻尼过渡。
  */
-export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: boolean }) {
+export function ViewSwitcher({
+  showPanelToggle = false,
+  compact = false,
+}: { showPanelToggle?: boolean; compact?: boolean }) {
   const activeView = useAppStore((s) => s.activeView);
   const activeStage = useAppStore((s) => s.activeStage);
   const mirrored = useAppStore((s) => s.mirrored);
@@ -45,20 +48,38 @@ export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: bo
   const setShowLabels = useAppStore((s) => s.setShowLabels);
   const setPanelCollapsed = useAppStore((s) => s.setPanelCollapsed);
 
+  // 紧凑布局：工具栏改成「贴顶、单行、可横向滚动」，不再换行铺满整个画面挡住 3D 标签。
+  // 功能一个不少（机位 / 展台 / 镜像 / 标签 / 面板），只是排布方式随视口变化。
+  const rowStyle: CSSProperties = compact
+    ? {
+      ...card, maxWidth: '100%', overflowX: 'auto', flexWrap: 'nowrap',
+      justifyContent: 'flex-start', padding: '4px 6px', gap: 4,
+    }
+    : card;
+  const chipStyle: CSSProperties = compact ? { ...chip, fontSize: 10, flex: '0 0 auto' } : chip;
+  const buttonStyle = (active: boolean, disabled = false): CSSProperties => (
+    compact
+      ? { ...btn(active, disabled), fontSize: 10, padding: '3px 6px', flex: '0 0 auto' }
+      : btn(active, disabled)
+  );
+
   return (
     <div style={{
-      position: 'absolute', top: 12, right: 12, zIndex: 30,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
+      position: 'absolute',
+      top: compact ? 8 : 12, right: compact ? 8 : 12, left: compact ? 8 : undefined,
+      zIndex: 30,
+      display: 'flex', flexDirection: 'column',
+      alignItems: compact ? 'stretch' : 'flex-end', gap: compact ? 4 : 6,
       pointerEvents: 'auto',
     }}>
-      <div style={card}>
-        <span style={chip}>机位</span>
+      <div style={rowStyle}>
+        <span style={chipStyle}>机位</span>
         {VIEW_BUTTONS.map((key) => (
           <button
             key={key}
             type="button"
             title={VIEW_PRESETS[key].desc}
-            style={btn(!activeStage && activeView === key)}
+            style={buttonStyle(!activeStage && activeView === key)}
             onClick={() => setView(key)}
           >
             {VIEW_PRESETS[key].label}
@@ -66,8 +87,8 @@ export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: bo
         ))}
       </div>
 
-      <div style={card}>
-        <span style={chip}>部件展台</span>
+      <div style={rowStyle}>
+        <span style={chipStyle}>部件展台</span>
         <select
           value={activeStage ?? ''}
           style={selectStyle}
@@ -79,12 +100,12 @@ export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: bo
           ))}
         </select>
         {activeStage && (
-          <button type="button" style={btn(false)} onClick={() => setStage(null)}>返回整机</button>
+          <button type="button" style={buttonStyle(false)} onClick={() => setStage(null)}>返回整机</button>
         )}
         <button
           type="button"
           title="沿中轴面左右镜像：起点与按钮箱移到右手侧"
-          style={btn(mirrored, !!activeStage)}
+          style={buttonStyle(mirrored, !!activeStage)}
           disabled={!!activeStage}
           onClick={() => setMirrored(!mirrored)}
         >
@@ -92,7 +113,7 @@ export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: bo
         </button>
         <button
           type="button"
-          style={btn(showLabels)}
+          style={buttonStyle(showLabels)}
           onClick={() => setShowLabels(!showLabels)}
         >
           标签 {showLabels ? 'ON' : 'OFF'}
@@ -100,7 +121,7 @@ export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: bo
         {showPanelToggle && (
           <button
             type="button"
-            style={btn(panelCollapsed)}
+            style={buttonStyle(panelCollapsed)}
             onClick={() => setPanelCollapsed(!panelCollapsed)}
           >
             {panelCollapsed ? '展开面板' : '收起面板'}
@@ -109,7 +130,7 @@ export function ViewSwitcher({ showPanelToggle = false }: { showPanelToggle?: bo
       </div>
 
       {activeStage && (
-        <div style={{ ...card, color: '#94a3b8', fontSize: 11, padding: '4px 8px' }}>
+        <div style={{ ...rowStyle, color: '#94a3b8', fontSize: 11, padding: '4px 8px' }}>
           部件展台 · {PART_STAGES[activeStage].label} · 1:1 真实尺度 · 拖拽旋转 / 滚轮缩放
         </div>
       )}

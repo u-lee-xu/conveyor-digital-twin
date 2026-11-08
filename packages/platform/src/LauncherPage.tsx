@@ -13,20 +13,22 @@ const PROTOCOL_LABELS: Record<string, string> = {
 
 export function LauncherPage({ devices, onSelect }: LauncherPageProps) {
   return (
-    <div className="w-screen h-screen bg-dark-900 overflow-hidden relative flex flex-col items-center justify-center">
+    <div className="w-screen h-screen bg-dark-900 overflow-y-auto overflow-x-hidden relative">
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-blue-600/10 blur-3xl rounded-full" />
         <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[300px] bg-purple-600/10 blur-3xl rounded-full" />
       </div>
 
-      <div className="relative z-10 text-center mb-10 px-6">
-        <h1 className="text-4xl font-bold text-white tracking-wide">
-          数字孪生<span className="text-gradient">仿真平台</span>
-        </h1>
-        <p className="mt-3 text-sm text-gray-400">选择要进入的教学设备 · © 2026 老徐</p>
-      </div>
+      {/* min-h-full 让桌面仍居中，小屏内容超高时整页可滚动（旧版固定视口禁止滚动，会裁掉标题和最后一张卡） */}
+      <div className="relative min-h-full flex flex-col items-center justify-center py-8">
+        <div className="relative z-10 text-center mb-6 sm:mb-10 px-5">
+          <h1 className="text-2xl sm:text-4xl font-bold text-white tracking-wide">
+            数字孪生<span className="text-gradient">仿真平台</span>
+          </h1>
+          <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-gray-400">选择要进入的教学设备 · © 2026 老徐</p>
+        </div>
 
-      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 px-6 max-w-5xl w-full">
+        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 px-4 sm:px-6 max-w-5xl w-full">
         {devices.map((device) => (
           <button
             key={device.id}
@@ -63,6 +65,7 @@ export function LauncherPage({ devices, onSelect }: LauncherPageProps) {
             </div>
           </button>
         ))}
+        </div>
       </div>
     </div>
   );

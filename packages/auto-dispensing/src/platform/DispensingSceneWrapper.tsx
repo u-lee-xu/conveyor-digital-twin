@@ -1,7 +1,10 @@
-import { Suspense, type ComponentType } from 'react';
+import { Suspense, useEffect, useState, type ComponentType } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { isViewerRuntime } from '@digital-twin/shared';
+import {
+  isViewerRuntime, useMobile,
+  fitCameraPosition, fitMaxDistance, renderPixelRatio,
+} from '@digital-twin/shared';
 import { SCENE_CAMERA, PART_STAGES, VISUAL } from '../scenes/auto-dispensing/constants';
 import { resolveViewTuples } from '../scenes/auto-dispensing/viewGoals';
 import { useAppStore } from '../stores/useAppStore';
@@ -20,6 +23,17 @@ const initialView = resolveViewTuples(
   initialQuery.get('mirror') === '1',
 );
 
+/** 视口尺寸只用于初始机位与 OrbitControls 距离上限；之后的转屏由 CameraRig 接管 */
+function useViewportSize(): { w: number; h: number } {
+  const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  useEffect(() => {
+    const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return size;
+}
+
 export function DispensingSceneWrapper({
   SceneContent,
   cameraPosition = SCENE_CAMERA,
@@ -30,17 +44,26 @@ export function DispensingSceneWrapper({
   const activeStage = useAppStore((s) => s.activeStage);
   // 角色判据统一来自 shared（软件=主控 / 浏览器+IP=观众），不再读 history.state
   const isViewer = isViewerRuntime();
+  const compact = useMobile();
+  const vp = useViewportSize();
   // 展台相机只有 0.5~2m：整机 minDistance=2 会把近景强行推远，故展台单独放宽到 0.2m
   const stageDistance = activeStage && PART_STAGES[activeStage] ? 0.2 : 2;
+  // 初始机位按视口宽高比补偿一次，避免首帧闪一下被裁切的画面
+  const initialCamera = fitCameraPosition(
+    initialView.camera ?? cameraPosition,
+    initialView.target,
+    vp.w,
+    vp.h,
+  );
 
   return (
     <>
       <Canvas
         style={{ position: 'absolute', inset: 0 }}
         shadows={!isViewer}
-        dpr={isViewer ? 1 : undefined}
+        dpr={renderPixelRatio(isViewer)}
         camera={{
-          position: initialView.camera ?? cameraPosition,
+          position: initialCamera,
           fov: initialView.fov,
           near: 0.1, far: 1000,
         }}
@@ -51,7 +74,7 @@ export function DispensingSceneWrapper({
           enableDamping
           dampingFactor={0.1}
           minDistance={stageDistance}
-          maxDistance={25}
+          maxDistance={fitMaxDistance(25, vp.w, vp.h)}
           maxPolarAngle={Math.PI / 2}
         />
         <color attach="background" args={[VISUAL.SCENE_BACKGROUND]} />
@@ -67,7 +90,7 @@ export function DispensingSceneWrapper({
           <SceneContent />
         </Suspense>
       </Canvas>
-      {!isViewer && <ViewSwitcher />}
+      {!isViewer && <ViewSwitcher compact={compact} />}
     </>
   );
 }

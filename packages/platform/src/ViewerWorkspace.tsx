@@ -147,14 +147,29 @@ export function ViewerWorkspace() {
       )}
 
       {/* 观众端无返回、无设备切换、无模式按钮：只剩状态角标 */}
-      <div className="absolute top-3 right-3 z-10 pointer-events-none">
-        <span className={`text-xs px-2.5 py-1 rounded-full border backdrop-blur ${badge.cls}`}>{badge.text}</span>
+      {/* 角标 / 状态条：刘海屏安全区 + 响应式字号 + 单行截断（旧版在 390px 竖屏会折成两行） */}
+      <div
+        className="absolute z-10 pointer-events-none max-w-[calc(100vw-2rem)]"
+        style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: 'max(0.75rem, env(safe-area-inset-right))' }}
+      >
+        <span className={`block truncate text-[0.7rem] sm:text-xs lg:text-sm px-2.5 py-1 rounded-full border backdrop-blur ${badge.cls}`}>
+          {badge.text}
+        </span>
       </div>
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none px-4 py-1.5 rounded-full border border-slate-600/40 bg-slate-900/70 backdrop-blur">
-        <span className="text-[0.7rem] font-mono text-slate-400">
-          {snapshot
-            ? `${snapshot.deviceId ?? '—'} · ${snapshot.protocol} · 更新于 ${new Date(snapshot.ts).toLocaleTimeString()}${snapshot.error ? ` · ${snapshot.error}` : ''}`
-            : '等待数据…'}
+      <div
+        className="absolute left-1/2 -translate-x-1/2 z-10 pointer-events-none max-w-[calc(100vw-2rem)] px-3 sm:px-4 py-1.5 rounded-full border border-slate-600/40 bg-slate-900/70 backdrop-blur"
+        style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      >
+        <span className="block truncate whitespace-nowrap font-mono text-[0.65rem] sm:text-xs lg:text-sm text-slate-400">
+          {snapshot ? (
+            <>
+              <span className="sm:hidden">{snapshot.deviceId ?? '—'} · {new Date(snapshot.ts).toLocaleTimeString()}</span>
+              <span className="hidden sm:inline">
+                {snapshot.deviceId ?? '—'} · {snapshot.protocol} · 更新于 {new Date(snapshot.ts).toLocaleTimeString()}
+                {snapshot.error ? ` · ${snapshot.error}` : ''}
+              </span>
+            </>
+          ) : '等待数据…'}
         </span>
       </div>
     </div>

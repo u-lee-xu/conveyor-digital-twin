@@ -313,3 +313,13 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* 跨设备适配：观众端竖屏相机拉远后部件标签会挤成一团，按宽高比隐藏（主控教学仍保留） */
+@media (max-aspect-ratio: 1/1) {
+  .dt-viewer-label { display: none; }
+}
+
+/* 智能电视 / 大屏：观众端 3D 标签字号随视口放大（inline fontSize 需 !important 覆盖） */
+@media (min-width: 1600px) {
+  .dt-viewer-label { font-size: 13px !important; padding: 5px 12px !important; }
+}
