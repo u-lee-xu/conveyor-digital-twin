@@ -8,6 +8,8 @@ import {
   LIGHT_DOME_R, LIGHT_DOME_STEP, LIGHT_POLE_H, LIGHT_POLE_Y, VISUAL, SURFACE_GAP,
 } from '../constants';
 import { materials } from '../../../components/scene/shared/materials';
+import { CABINET_BUTTON_IO, type CabinetButtonKey } from '../simulationIo';
+import { writeSimPlcVar } from '../../../services/simulationPlc';
 
 const P = CABINET_PANEL;
 const SW = CABINET_SELECTOR_SHAPE;
@@ -442,10 +444,18 @@ export function ControlCabinet() {
 
       {/* 按钮两排；急停独占下排左侧，中间是手动/自动选择开关 */}
       {CABINET_BUTTONS.map((b) => {
+        const key = b.key as CabinetButtonKey;
+        // 仿真模式：按钮箱是真实的 PLC 输入元件，按下/松开必须写对应线圈；
+        // 本地 store 仅做即时外观反馈，下一轮 readVars 回读会把它对齐到 PLC 真值。
+        // 其余模式仍只驱动本地演示状态机，不发起网络写入。
+        const press = (down: boolean) => {
+          setButton(key, down);
+          if (mode === 'sim') void writeSimPlcVar(CABINET_BUTTON_IO[key], down);
+        };
         const handlers = {
           pressed: !!buttons[b.key],
-          onDown: () => setButton(b.key, true),
-          onUp: () => setButton(b.key, false),
+          onDown: () => press(true),
+          onUp: () => press(false),
         };
         return b.kind === 'estop'
           ? <EStopButton key={b.key} spec={b} mirrored={flipText} {...handlers} />

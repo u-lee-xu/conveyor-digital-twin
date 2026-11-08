@@ -485,7 +485,10 @@ describe('悬停浮框三协议地址（防回退）', () => {
     expect(controlSource).toContain('ioAddressRows(points)');
     expect(statusSource).toContain('ioAddressRows([point])');
     expect(simSource).toContain('pointAddressRow(addrKey, label)');
-    expect(simSource).toContain('addrKey="MOTOR_FWD"');
+    // 仿真面板已改为「全部 22 输入点 / 10 输出点由点位表 map 渲染」，
+    // 不再逐条写死 addrKey 字面量；更细的绑定断言见 __simulation_io_check.test.ts
+    expect(simSource).toContain('addrKey={p.key}');
+    expect(simSource).toContain('MANUAL_INPUT_POINTS.map');
     expect(simSource).not.toContain('getAddr(');
     expect(simSource).not.toContain('Coil ${map');
   });
