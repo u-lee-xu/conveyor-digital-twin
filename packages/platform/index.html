@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 空图标：避免浏览器默认请求 /favicon.ico 产生 404 控制台噪声 -->
+    <link rel="icon" href="data:," />
     <title>数字孪生仿真平台</title>
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
@@ -10,7 +12,7 @@
       style-src 'self' 'unsafe-inline';
       img-src 'self' data: blob:;
       font-src 'self' data:;
-      connect-src 'self' ws://*:8083 wss://*:8084 ws://localhost:* wss://*:*;
+      connect-src 'self' ws://*:8081 ws://*:8082 ws://*:8083 wss://*:8084 ws://localhost:* ws://127.0.0.1:* wss://*:*;
       worker-src 'self' blob:;
     " />
   </head>

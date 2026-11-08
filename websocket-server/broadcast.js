@@ -1,251 +1,130 @@
 /**
- * 边缘部署状态广播服务（edge status broadcast）— 多设备版
+ * 课堂演示状态中继（纯扇出，不连接 PLC）
  *
- * 拓扑：PLC <-> websocket-server(8081) <-> broadcast(8082) <-> 观众端
+ * 拓扑：主控浏览器 --(report 单向)--> 中继 --(snapshot)--> 观众浏览器 ×N
  *
- * 职责：
- *  1. 作为 websocket-server(8081) 的常驻客户端，建立/复用 PLC 会话
- *  2. 按"当前激活设备"周期轮询 PLC 关键状态（每设备独立协议/地址/变量表）
- *  3. 把状态快照（含 deviceId）广播给所有订阅者（手机观众页 / 平台观众模式）
- *  4. 接收 set-device 消息切换激活设备（教师端进入某设备工作区时上报）
+ * 设计口径（2026-11-08 定稿）：
+ *  - PLC 只由主控电脑通过网关 8081 双向访问；本服务不再连网关、不再 connect PLC、
+ *    不再轮询 read-vars，避免真实 PLC 出现第二个客户端和共享会话写冲突。
+ *  - 快照来自主控 UI store，因此演示 / 手动模式（未连 PLC）观众也能同步看到画面。
+ *  - 观众端零上行：只有主控连接能 report；观众发来的任何消息一律丢弃。
+ *  - 后加入的观众立即收到 lastSnapshot，不会黑屏等待。
  *
- * 配置：edge-broadcast.json
+ * 配置：edge-broadcast.json 只读取 broadcastPort；设备/地址表由主控前端负责。
  */
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 
 const CONFIG_PATH = path.join(__dirname, 'edge-broadcast.json');
-
-const DEFAULT_CONFIG = {
-  bridgeUrl: 'ws://127.0.0.1:8081',
-  broadcastPort: 8082,
-  pollIntervalMs: 1000,
-  activeDevice: 'conveyor-sorting',
-  devices: {
-    'conveyor-sorting': {
-      protocol: 'modbus',
-      host: '192.168.1.10',
-      port: 502,
-      vars: ['START', 'RESET', 'STOP', 'SENSOR_FEED', 'SENSOR_COLOR', 'SENSOR_MATERIAL',
-        'MAGNETIC_FEED_RETRACT', 'MAGNETIC_FEED_EXTEND',
-        'MAGNETIC_SORTING1_RETRACT', 'MAGNETIC_SORTING1_EXTEND',
-        'MAGNETIC_SORTING2_RETRACT', 'MAGNETIC_SORTING2_EXTEND',
-        'FEED_CYLINDER_VALVE', 'SORTING1_CYLINDER_VALVE', 'SORTING2_CYLINDER_VALVE',
-        'CONVEYOR', 'SIGNAL_TOWER_RED', 'SIGNAL_TOWER_GREEN', 'SIGNAL_TOWER_YELLOW'],
-    },
-  },
-};
+const DEFAULT_CONFIG = { broadcastPort: 8082 };
 
 function loadConfig() {
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    const user = JSON.parse(raw);
-    return {
-      ...DEFAULT_CONFIG,
-      ...user,
-      devices: { ...DEFAULT_CONFIG.devices, ...(user.devices || {}) },
-    };
+    const user = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    return { ...DEFAULT_CONFIG, ...user };
   } catch {
     return DEFAULT_CONFIG;
   }
 }
 
 const config = loadConfig();
-let reqId = 0;
 
-/** 经桥发送消息并等待响应 */
-function bridgeRequest(ws, payload) {
-  return new Promise((resolve) => {
-    const id = ++reqId;
-    const timer = setTimeout(() => resolve({ success: false, error: 'timeout' }), 3000);
-    const onMessage = (raw) => {
-      let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg.id === id) {
-        clearTimeout(timer);
-        ws.off('message', onMessage);
-        resolve(msg);
-      }
-    };
-    ws.on('message', onMessage);
-    ws.send(JSON.stringify({ id, ...payload }));
-  });
-}
-
-class Broadcaster {
+class Relay {
   constructor() {
-    this.bridge = null;
-    this.connected = false;
-    // 初始无激活设备：等待主控端 set-device 后才开始轮询（观众端黑屏等待）
     this.deviceId = null;
+    this.mode = null;
     this.lastSnapshot = null;
+    /** 当前主控连接；只有它能上报，观众连接不持有此引用 */
+    this.controller = null;
+    this.leaveTimer = null;
     this.viewers = new Set();
-    this.pollTimer = null;
-    this.reconnectTimer = null;
-    this.connectTimer = null;
-  }
-
-  get device() {
-    return this.deviceId ? (config.devices[this.deviceId] || null) : null;
   }
 
   start() {
-    this.startBridge();
-    this.startBroadcastServer();
-  }
-
-  startBridge() {
-    this.bridge = new WebSocket(config.bridgeUrl);
-    this.bridge.on('open', () => {
-      console.log(`[broadcast] 已连接桥 ${config.bridgeUrl}`);
-      this.tryConnect();
-    });
-    this.bridge.on('close', () => {
-      this.connected = false;
-      this.broadcastError('网关断开');
-      console.log('[broadcast] 桥断开，5秒后重连');
-      this.reconnectTimer = setTimeout(() => this.startBridge(), 5000);
-    });
-    this.bridge.on('error', (err) => {
-      console.error('[broadcast] 桥错误:', err.message);
-    });
-  }
-
-  async tryConnect() {
-    if (!this.bridge || this.bridge.readyState !== WebSocket.OPEN) return;
-    if (!this.device) {
-      // 无激活设备：广播等待状态，不连 PLC（主控进入后 set-device 再来）
-      this.broadcastSnapshot({ vars: {}, error: '主控尚未进入设备' });
-      return;
-    }
-    const dev = this.device;
-    const res = await bridgeRequest(this.bridge, {
-      type: 'connect',
-      protocol: dev.protocol,
-      host: dev.host,
-      port: dev.port,
-      rack: dev.rack || 0,
-      slot: dev.slot || 1,
-      // 场景自带变量表时下发给网关（缺省沿用网关内置表，兼容已有设备）
-      ...(dev.variables ? { variables: dev.variables } : {}),
-      // 32 位 DINT 数值变量表：与布尔变量表分开发，旧设备不给就是空表
-      ...(dev.words ? { wordVariables: dev.words } : {}),
-    });
-    this.connected = res.success;
-    console.log(`[broadcast] 设备 ${this.deviceId} PLC连接 ${res.success ? '成功' : '失败'}: ${res.error || ''}`);
-    this.broadcastSnapshot({ vars: {}, error: res.success ? undefined : (res.error || 'PLC连接失败') });
-    if (res.success) {
-      this.pollLoop();
-    } else {
-      this.connectTimer = setTimeout(() => this.tryConnect(), 5000);
-    }
-  }
-
-  async pollLoop() {
-    while (this.connected && this.bridge && this.bridge.readyState === WebSocket.OPEN) {
-      try {
-        const dev = this.device;
-        const varsRes = await bridgeRequest(this.bridge, { type: 'read-vars', names: dev.vars });
-        // 位置等 32 位 DINT 数值走独立通道；旧设备没有 wordVars 时直接给空表
-        const wordsRes = (dev.wordVars && dev.wordVars.length)
-          ? await bridgeRequest(this.bridge, { type: 'read-words', names: dev.wordVars })
-          : { success: true, values: {} };
-        const statusRes = await bridgeRequest(this.bridge, { type: 'get-status' });
-        this.broadcastSnapshot({
-          vars: {
-            ...(varsRes.success ? (varsRes.values || {}) : {}),
-            ...(wordsRes.success ? (wordsRes.values || {}) : {}),
-          },
-          error: !varsRes.success ? varsRes.error : (wordsRes.success ? undefined : wordsRes.error),
-          protocol: statusRes.protocol || dev.protocol,
-        });
-      } catch (err) {
-        console.error('[broadcast] 轮询失败:', err.message);
-      }
-      await new Promise((r) => setTimeout(r, config.pollIntervalMs));
-    }
-  }
-
-  /** 切换激活设备：null 表示主控离开（观众等待）；非 null 校验后重连新设备 */
-  setActiveDevice(deviceId) {
-    if (deviceId && !config.devices[deviceId]) {
-      console.error(`[broadcast] 未知设备: ${deviceId}`);
-      return;
-    }
-    if (deviceId === this.deviceId && (deviceId === null || this.connected)) {
-      console.log(`[broadcast] 设备未变化，忽略: ${deviceId}`);
-      return;
-    }
-    console.log(`[broadcast] 切换激活设备: ${this.deviceId} -> ${deviceId}`);
-    this.deviceId = deviceId;
-    this.connected = false;
-    this.lastSnapshot = null;
-    if (this.connectTimer) clearTimeout(this.connectTimer);
-    this.tryConnect();
-  }
-
-  broadcastSnapshot({ vars, error, protocol }) {
-    const snapshot = {
-      type: 'snapshot',
-      deviceId: this.deviceId,
-      ts: Date.now(),
-      connected: this.connected,
-      protocol: protocol || (this.device ? this.device.protocol : 'none'),
-      vars,
-      error,
-    };
-    this.lastSnapshot = snapshot;
-    this.broadcast(snapshot);
-  }
-
-  broadcastError(error) {
-    const snapshot = {
-      type: 'snapshot',
-      deviceId: this.deviceId,
-      ts: Date.now(),
-      connected: false,
-      protocol: this.device.protocol,
-      vars: {},
-      error,
-    };
-    this.lastSnapshot = snapshot;
-    this.broadcast(snapshot);
-  }
-
-  startBroadcastServer() {
     const wss = new WebSocket.Server({ port: config.broadcastPort });
-    console.log(`[broadcast] 观众广播服务启动 :${config.broadcastPort}`);
+    console.log(`[relay] 状态中继启动 :${config.broadcastPort}（不连接 PLC）`);
     wss.on('connection', (ws) => {
       this.viewers.add(ws);
-      if (this.lastSnapshot) {
-        ws.send(JSON.stringify(this.lastSnapshot));
-      }
-      // 教师端上报激活设备（控制消息；观众连接无影响）；deviceId 为 null 表示主控离开
+      // 后加入的智能电视 / 手机 / 学生机浏览器立刻拿到当前画面
+      if (this.lastSnapshot) ws.send(JSON.stringify(this.lastSnapshot));
+
       ws.on('message', (raw) => {
         let msg;
         try { msg = JSON.parse(raw.toString()); } catch { return; }
-        if (msg && msg.type === 'set-device') {
-          this.setActiveDevice(msg.deviceId ?? null);
+        if (!msg || typeof msg !== 'object') return;
+
+        if (msg.type === 'report') {
+          // 第一个上报者成为主控；同一教室只认一台主控
+          if (this.controller && this.controller !== ws && this.controller.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'rejected', error: '已有主控在演示' }));
+            return;
+          }
+          this.controller = ws;
+          if (this.leaveTimer) { clearTimeout(this.leaveTimer); this.leaveTimer = null; }
+          this.deviceId = msg.deviceId ?? null;
+          this.mode = msg.mode ?? null;
+          this.publish(this.snapshot(msg.vars || {}, { error: undefined }));
+          return;
+        }
+
+        if (msg.type === 'leave' && this.controller === ws) {
+          this.controller = null;
+          this.clearController();
+          return;
+        }
+
+        // 兼容旧主控的 set-device 帧（只切设备，不带状态）
+        if (msg.type === 'set-device' && (!this.controller || this.controller === ws)) {
+          this.deviceId = msg.deviceId ?? null;
+          this.publish(this.snapshot({}, { error: undefined }));
+        }
+        // 其它消息（含观众端上行）一律忽略：观众只读
+      });
+
+      ws.on('close', () => {
+        this.viewers.delete(ws);
+        if (this.controller === ws) {
+          this.controller = null;
+          // 主控刷新页面会短暂断线，给 800ms 宽限避免观众画面闪一下
+          this.leaveTimer = setTimeout(() => {
+            if (this.controller) return;
+            this.clearController();
+          }, 800);
         }
       });
-      ws.on('close', () => this.viewers.delete(ws));
     });
-    wss.on('error', (err) => {
-      console.error('[broadcast] 广播服务错误:', err.message);
-    });
+    wss.on('error', (err) => console.error('[relay] 服务错误:', err.message));
   }
 
-  broadcast(snapshot) {
+  clearController() {
+    this.deviceId = null;
+    this.mode = null;
+    this.publish(this.snapshot({}, { error: '主控已离开' }));
+  }
+
+  snapshot(vars, extra) {
+    return {
+      type: 'snapshot',
+      deviceId: this.deviceId,
+      mode: this.mode,
+      ts: Date.now(),
+      connected: this.deviceId !== null,
+      protocol: this.mode || '主控镜像',
+      vars,
+      ...extra,
+    };
+  }
+
+  publish(snapshot) {
+    this.lastSnapshot = snapshot;
     const msg = JSON.stringify(snapshot);
     for (const ws of this.viewers) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(msg);
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.send(msg);
     }
   }
 }
 
-new Broadcaster().start();
+new Relay().start();
 process.on('SIGTERM', () => process.exit(0));
 process.on('SIGINT', () => process.exit(0));

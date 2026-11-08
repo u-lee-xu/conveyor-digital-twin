@@ -21,14 +21,7 @@
  * 前端 <-> WebSocket(8081) <-> Node.js代理 <-> PLC(ModbusTCP:502 或 S7:102)
  */
 
-/** 动态解析 WebSocket 桥地址：
- * - 浏览器远程访问（边缘部署）：取页面 hostname（树莓派 IP），连树莓派上的桥
- * - 本机 / Electron file://（hostname 为空）：回退 localhost
- */
-function getWsHost(): string {
-  if (typeof location !== 'undefined' && location.hostname) return location.hostname;
-  return 'localhost';
-}
+import { plcWsUrl, canOpenPlcChannel } from './wsEndpoints';
 
 export const MODBUS_ADDRESSES = {
   START: 0,
@@ -135,6 +128,8 @@ export class ModbusService {
   private ws: WebSocket | null = null;
   private connected: boolean = false;
   private currentProtocol: ProtocolType = 'modbus';
+  // WS 响应是三协议的动态报文，历史泛型保留（非本轮引入）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private messageHandlers: Map<string, (result: any) => void> = new Map();
   private messageId: number = 0;
   private onPlcDisconnected: (() => void) | null = null;
@@ -220,6 +215,8 @@ export class ModbusService {
   }
 
   private connectWebSocket() {
+    // 观众端只读镜像：绝不建立 PLC 控制通道（主控是唯一 PLC 客户端）
+    if (!canOpenPlcChannel()) return;
     if (this.reconnecting) {
       return;
     }
@@ -236,7 +233,7 @@ export class ModbusService {
     }
     
     try {
-      this.ws = new WebSocket(`ws://${getWsHost()}:8081`);
+      this.ws = new WebSocket(plcWsUrl());
       
       this.ws.onopen = () => {
         console.log('WebSocket已连接');
@@ -290,6 +287,7 @@ export class ModbusService {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private sendMessage(message: WSMessage): Promise<any> {
     return new Promise((resolve, reject) => {
       if (this.messageHandlers.size >= ModbusService.MAX_PENDING_MESSAGES) {

@@ -60,4 +60,17 @@ export const pneumaticDevice: DeviceDefinition = {
     store.setIndicator('processing', !!v['INDICATOR_PROCESSING']);
     store.setIndicator('alarm', !!v['INDICATOR_ALARM']);
   },
+  /** 主控上报：夹爪信号语义与气缸 extended 相反，导出时同步取反 */
+  exportSnapshot: () => {
+    const s = useRobotStore.getState();
+    return {
+      SOLENOID_FORWARD_EXTEND: s.cylinders.forward.extended,
+      SOLENOID_LIFT_EXTEND: s.cylinders.lift.extended,
+      SOLENOID_CLAMP_CLOSE: !s.cylinders.clamp.extended,
+      INDICATOR_ORIGIN: s.indicators.home,
+      INDICATOR_WORKING: s.indicators.running,
+      INDICATOR_PROCESSING: s.indicators.processing,
+      INDICATOR_ALARM: s.indicators.alarm,
+    };
+  },
 };

@@ -37,8 +37,11 @@ type WSMessage = {
   [key: string]: unknown;
 };
 
-/** 动态解析 WebSocket 桥地址：远程访问取页面 hostname（边缘部署），本机/Electron file:// 回退 localhost */
-const WS_URL = `ws://${typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost'}:8081`;
+
+import { plcWsUrl, canOpenPlcChannel } from '@digital-twin/shared';
+
+/** WebSocket 端点统一由 shared 推导：同源 /ws/plc 代理，file:// 回退本机 */
+const WS_URL = plcWsUrl();
 
 import { MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS } from '../scenes/coal-sorting/constants';
 
@@ -125,6 +128,8 @@ export class PlcWebSocketService {
   constructor() { this._connectWS(); }
 
   private _connectWS() {
+    // 观众端只读镜像：绝不建立 PLC 控制通道（主控是唯一 PLC 客户端）
+    if (!canOpenPlcChannel()) return;
     if (this.reconnecting) return;
     this.reconnecting = true;
 

@@ -22,6 +22,14 @@ export { Ground, PhysicsGround, GROUND_SIZE, GROUND_COLOR, GROUND_GRID_COLOR } f
 export { modbusService } from './services/modbus-websocket';
 export type { ProtocolType } from './services/modbus-websocket';
 export { MODBUS_ADDRESSES, MODBUS_CONFIG, useModbusService } from './services/modbus';
+export {
+  PLC_WS_PATH, RELAY_WS_PATH, PLC_WS_PORT, RELAY_WS_PORT,
+  resolveWsUrl, plcWsUrl, relayWsUrl, canOpenPlcChannel,
+} from './services/wsEndpoints';
+
+// Runtime（软件 = 主控 / 浏览器 + IP = 观众，判据单一来源）
+export { detectRuntimeRole, isTeacherRuntime, isViewerRuntime } from './runtime/runtimeRole';
+export type { RuntimeRole } from './runtime/runtimeRole';
 
 // Types
 export type { Mode } from './types';

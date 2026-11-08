@@ -169,7 +169,11 @@ function checkDintCodec() {
   return ok;
 }
 
-/** 网关 / 虚拟 PLC / 广播 / 前端的数值通道必须齐全，旧线圈镜像不得回流 */
+/**
+ * 网关 / 虚拟 PLC / 主控上报 / 纯中继 / 前端的数值通道必须齐全。
+ * 2026-11-08 架构变更：PLC 只由主控连接，中继改为纯扇出，不再自行 read-words；
+ * 观众端的位置数值来自主控 UI store 的 exportSnapshot，演示模式同样可同步。
+ */
 function checkDintGateway() {
   const fs = require('fs');
   const path = require('path');
@@ -177,6 +181,7 @@ function checkDintGateway() {
   const server = read('server.js');
   const mockPlc = read('mock-dispensing-server.js');
   const broadcast = read('broadcast.js');
+  const shell = read('../packages/platform/src/WorkspaceShell.tsx');
   const edge = read('edge-broadcast.json');
   const sim = read('../packages/auto-dispensing/src/scenes/auto-dispensing/panels/DispenseSimPanel.tsx');
   const viewer = read('../packages/auto-dispensing/src/index.ts');
@@ -187,18 +192,25 @@ function checkDintGateway() {
     [server, '0x10', 'Modbus FC10'],
     [server, 'wordVariables', 'connect 下发 wordVariables'],
     [mockPlc, 'setRegisterArray', '虚拟 PLC FC16 原子写'],
-    [broadcast, 'read-words', '广播读数值'],
+    [shell, "type: 'report'", '主控上报状态快照'],
+    [shell, 'exportSnapshot', '主控导出 UI store 渲染态'],
+    [broadcast, "msg.type === 'report'", '中继只接收主控上报'],
+    [broadcast, 'lastSnapshot', '中继缓存最新快照'],
     [edge, '"wordVars"', '广播配置 wordVars'],
     [sim, "writeWord('ENCODER_PULSES'", '仿真面板写 DINT'],
     [viewer, "v['ENCODER_PULSES']", '观众端读数值'],
-    [viewer, 'Number.isFinite(encoderValue)', '广播缺字段时保留位置'],
+    [viewer, 'ENCODER_PULSES: s.encoderPulses', '位置数值来自主控 store'],
+    [viewer, 'Number.isFinite(encoderValue)', '快照缺字段时保留位置'],
   ];
   const missing = required.filter(([src, token]) => !src.includes(token)).map(([, , name]) => name);
   const legacy = [mockPlc, edge, sim, viewer].some((src) => /ENCODER_BIT\d/.test(src));
-  if (missing.length || legacy) {
+  // 防回退：纯中继不得再连网关 / 自行轮询 PLC，否则主控不再是唯一 PLC 客户端
+  const relayBridgeBack = /(startBridge|bridgeRequest|config\.bridgeUrl|pollLoop)/.test(broadcast);
+  if (missing.length || legacy || relayBridgeBack) {
     console.error('[check][dint-chain] ❌ 32 位 DINT 链路不完整：');
     if (missing.length) console.error('  缺:', missing.join(' | '));
     if (legacy) console.error('  虚拟 PLC / 广播 / 面板 / 观众端仍残留 ENCODER_BIT 线圈镜像');
+    if (relayBridgeBack) console.error('  状态中继仍在连接 PLC 网关 / 自行轮询数值');
     return false;
   }
   console.log(`[check][dint-chain] ✅ ${required.length} 处数值通道齐全，且无线圈镜像回流`);
@@ -237,6 +249,49 @@ function checkEncoderScale() {
   return true;
 }
 
+/**
+ * 观众端隔离（2026-11-08）：观众是只读镜像，只允许订阅 /ws/relay，
+ * 绝不建立 /ws/plc 通道。各设备 plcService 是模块级单例，构造时就会连网关，
+ * 因此每个服务都必须在连接入口带 canOpenPlcChannel() 守卫。
+ */
+function checkViewerIsolation() {
+  const fs = require('fs');
+  const path = require('path');
+  const read = (rel) => fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  const services = [
+    'packages/auto-dispensing/src/services/plc-websocket.ts',
+    'packages/coal-sorting/src/services/plc-websocket.ts',
+    'packages/pneumatic-robot/src/services/plc-websocket.ts',
+    'packages/traffic-light/src/services/plc-websocket.ts',
+    'packages/shared/src/services/modbus-websocket.ts',
+  ];
+  const endpoints = read('../packages/shared/src/services/wsEndpoints.ts');
+  const barrel = read('../packages/shared/src/index.ts');
+  const viewer = read('../packages/platform/src/ViewerWorkspace.tsx');
+  const required = [
+    [endpoints, 'return !isViewerRuntime()', 'PLC 通道开关按运行角色判定'],
+    [barrel, 'canOpenPlcChannel', '总入口导出通道开关'],
+    [viewer, 'relayWsUrl()', '观众只连状态中继'],
+    ...services.map((rel) => [
+      read(`../${rel}`), 'if (!canOpenPlcChannel()) return;', `${rel} 观众端守卫`,
+    ]),
+  ];
+  const missing = required.filter(([src, token]) => !src.includes(token)).map(([, , name]) => name);
+  const forbidden = [
+    [viewer, /new WebSocket\(plcWsUrl\(\)\)/, '观众端自建 PLC 连接'],
+    [viewer, /type:\s*['"]set-device['"]|sendSetDevice\s*\(/, '观众端反向切换设备'],
+    [endpoints, /location\.hostname.*8081/, '端点又拼回跨端口直连'],
+  ].filter(([src, re]) => re.test(src)).map(([, , name]) => name);
+  if (missing.length || forbidden.length) {
+    console.error('[check][viewer-isolation] ❌ 观众端隔离不完整：');
+    if (missing.length) console.error('  缺:', missing.join(' | '));
+    if (forbidden.length) console.error('  禁止:', forbidden.join(' | '));
+    return false;
+  }
+  console.log(`[check][viewer-isolation] ✅ ${services.length} 个 PLC 服务带观众端守卫，观众零上行且不建 PLC 通道`);
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -248,6 +303,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkDintCodec() && ok;
   ok = checkDintGateway() && ok;
   ok = checkEncoderScale() && ok;
+  ok = checkViewerIsolation() && ok;
   process.exit(ok ? 0 : 1);
 }
 

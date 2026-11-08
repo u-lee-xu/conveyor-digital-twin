@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { Physics } from '@react-three/rapier';
-import { PhysicsGround } from '@digital-twin/shared';
+import { PhysicsGround, isViewerRuntime } from '@digital-twin/shared';
 import { useDispensingStore } from '../../stores/useDispensingStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { CameraRig } from './CameraRig';
@@ -232,6 +232,15 @@ function SceneBody({ stage, part }: { stage: string | null; part: string | null 
 export function DispensingSceneContent() {
   const stage = useAppStore((s) => s.activeStage);
   const part = useAppStore((s) => s.activePart);
+  // 观众端（智能电视 / 手机）是只读镜像，不加载 Rapier WASM、不建刚体与碰撞体
+  if (isViewerRuntime()) {
+    return (
+      <>
+        <CameraRig />
+        <SceneBody stage={stage} part={part} />
+      </>
+    );
+  }
   return (
     <>
       <CameraRig />

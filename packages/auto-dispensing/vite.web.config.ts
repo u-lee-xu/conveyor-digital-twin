@@ -2,6 +2,20 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+/** 浏览器只碰一个端口：WebSocket 同源代理到本机内部服务，CSP 'self' 直接放行 */
+const WS_PROXY = {
+  '/ws/plc': {
+    target: 'ws://127.0.0.1:8081',
+    ws: true,
+    rewrite: (p: string) => p.replace(/^\/ws\/plc/, '') || '/',
+  },
+  '/ws/relay': {
+    target: 'ws://127.0.0.1:8082',
+    ws: true,
+    rewrite: (p: string) => p.replace(/^\/ws\/relay/, '') || '/',
+  },
+};
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -14,5 +28,7 @@ export default defineConfig({
     // coal-sorting 占用 5176，自动化配药场景用 5177
     port: 5177,
     strictPort: true,
+    proxy: WS_PROXY,
   },
+  preview: { host: '0.0.0.0', proxy: WS_PROXY },
 })
