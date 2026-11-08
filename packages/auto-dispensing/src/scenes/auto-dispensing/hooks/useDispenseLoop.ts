@@ -56,7 +56,6 @@ const MAG_IDS: MagazineId[] = ['A', 'B', 'C', 'D'];
 
 interface LoopRef {
   prevStart: boolean;
-  prevConfirm: boolean;
   /** 当前轮次的任务队列（按 A→B→C→D 过滤配方>0） */
   queue: MagazineId[];
   queueIndex: number;
@@ -78,7 +77,6 @@ interface LoopRef {
 
 const initRef = (): LoopRef => ({
   prevStart: false,
-  prevConfirm: false,
   queue: [],
   queueIndex: 0,
   remain: 0,
@@ -255,7 +253,6 @@ export function useDispenseLoop() {
         });
         r.pillFlying = false;
         r.dumpStarted = false;
-        r.prevConfirm = s.buttons.confirm;
         raf = requestAnimationFrame(tick);
         return;
       }
@@ -377,24 +374,38 @@ export function useDispenseLoop() {
         const delta = SLIDER_MIN_X - st.sliderX;
         if (Math.abs(delta) <= arriveTol(dt)) {
           useDispensingStore.getState().setSliderX(SLIDER_MIN_X);
+          // 进入等待前先清掉上一轮残留的确认电平，否则会立刻自动开跑下一轮
+          useDispensingStore.getState().setButton('confirm', false);
           useDispensingStore.setState({ motorFwd: false, motorRev: false, targetX: null, autoPhase: 'wait_confirm' });
         } else {
           // 与 travel 段保持同一符号约定：delta>0 → 正转(+X)，delta<0 → 反转(-X)
           useDispensingStore.setState({ motorFwd: delta > 0, motorRev: delta < 0 });
         }
       } else if (st.autoPhase === 'wait_confirm') {
-        // 等待人工取药确认（黄灯亮）
-        const confirmPressed = st.buttons.confirm && !r.prevConfirm;
-        r.prevConfirm = st.buttons.confirm;
-        if (confirmPressed) {
-          useDispensingStore.getState().clearBin();
-          st.setLamp('yellow', false);
-          st.setLamp('green', true);
-          useDispensingStore.getState().bumpCycle();
-          // 下一轮：重新开始（同一配方）
+        /**
+         * 取药确认是「一次性脉冲」而不是锁存电平。
+         * 旧版用 prevConfirm 上升沿判断，但演示面板 / 3D 按钮箱按下后 buttons.confirm
+         * 永远保持 true，且 prevConfirm 只在本分支更新：第一次确认后再无上升沿，
+         * 于是第二遍倒药结束后永远卡在 wait_confirm（用户反馈「第二次取药确认没反应」）。
+         * 现在由状态机消费后立即复位按钮，每轮都能重新按键触发；进入本阶段时
+         * 已在 returning 段清掉残留电平，不会自动连跑。
+         */
+        if (st.buttons.confirm) {
+          const cur = useDispensingStore.getState();
+          cur.setButton('confirm', false); // 先消费，避免同帧重复进入
+          cur.clearBin();
+          cur.setLamp('yellow', false);
+          cur.setLamp('green', true);
+          cur.bumpCycle();
+          // 下一轮：与首次启动一致地重置队列 / 出药锁 / 倒药标志，同一配方重跑
           r.queue = MAG_IDS.filter((m) => st.recipe[m] > 0);
           r.queueIndex = 0;
-          useDispensingStore.setState({ autoPhase: 'travel' });
+          r.dumpStarted = false;
+          r.pillFlying = false;
+          useDispensingStore.setState({
+            dispensed: { A: false, B: false, C: false, D: false },
+            autoPhase: 'travel',
+          });
         }
       }
 

@@ -102,6 +102,13 @@ interface DispensingState {
     confirm: boolean;
   };
 
+  /**
+   * 控制柜「手动 / 自动」两位选择开关的物理档位。
+   * 它是设备输入元件（PLC 输入 X5/C5/M0.5 与 X6/C6/M0.6 互锁），
+   * 不再只读跟随 AppMode：拨动会写 PLC，观众端按广播快照跟随。
+   */
+  selectorAuto: boolean;
+
   // ---- 自动流程 ----
   autoPhase: AutoPhase;
   autoCycle: number;   // 已完成配方轮数
@@ -142,6 +149,8 @@ interface DispensingState {
   setLamp: (color: 'green' | 'yellow' | 'red', on: boolean) => void;
   setLamps: (lamp: DispensingState['lamp']) => void;
   setButton: (btn: keyof DispensingState['buttons'], pressed: boolean) => void;
+  /** 拨动两位选择开关；调用方负责同时写 PLC 两个互锁输入点 */
+  setSelectorAuto: (auto: boolean) => void;
   setAutoPhase: (phase: AutoPhase) => void;
   setDosing: (mag: MagazineId | null, remain: number) => void;
   bumpCycle: () => void;
@@ -218,6 +227,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
   lamp: initialLamp,
 
   buttons: { start: false, stop: false, reset: false, estop: false, confirm: false },
+  selectorAuto: false,
 
   autoPhase: 'idle',
   autoCycle: 0,
@@ -339,6 +349,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
   setLamp: (color, on) => set((s) => ({ lamp: { ...s.lamp, [color]: on } })),
   setLamps: (lamp) => set({ lamp }),
   setButton: (btn, pressed) => set((s) => ({ buttons: { ...s.buttons, [btn]: pressed } })),
+  setSelectorAuto: (auto) => set({ selectorAuto: auto }),
   setAutoPhase: (phase) => set({ autoPhase: phase }),
   setDosing: (dosingMag, dosingRemain) => set({ dosingMag, dosingRemain }),
   bumpCycle: () => set((s) => ({ autoCycle: s.autoCycle + 1 })),

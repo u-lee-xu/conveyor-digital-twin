@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
 import { useAppStore } from '../../../stores/useAppStore';
 import { useDispensingStore, type MagazineId } from '../../../stores/useDispensingStore';
 import {
@@ -10,8 +10,9 @@ import {
   MANUAL_INPUT_POINTS, inputPointLevel,
 } from '../manualIo';
 import {
-  CABINET_BUTTON_IO, SIM_COMMAND_KEYS, SIM_COMMAND_LABELS,
+  CABINET_BUTTON_IO, SIM_COMMAND_KEYS, SIM_COMMAND_LABELS, SIM_COMMAND_COLORS,
   SIM_SENSOR_VAR_NAMES, SIM_OUTPUT_POINTS, SIM_OUTPUT_ACTION_LABELS,
+  SIM_SELECTOR_POINTS, SELECTOR_IO, simSelectorRows, selectorIo,
   SIM_READ_VAR_NAMES, simCommandPoint, simPointRows, motorInterlockPartner,
   type CabinetButtonKey,
 } from '../simulationIo';
@@ -51,10 +52,13 @@ function getReadVars(protocol: ProtocolType) {
 
 const MAG: MagazineId[] = ['A', 'B', 'C', 'D'];
 
-const CMD_CLS: Record<CabinetButtonKey, string> = {
-  start: 'btn-success', stop: 'btn-warning', estop: 'btn-danger',
-  reset: 'btn-outline', confirm: 'btn-blue',
-};
+/** 主令按钮配色来自 3D 按钮箱 CABINET_BUTTONS，未按下只用描边、按下才填实色 */
+function commandStyle(key: CabinetButtonKey, on: boolean): CSSProperties {
+  const color = SIM_COMMAND_COLORS[key];
+  return on
+    ? { backgroundColor: color, borderColor: color, color: '#fff' }
+    : { borderColor: color, color: color };
+}
 
 /**
  * 仿真模式面板 = 一台可对线的 PLC I/O 教学台：
@@ -80,6 +84,8 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
   const prevSignalsRef = useRef<Record<string, boolean> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollingRef = useRef(false);
+  /** 连接建立后把物理旋钮档位同步进 PLC 一次；断开重连要重新同步 */
+  const selectorSyncedRef = useRef(false);
   const protocolRef = useRef(protocol);
   protocolRef.current = protocol;
   const stopPollingRef = useRef<(() => void) | null>(null);
@@ -100,11 +106,20 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
       if (!plcService.connected || pollingRef.current) return;
       pollingRef.current = true;
       try {
-        // 22 输入 + 10 输出全部回读；协议自带变量表并入，保证三协议都不漏点
+        // 24 输入 + 10 输出全部回读；协议自带变量表并入，保证三协议都不漏点
         const protoVars = getReadVars(protocolRef.current);
         const names = Array.from(new Set([...SIM_READ_VAR_NAMES, ...Object.keys(protoVars)]));
         const res = await plcService.readVars(names);
         if (!res.success || !res.values) return;
+
+        // 上电同步：两位选择开关是物理输入元件，连接后必须把本地旋钮档位
+        // 写成一真一假的两路互锁输入，避免虚拟 PLC 里两档同时断开、与 3D 旋钮不一致。
+        // 之后只由拨档事件写，不在这里每轮覆盖（PLC 侧可单独对线）。
+        if (!selectorSyncedRef.current) {
+          selectorSyncedRef.current = true;
+          const initial = selectorIo(useDispensingStore.getState().selectorAuto);
+          await writeSimPlcVars(initial.names, initial.values);
+        }
 
         const v = res.values;
         const signals: Record<string, boolean> = { ...v };
@@ -141,7 +156,10 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
 
         // ===== 模型 → PLC：17 个传感器 / 磁性开关（主令由按钮事件写，不在这里覆盖）=====
         const s = useDispensingStore.getState();
-        const snap = { buttons: s.buttons, sensors: s.sensors, encoderPulses: s.encoderPulses };
+        const snap = {
+          buttons: s.buttons, sensors: s.sensors,
+          encoderPulses: s.encoderPulses, selectorAuto: s.selectorAuto,
+        };
         const sensorValues = SIM_SENSOR_VAR_NAMES.map((name) => inputPointLevel(name, snap));
         await plcService.writeVars([...SIM_SENSOR_VAR_NAMES], sensorValues);
         // 位置只走一个 32 位 DINT 数据寄存器：不拆线圈、不占输入点
@@ -158,6 +176,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    selectorSyncedRef.current = false; // 重连后重新做一次旋钮档位上电同步
   }, []);
 
   // 保持 ref 同步
@@ -195,6 +214,15 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
 
   const encoderPulses = useDispensingStore((s) => s.encoderPulses);
   const encoderDir = useDispensingStore((s) => s.encoderDir);
+  const selectorAuto = useDispensingStore((s) => s.selectorAuto);
+
+  /** 拨动两位选择开关：本地 3D 旋钮立即跟随，仿真模式一帧写两个互锁输入线圈 */
+  const selectSelector = useCallback((auto: boolean) => {
+    useDispensingStore.getState().setSelectorAuto(auto);
+    if (!connected) return;
+    const io = selectorIo(auto);
+    void writeSimPlcVars(io.names, io.values);
+  }, [connected]);
 
   return (
     <div className="space-y-2">
@@ -206,21 +234,23 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
             未连接 PLC：按键不会写入任何地址，请先在上方连接仿真 PLC。
           </div>
         )}
-        <div className="grid grid-cols-5 gap-1.5 mb-2">
+        {/* 三列两行与 3D 按钮箱「上排 3 + 下排 2」一致；名称/颜色/顺序全部由
+            CABINET_BUTTONS 派生，AddressHint 默认虚线下划线与手动模式观感相同。 */}
+        <div className="grid grid-cols-3 gap-1.5 mb-2">
           {SIM_COMMAND_KEYS.map((key) => {
             const point = simCommandPoint(key);
             return (
               <AddressHint key={key} title={point.label} rows={simPointRows(point)}
-                underline={false} className="block min-w-0">
+                className="block min-w-0">
                 <button
-                  className={`btn btn-xs w-full touch-manipulation ${CMD_CLS[key]} ${ioSignals[point.key] ? 'ring-1 ring-green-400' : ''}`}
+                  className="btn btn-xs btn-outline w-full touch-manipulation truncate"
                   onMouseDown={() => writeBtn(key, true)}
                   onMouseUp={() => writeBtn(key, false)}
                   onMouseLeave={() => writeBtn(key, false)}
                   onTouchStart={() => writeBtn(key, true)}
                   onTouchEnd={() => writeBtn(key, false)}
                   aria-label={`${point.label}按钮`}
-                  style={{ fontSize: '0.58rem' }}
+                  style={{ fontSize: '0.58rem', ...commandStyle(key, !!ioSignals[point.key]) }}
                 >
                   {SIM_COMMAND_LABELS[key]}
                 </button>
@@ -248,6 +278,34 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         </div>
       </div>
 
+      {/* ===== 手动 / 自动 两位选择开关：两个互锁的 PLC 输入点 ===== */}
+      <div className="card">
+        <div className="section-title !mb-1.5">手动 / 自动 选择开关（写 PLC 输入）</div>
+        <div className="text-[0.5rem] text-slate-500 mb-1 leading-relaxed">
+          两档互锁，与 3D 控制柜旋钮联动；拨动后对应输入线圈点亮，悬停档位查看三菱 / Modbus / S7 地址。
+          未连接 PLC 时只切换本地旋钮，不写任何地址。
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {SIM_SELECTOR_POINTS.map((p) => {
+            const auto = p.key === SELECTOR_IO.auto;
+            const on = connected ? !!ioSignals[p.key] : (auto ? selectorAuto : !selectorAuto);
+            return (
+              <AddressHint key={p.key} title={p.label} rows={simSelectorRows()}
+                className="block min-w-0">
+                <button
+                  className={`btn btn-xs w-full touch-manipulation ${on ? 'btn-success' : 'btn-outline'}`}
+                  onClick={() => selectSelector(auto)}
+                  aria-label={`${p.label}选择开关`}
+                  style={{ fontSize: '0.6rem' }}
+                >
+                  {auto ? '⚙ 自动' : '✋ 手动'} {on ? '● 接通' : '○ 断开'}
+                </button>
+              </AddressHint>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ===== 输出点操作：前进 / 后退 / 气缸 / 灯，直接绑定 PLC 输出线圈 ===== */}
       <div className="card">
         <div className="section-title !mb-1.5">输出点直接置位（写 PLC 输出）</div>
@@ -258,7 +316,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         <div className="grid grid-cols-5 gap-1.5">
           {SIM_OUTPUT_POINTS.map((p) => (
             <AddressHint key={p.key} title={p.label} rows={simPointRows(p)}
-              underline={false} className="block min-w-0">
+              className="block min-w-0">
               <button
                 className={`btn btn-xs w-full touch-manipulation ${ioSignals[p.key] ? 'btn-success' : 'btn-outline'}`}
                 onClick={() => toggleOutput(p.key)}
@@ -304,7 +362,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         <div className="space-y-1.5">
           <div>
             <div className="text-[0.5rem] text-slate-500 mb-0.5">
-              输入点 22（主令由按钮写入 · 传感器由孪生写回 PLC）
+              输入点 24（主令/选择开关由控件写入 · 传感器由孪生写回 PLC）
             </div>
             <div className="grid grid-cols-3 gap-x-1">
               {MANUAL_INPUT_POINTS.map((p) => (

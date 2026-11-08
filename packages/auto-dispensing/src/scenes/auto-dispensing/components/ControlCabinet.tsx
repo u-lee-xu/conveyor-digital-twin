@@ -1,15 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
+import { isViewerRuntime } from '@digital-twin/shared';
 import { useDispensingStore } from '../../../stores/useDispensingStore';
-import { useAppStore, type AppMode } from '../../../stores/useAppStore';
+import { useAppStore } from '../../../stores/useAppStore';
 import {
   CABINET_SIZE, CABINET_PANEL, CABINET_BUTTONS, CABINET_LAMPS, CABINET_LAMP_Y, CABINET_SELECTOR,
   CABINET_SELECTOR_SHAPE, CABINET_ESTOP_SHAPE,
   LIGHT_DOME_R, LIGHT_DOME_STEP, LIGHT_POLE_H, LIGHT_POLE_Y, VISUAL, SURFACE_GAP,
 } from '../constants';
 import { materials } from '../../../components/scene/shared/materials';
-import { CABINET_BUTTON_IO, type CabinetButtonKey } from '../simulationIo';
-import { writeSimPlcVar } from '../../../services/simulationPlc';
+import { CABINET_BUTTON_IO, selectorIo, type CabinetButtonKey } from '../simulationIo';
+import { writeSimPlcVar, writeSimPlcVars } from '../../../services/simulationPlc';
 
 const P = CABINET_PANEL;
 const SW = CABINET_SELECTOR_SHAPE;
@@ -288,8 +289,9 @@ function EStopButton({ spec, pressed, mirrored, onDown, onUp }: {
  * （无 envMap 时也保持浅色），并做成根部宽 / 尖端收窄的箭头形，
  * 一眼能看出指向哪一档；档位刻线按 manual / auto 的真实偏角摆放。
  */
-function SelectorSwitch({ mode }: { mode: AppMode }) {
-  const angle = CABINET_SELECTOR.angles[mode];
+function SelectorSwitch({ auto, onToggle }: { auto: boolean; onToggle: () => void }) {
+  // 旋钮是物理输入元件，只有手动/自动两档；不再按 AppMode 停在软件中位
+  const angle = CABINET_SELECTOR.angles[auto ? 'auto' : 'manual'];
   const handleShape = useMemo(() => {
     const s = new THREE.Shape();
     const half = SW.HANDLE_W / 2;
@@ -308,7 +310,11 @@ function SelectorSwitch({ mode }: { mode: AppMode }) {
   }, []);
 
   return (
-    <group position={[CABINET_SELECTOR.x, CABINET_SELECTOR.y, 0]}>
+    // 事件挂在 group 上：R3F 会沿场景图冒泡，点中旋钮座/刻度环/拨柄任一处都能拨档
+    <group
+      position={[CABINET_SELECTOR.x, CABINET_SELECTOR.y, 0]}
+      onPointerDown={(e) => { e.stopPropagation(); onToggle(); }}
+    >
       <ZDisc r={P.SELECTOR_R} depth={P.BEZEL_T} z={P.FRONT_Z + P.BEZEL_T / 2} material={switchMat} />
       <ZDisc r={SW.KNOB_R} depth={SW.KNOB_T} z={SW.KNOB_Z} material={collarMat} />
       {/* 旋钮座顶面的银色刻度环：贴面统一错开 SURFACE_GAP */}
@@ -388,9 +394,22 @@ export function ControlCabinet() {
   const buttons = useDispensingStore((s) => s.buttons);
   const lamp = useDispensingStore((s) => s.lamp);
   const setButton = useDispensingStore((st) => st.setButton);
+  const selectorAuto = useDispensingStore((s) => s.selectorAuto);
   const mirrored = useAppStore((s) => s.mirrored);
   const stage = useAppStore((s) => s.activeStage);
   const mode = useAppStore((s) => s.mode);
+
+  /** 拨动两位旋钮：仿真模式一帧写 SEL_MANUAL / SEL_AUTO 两个互锁输入线圈。
+   *  观众端是只读跟随页，档位只能来自主控广播快照，禁止本地拨动造成画面与主控不一致。 */
+  const toggleSelector = () => {
+    if (isViewerRuntime()) return;
+    const next = !useDispensingStore.getState().selectorAuto;
+    useDispensingStore.getState().setSelectorAuto(next);
+    if (mode === 'sim') {
+      const io = selectorIo(next);
+      void writeSimPlcVars(io.names, io.values);
+    }
+  };
   /**
    * 只有整机（AssembledScene）才套 X 负缩放 group；部件展台是正缩放，
    * 展台下若仍按 mirrored 反转铭牌，反而会把本来正立的文字翻成镜像字。
@@ -461,7 +480,7 @@ export function ControlCabinet() {
           ? <EStopButton key={b.key} spec={b} mirrored={flipText} {...handlers} />
           : <PushButton key={b.key} spec={b} lit={b.key === 'start' && !!lamp.green} {...handlers} />;
       })}
-      <SelectorSwitch mode={mode} />
+      <SelectorSwitch auto={selectorAuto} onToggle={toggleSelector} />
       {CABINET_BUTTONS.map((b) => (
         <Nameplate
           key={`btn-plate-${b.key}`} x={b.x} y={b.y + P.PLATE_DY} text={b.label}

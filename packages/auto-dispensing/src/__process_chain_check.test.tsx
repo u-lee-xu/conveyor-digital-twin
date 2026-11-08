@@ -154,4 +154,41 @@ describe('自动配药工艺链（真实 hook 时序）', () => {
     expect(s().magStock.C).toBe(stockBefore.C - 1);
     expect(s().magStock.D).toBe(stockBefore.D - 1);
   });
+
+  it('取药确认可连续多轮：状态机消费后复位按钮，第二遍不卡在 wait_confirm', () => {
+    const s = () => useDispensingStore.getState();
+    // 单仓单份，一轮最快；避免长配方把测试拖到几十秒
+    act(() => { useDispensingStore.setState({ recipe: { A: 1, B: 0, C: 0, D: 0 } }); });
+
+    act(() => { s().setButton('start', true); });
+    advance(30);
+    expect(s().autoPhase).toBe('wait_confirm');
+    expect(s().autoCycle).toBe(0);
+
+    // 第一轮确认：按钮锁存电平必须由状态机消费复位，否则再无上升沿
+    act(() => { s().setButton('confirm', true); });
+    advance(1);
+    expect(s().buttons.confirm).toBe(false);
+    expect(s().autoCycle).toBe(1);
+    expect(s().autoPhase).not.toBe('wait_confirm');
+
+    // 第二遍完整跑完再次停在等待确认
+    advance(30);
+    expect(s().autoPhase).toBe('wait_confirm');
+    expect(s().buttons.confirm).toBe(false); // 进入等待时清残留，不自动连跑
+
+    // 用户反馈的卡点：第二次取药确认必须仍然有效
+    act(() => { s().setButton('confirm', true); });
+    advance(1);
+    expect(s().buttons.confirm).toBe(false);
+    expect(s().autoCycle).toBe(2);
+    expect(s().autoPhase).not.toBe('wait_confirm');
+
+    advance(30);
+    expect(s().autoPhase).toBe('wait_confirm');
+    act(() => { s().setButton('confirm', true); });
+    advance(1);
+    expect(s().autoCycle).toBe(3);
+    expect(s().autoPhase).not.toBe('wait_confirm');
+  });
 });

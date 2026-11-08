@@ -18,7 +18,7 @@ import {
 
 export type IoGroup =
   | 'motor' | 'cylinder' | 'tilt' | 'lamp'
-  | 'button' | 'limit' | 'magazine' | 'reed';
+  | 'button' | 'selector' | 'limit' | 'magazine' | 'reed';
 
 export interface IoPoint {
   /** constants.ts 地址表里的键，输出/输入两组共用同一命名 */
@@ -103,6 +103,7 @@ const INPUT_KEYS = Object.keys(MITSUBISHI_READ_VARS) as readonly InputKey[];
 const INPUT_LABELS: Record<InputKey, string> = {
   BUTTON_START: '启动', BUTTON_STOP: '停止', BUTTON_RESET: '复位',
   BUTTON_ESTOP: '急停', BUTTON_CONFIRM: '确认',
+  SEL_MANUAL: '手动档', SEL_AUTO: '自动档',
   S_LIMIT_START: '原点', S_LIMIT_END: '终点',
   S_MAG_A_EMPTY: 'A 空仓', S_MAG_B_EMPTY: 'B 空仓',
   S_MAG_C_EMPTY: 'C 空仓', S_MAG_D_EMPTY: 'D 空仓',
@@ -122,6 +123,7 @@ const INPUT_LABELS: Record<InputKey, string> = {
  */
 function inputGroup(key: InputKey): IoGroup {
   if (key.startsWith('BUTTON_')) return 'button';
+  if (key.startsWith('SEL_')) return 'selector';
   if (key === 'S_BIN_HAS_DRUG') return 'button';
   if (key.startsWith('S_LIMIT_')) return 'limit';
   if (key.startsWith('S_MAG_')) return 'magazine';
@@ -169,6 +171,7 @@ export const IO_GROUP_TITLES: Record<IoGroup, string> = {
   tilt: '翻转缸',
   lamp: '灯塔',
   button: '主令 / 取药仓',
+  selector: '手动 / 自动 选择开关',
   limit: '限位',
   magazine: '空仓',
   reed: '磁性开关',
@@ -208,6 +211,8 @@ export const DINT_ADDRESS_ROWS: readonly IoAddressRow[] = [
 
 export interface InputSnapshot {
   buttons: Record<'start' | 'stop' | 'reset' | 'estop' | 'confirm', boolean>;
+  /** 控制柜两位选择开关：false=手动档、true=自动档（两档互锁） */
+  selectorAuto: boolean;
   sensors: {
     limitStart: boolean;
     limitEnd: boolean;
@@ -240,6 +245,9 @@ export function inputPointLevel(key: string, s: InputSnapshot): boolean {
     return !!s.buttons[BUTTON_FIELD[key as keyof typeof BUTTON_FIELD]];
   }
   switch (key) {
+    // 两位选择开关的两个输入点互锁：任一时刻只有一个档位为 ON
+    case 'SEL_MANUAL': return !s.selectorAuto;
+    case 'SEL_AUTO': return s.selectorAuto;
     case 'S_LIMIT_START': return s.sensors.limitStart;
     case 'S_LIMIT_END': return s.sensors.limitEnd;
     case 'S_BIN_HAS_DRUG': return s.sensors.binHasDrug;
