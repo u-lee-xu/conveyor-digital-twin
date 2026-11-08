@@ -507,6 +507,9 @@ function ShaftEndEncoder() {
   const E = SHAFT_END_ENCODER;
   const S = ENCODER_STATIONS;
   const bodyCx = (S.BODY_MIN + S.BODY_MAX) / 2;
+  // 铭牌底板坐在圆柱面外侧；印刷条再坐在底板前表面之上，两层都不与宿主精确共面
+  const plateZ = E.BODY_R + SURFACE_GAP;
+  const printZ = plateZ + 2 * E.PLATE_PRINT_T;
   return (
     <group position={[0, FRAME.SCREW_H, 0]}>
       {/* L 型安装支架：立柱贴浮动轴承座端面下沿（不悬空），托板水平伸出托住法兰底面 */}
@@ -545,18 +548,52 @@ function ShaftEndEncoder() {
         );
       })}
 
-      {/* 编码器本体（静止）：金属圆筒 + 尾部端盖 + 朝 +Z 的铭牌 */}
+      {/* 编码器本体（静止）：金属圆筒 + 尾部端盖 */}
       <mesh position={[bodyCx, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow material={materials.encoderBody}>
         <cylinderGeometry args={[E.BODY_R, E.BODY_R, E.BODY_LEN, 24]} />
       </mesh>
       <mesh position={[S.BODY_MAX - 0.002, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.endCap}>
         <cylinderGeometry args={[E.BODY_R * 0.94, E.BODY_R * 0.94, 0.004, 24]} />
       </mesh>
-      <mesh position={[bodyCx, 0, E.BODY_R + SURFACE_GAP]} material={materials.decal}>
-        <boxGeometry args={[E.BODY_LEN * 0.6, E.BODY_R * 0.7, 0.001]} />
+
+      {/* 两端压装亮银卡环：半径大于本体，靠形体起伏把本体和端盖分开 */}
+      {[S.BODY_MIN + E.BAND_INSET, S.BODY_MAX - E.BAND_INSET].map((bx) => (
+        <mesh
+          key={`enc-band-${bx}`}
+          position={[bx, 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+          material={materials.encoderTrim}
+        >
+          <cylinderGeometry args={[E.BAND_R, E.BAND_R, E.BAND_T, 24]} />
+        </mesh>
+      ))}
+
+      {/* 铭牌：亮银底 + 深色标题条 / 字线（+Z 朝观察者）；本体其余部分保持光面 */}
+      <mesh position={[bodyCx, 0, plateZ]} material={materials.encoderTrim}>
+        <boxGeometry args={[E.NAMEPLATE_W, E.NAMEPLATE_H, E.PLATE_T]} />
+      </mesh>
+      <mesh position={[bodyCx, E.NAMEPLATE_H * 0.28, printZ]} material={materials.darkMetal}>
+        <boxGeometry args={[E.NAMEPLATE_W * 0.8, E.NAMEPLATE_STRIPE_H, E.PLATE_PRINT_T]} />
+      </mesh>
+      {[-1, 1].map((k) => (
+        <mesh
+          key={`enc-plate-line-${k}`}
+          position={[bodyCx, -E.NAMEPLATE_H * 0.15 + k * E.NAMEPLATE_STRIPE_H * 0.9, printZ]}
+          material={materials.darkMetal}
+        >
+          <boxGeometry args={[E.NAMEPLATE_W * 0.6, E.NAMEPLATE_STRIPE_H * 0.35, E.PLATE_PRINT_T]} />
+        </mesh>
+      ))}
+
+      {/* Z 相零位标记：本体 +Z 侧一枚琥珀亮点，与铭牌 X 错开不重叠 */}
+      <mesh
+        position={[S.BODY_MIN + E.BODY_LEN * 0.18, 0, plateZ]}
+        material={materials.encoderZMark}
+      >
+        <sphereGeometry args={[E.Z_MARK_R, 12, 12]} />
       </mesh>
 
-      {/* 尾部出线插头 + 电缆（A/B 相 → X0/X1 → C0） */}
+      {/* 尾部出线插头 + A/B 相分色双线（→ X0/X1 → 高速计数器 C0） */}
       <mesh
         position={[S.BODY_MAX + E.CONN_LEN / 2, 0, 0]}
         rotation={[0, 0, Math.PI / 2]}
@@ -564,13 +601,16 @@ function ShaftEndEncoder() {
       >
         <cylinderGeometry args={[E.CONN_R, E.CONN_R, E.CONN_LEN, 12]} />
       </mesh>
-      <mesh
-        position={[S.CONN_MAX + E.CABLE_LEN / 2, 0, 0]}
-        rotation={[0, 0, Math.PI / 2]}
-        material={materials.darkMetal}
-      >
-        <cylinderGeometry args={[E.CABLE_R, E.CABLE_R, E.CABLE_LEN, 10]} />
-      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={`enc-phase-${side}`}
+          position={[S.CONN_MAX + E.CABLE_LEN / 2, 0, side * E.PHASE_CABLE_GAP]}
+          rotation={[0, 0, Math.PI / 2]}
+          material={side < 0 ? materials.encoderPhaseA : materials.encoderPhaseB}
+        >
+          <cylinderGeometry args={[E.PHASE_CABLE_R, E.PHASE_CABLE_R, E.CABLE_LEN, 8]} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -704,6 +744,28 @@ export function MachineFrame() {
       {/* 原点 / 终点接近开关：滑块跑到对应位置触发信号，LED 同步亮灭 */}
       <LimitSensor kind="origin" at={SENSOR.ORIGIN_X} on={limitStart} />
       <LimitSensor kind="end" at={SENSOR.END_X} on={limitEnd} />
+    </group>
+  );
+}
+
+/**
+ * 部件展台专用：+X 轴末端独立增量编码器的 1:1 裸视图。
+ *
+ * 局部原点 = 浮动端轴承座 +X 端面在丝杆轴线上的投影；y=0 是丝杆轴线，
+ * +X 指向编码器尾部 A/B 相出线。整机与展台共用同一批几何，这里只做一次
+ * 刚性平移把机架局部坐标搬到展台原点，不复制任何尺寸或造型。
+ * 随转件（轴伸 / 弹性联轴器）在整机里挂在 screwRef 旋转组内；展台是静态
+ * 装配核对，按相同的轴线 group 摆出即可，不需要自转。
+ */
+export function EncoderStage() {
+  const E = SHAFT_END_ENCODER;
+  return (
+    <group position={[-E.BEARING_FACE_X, -FRAME.SCREW_H, 0]}>
+      <FloatingBearing x={FRAME.AXLE_TO} />
+      <group position={[0, FRAME.SCREW_H, 0]}>
+        <EncoderRotatingParts />
+      </group>
+      <ShaftEndEncoder />
     </group>
   );
 }

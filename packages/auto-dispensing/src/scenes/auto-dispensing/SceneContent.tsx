@@ -15,7 +15,7 @@ import {
   ASSEMBLY, MAGAZINE_ASSEMBLY, PART_STAGES, SENSOR, SENSOR_WORLD,
   type Vec3, type MagazineId,
 } from './constants';
-import { MachineFrame } from './components/MachineFrame';
+import { MachineFrame, EncoderStage } from './components/MachineFrame';
 import { MagazineRack } from './components/MagazineRack';
 import { MagazineUnit } from './components/MagazineUnit';
 import { SliderHopper } from './components/SliderHopper';
@@ -62,6 +62,9 @@ function renderBarePart(name: string): ReactNode {
     case 'bin': return <CollectBin />;
     case 'cabinet': return <ControlCabinet />;
     case 'tower': return <LightTower />;
+    // 轴末端编码器不属于独立 ASSEMBLY 条目，只在展台里以裸视图出现；
+    // 整机中它作为 MachineFrame 的一部分渲染，避免两套几何漂移。
+    case 'encoder': return <EncoderStage />;
     default: return null;
   }
 }

@@ -958,11 +958,27 @@ export const SHAFT_END_ENCODER = {
   BRACKET_T: 0.006,
   BRACKET_W: 0.060,
   BRACKET_DROP: 0.030,
-  /** 尾部出线插头 + 电缆（朝 +X） */
+  /** 尾部出线插头（朝 +X） */
   CONN_R: 0.009,
   CONN_LEN: 0.012,
-  CABLE_R: 0.004,
+  /** A/B 相分色双线：示意两相计数信号，比单根黑电缆更容易一眼认出是编码器 */
+  PHASE_CABLE_R: 0.0022,
+  PHASE_CABLE_GAP: 0.0035,
   CABLE_LEN: 0.020,
+  /** 本体两端压装亮银卡环 */
+  BAND_T: 0.003,
+  BAND_R: 0.0258,
+  BAND_INSET: 0.005,
+  // 本体刻意保持光滑：增量编码器外壳是光面圆筒 + 铭牌，不带电机式纵向散热筋；
+  // 加筋会被误认成「又一个电机」，与 2026-11-08 锁定的非伺服口径冲突。
+  /** Z 相零位标记：本体 +Z 侧一枚亮色圆点 */
+  Z_MARK_R: 0.0032,
+  /** 铭牌：亮银底 + 深色印刷条 + 字线（厚度同源，组件里不写贴面字面量） */
+  NAMEPLATE_W: 0.022,
+  NAMEPLATE_H: 0.017,
+  NAMEPLATE_STRIPE_H: 0.003,
+  PLATE_T: 0.001,
+  PLATE_PRINT_T: 0.0006,
 } as const;
 
 const encX0 = SHAFT_END_ENCODER.BEARING_FACE_X;
@@ -1114,6 +1130,13 @@ export const PART_STAGES: Record<string, PartStage> = {
   // 灯塔抬高后总高 1.685m，展台相机需覆盖 y ∈ [0, 1.685]（自检 covers() 断言）
   // 视点上移、稍退并放宽 fov 到 41°：竖向视野 [-0.16, 1.88]，上下各留约 8% 余量，灯头不再贴边
   tower: { label: '信号灯塔', camera: [0.80, 1.44, 2.55], target: [0, 0.86, 0], fov: 41, grid: 1.6, gridY: 0 },
+  // 轴末端编码器：1:1 近景把「浮动轴承座 → 轴伸 → 弹性联轴器 → 夹紧法兰 →
+  // 静止本体 → A/B 相出线」整条安装链收进画面；与整机共用 EncoderStage 的同一批几何。
+  encoder: {
+    label: '轴末端编码器',
+    camera: [0.18, 0.13, 0.30], target: [0.02, -0.005, 0], fov: 36,
+    grid: 0.3, gridY: -0.040,
+  },
 };
 
 /** 展台部件的局部原点定义：截图/自检时明确「这个部件以哪个面为基准」 */
@@ -1125,6 +1148,7 @@ export const PART_STAGE_ORIGIN: Record<string, string> = {
   bin: ASSEMBLY.collectBin.origin,
   cabinet: ASSEMBLY.cabinet.origin,
   tower: ASSEMBLY.lightTower.origin,
+  encoder: '浮动端轴承座 +X 端面在丝杆轴线上的投影；y=0 为丝杆轴线，+X 指向编码器尾部 A/B 相出线',
 };
 
 // ============================================================
@@ -1258,6 +1282,9 @@ export const VISUAL = {
   TERMINAL_BOX_COLOR: '#46525f', // 顶部接线盒：铸件灰
   ENCODER_BODY_COLOR: '#2b3440', // 轴末端独立编码器金属外壳
   COUPLING_SPIDER_COLOR: '#c2552f', // 梅花联轴器聚氨酯弹性体（工业常用砖红/绿）
+  ENCODER_Z_MARK_COLOR: '#fbbf24',  // Z 相零位标记：琥珀亮点
+  ENCODER_PHASE_A_COLOR: '#e07b39', // A 相芯线：橙棕
+  ENCODER_PHASE_B_COLOR: '#4fb3a5', // B 相芯线：青绿
 } as const;
 
 // ============================================================
