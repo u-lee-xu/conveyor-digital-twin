@@ -27,6 +27,12 @@ export {
   resolveWsUrl, plcWsUrl, relayWsUrl, canOpenPlcChannel,
 } from './services/wsEndpoints';
 
+// 跨设备画面适配（纯函数，桌面零回退）
+export {
+  DESIGN_ASPECT, MAX_ASPECT_FIT, aspectFitScale, fitCameraPosition,
+  fitMaxDistance, renderPixelRatio,
+} from './styles/aspectFit';
+
 // Runtime（软件 = 主控 / 浏览器 + IP = 观众，判据单一来源）
 export { detectRuntimeRole, isTeacherRuntime, isViewerRuntime } from './runtime/runtimeRole';
 export type { RuntimeRole } from './runtime/runtimeRole';

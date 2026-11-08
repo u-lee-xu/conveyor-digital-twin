@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { aspectFitScale } from '@digital-twin/shared';
 import { useAppStore } from '../../stores/useAppStore';
 import {
   resolveViewGoal, dampCameraToward,
@@ -17,12 +18,21 @@ export function CameraRig() {
   const mirrored = useAppStore((s) => s.mirrored);
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as ControlsLike | null;
+  const size = useThree((s) => s.size);
   const goalRef = useRef<Goal | null>(null);
 
   useEffect(() => {
     if (!controls) return;
-    goalRef.current = resolveViewGoal(activeView, activeStage, mirrored);
-  }, [activeView, activeStage, mirrored, controls]);
+    const base = resolveViewGoal(activeView, activeStage, mirrored);
+    // 机位常量按桌面 16:10 标定；窄屏沿视线拉远，保证横向整机仍完整入画。
+    // 补偿放在「阻尼目标」里而不是直接写 camera，切机位 / 转屏都不会互相打架。
+    const k = aspectFitScale(size.width, size.height);
+    goalRef.current = {
+      pos: base.target.clone().add(base.pos.clone().sub(base.target).multiplyScalar(k)),
+      target: base.target,
+      fov: base.fov,
+    };
+  }, [activeView, activeStage, mirrored, controls, size.width, size.height]);
 
   useFrame((_, dt) => {
     const goal = goalRef.current;

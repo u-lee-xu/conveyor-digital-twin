@@ -178,7 +178,10 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
       {isMobile && (
         <>
           {/* 收起态：底部悬浮操作条（不遮场景主体） */}
-          <div className="absolute bottom-3 left-3 right-3 z-10">
+          <div
+            className="absolute left-3 right-3 z-10"
+            style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          >
             <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-xl border border-slate-700/50 rounded-2xl px-2.5 py-2 shadow-xl">
               <button
                 onClick={onBack}
@@ -226,7 +229,10 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
 
           {/* 展开态：底部抽屉（可滚动，最高 58vh，其余留白给 3D 场景） */}
           {panelOpen && (
-            <div className="absolute bottom-[4.5rem] left-3 right-3 z-10 max-h-[58vh] overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900/95 backdrop-blur-2xl p-4 shadow-2xl">
+            <div
+              className="absolute left-3 right-3 z-10 max-h-[58vh] overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900/95 backdrop-blur-2xl p-4 shadow-2xl"
+              style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 4.5rem)' }}
+            >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-bold text-white">{device.icon} {device.name}</span>
                 {device.helpContent && (
@@ -240,6 +246,17 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
                 )}
               </div>
               <ModeSelector currentMode={mode} onModeChange={setMode} modes={device.modes} />
+              {/* 紧凑布局没有底部地址条的位置，观众访问地址收进抽屉，仍可一键复制 */}
+              {viewerUrl && (
+                <button
+                  type="button"
+                  onClick={() => { void navigator.clipboard?.writeText(viewerUrl); }}
+                  title="点击复制观众访问地址"
+                  className="mt-3 w-full truncate rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-left text-[0.7rem] text-blue-300"
+                >
+                  观众访问 {viewerUrl}（点击复制）
+                </button>
+              )}
               <div className="mt-4">
                 {ModePanel && <ModePanel isMobile={true} />}
               </div>
@@ -248,7 +265,7 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
         </>
       )}
 
-      {viewerUrl && (
+      {viewerUrl && !isMobile && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-600/40 bg-slate-900/80 backdrop-blur text-[0.7rem] text-slate-300">
           <span className="shrink-0">观众访问</span>
           <button
@@ -261,7 +278,9 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
           </button>
         </div>
       )}
-      <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
+      {!isMobile && (
+        <div className="absolute bottom-4 right-4 text-xs text-gray-600">© 2026 老徐 · 数字孪生仿真平台</div>
+      )}
 
       {device.helpContent && showHelp && (
         <HelpPanel content={device.helpContent} onClose={() => setShowHelp(false)} />

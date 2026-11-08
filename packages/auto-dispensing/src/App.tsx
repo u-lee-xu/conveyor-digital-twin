@@ -120,7 +120,7 @@ export default function App() {
       )}
 
       {/* 右上角视图工具栏：机位 / 部件展台 / 镜像布局 / 标签 / 面板折叠 */}
-      <ViewSwitcher showPanelToggle />
+      <ViewSwitcher showPanelToggle compact={isMobile} />
 
       {/* 左侧极窄控制栏（手机端隐藏，使用底部抽屉；部件展台下也隐藏） */}
       {!activeStage && !isMobile && !panelCollapsed && (

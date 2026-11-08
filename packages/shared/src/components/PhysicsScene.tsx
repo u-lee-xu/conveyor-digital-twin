@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import { Physics } from '@react-three/rapier';
 import type { ComponentType } from 'react';
 import { PhysicsGround } from './Ground';
+import { AspectFitCamera } from './AspectFitCamera';
 import type { IndustrialLighting } from '../styles/industrialVisual';
 
 interface PhysicsSceneProps {
@@ -79,6 +80,8 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
           maxDistance={20}
           maxPolarAngle={Math.PI / 2}
         />
+        {/* 窄屏 / 竖屏按宽高比拉远相机，避免设备两端被裁掉；桌面 aspect>=1.6 不改动 */}
+        <AspectFitCamera maxDistance={20} />
       </Canvas>
     </div>
   );
