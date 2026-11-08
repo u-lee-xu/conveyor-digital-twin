@@ -53,6 +53,12 @@ const viewGoalsSource = import.meta.glob<string>(
   { query: '?raw', import: 'default', eager: true },
 )['./scenes/auto-dispensing/viewGoals.ts'];
 
+/** 场景层源码：确认新增部件展台真的接到了裸部件渲染分支 */
+const sceneContentSource = import.meta.glob<string>(
+  './scenes/auto-dispensing/SceneContent.tsx',
+  { query: '?raw', import: 'default', eager: true },
+)['./scenes/auto-dispensing/SceneContent.tsx'];
+
 /** 出药状态链路源码：确认视觉与刚体共用同一个显式真值 */
 const loopSource = import.meta.glob<string>(
   './scenes/auto-dispensing/hooks/useDispenseLoop.ts',
@@ -70,7 +76,7 @@ const physicsGeometrySource = import.meta.glob<string>(
 )['./scenes/auto-dispensing/physicsGeometry.ts'];
 
 const MAGS: MagazineId[] = ['A', 'B', 'C', 'D'];
-const PART_NAMES = ['frame', 'rack', 'unit', 'hopper', 'bin', 'cabinet', 'tower'];
+const PART_NAMES = ['frame', 'rack', 'unit', 'hopper', 'bin', 'cabinet', 'tower', 'encoder'];
 
 /** 展台相机的可视高度（半视角 × 距离），用于确认高部件不会被裁切 */
 function stageExtent(name: string) {
@@ -220,7 +226,7 @@ describe('部件层契约与展台取景', () => {
     });
   });
 
-  it('七个部件都有展台相机、网格和原点说明，且高部件不被裁切', () => {
+  it('八个部件都有展台相机、网格和原点说明，且高部件不被裁切', () => {
     expect(Object.keys(PART_STAGES).sort()).toEqual([...PART_NAMES].sort());
     expect(Object.keys(PART_STAGE_ORIGIN).sort()).toEqual([...PART_NAMES].sort());
     PART_NAMES.forEach((name) => {
@@ -244,6 +250,12 @@ describe('部件层契约与展台取景', () => {
     covers('tower', 0, towerTop);
     // 仓顶「有药指示灯」球体半径 0.018，取景必须把它也算进去
     covers('bin', -BIN.PEDESTAL_H, BIN.LAMP_Y + 0.018);
+    // 轴末端编码器：法兰半径决定上下界，L 型支架托板略低于法兰
+    covers(
+      'encoder',
+      -SHAFT_END_ENCODER.FLANGE_R - SHAFT_END_ENCODER.BRACKET_T,
+      SHAFT_END_ENCODER.FLANGE_R,
+    );
   });
 });
 
@@ -901,5 +913,68 @@ describe('z-fighting 防护：相邻可见面不再共面', () => {
       const raw = componentSources[`./scenes/auto-dispensing/components/${f}`];
       expect(raw, `${f} 仍有 0.0005/0.0006 贴面`).not.toMatch(/0\.000[56]\b/);
     });
+  });
+});
+
+// ============================================================
+// 轴末端编码器部件展台（2026-11-08）：1:1 裸视图 + 外观可辨识度。
+// 展台必须复用整机同一批几何，否则改一处尺寸就会出现两套真值。
+// ============================================================
+describe('轴末端编码器展台与外观可辨识度', () => {
+  const E = SHAFT_END_ENCODER;
+  const ES = ENCODER_STATIONS;
+  const frame = componentSources['./scenes/auto-dispensing/components/MachineFrame.tsx'];
+
+  it('展台取景把整条安装链（浮动轴承座 → A/B 相线尾）完整收进画面', () => {
+    const s = PART_STAGES.encoder;
+    const halfW = (stageExtent('encoder').height * 1.4) / 2;
+    const left = FRAME.AXLE_TO - FRAME_DETAIL.SUPPORT_UNIT_LEN / 2 - E.BEARING_FACE_X;
+    const right = ES.CABLE_MAX - E.BEARING_FACE_X;
+    expect(s.camera[1]).toBeGreaterThan(s.target[1]);
+    expect(s.target[0] - halfW).toBeLessThan(left);
+    expect(s.target[0] + halfW).toBeGreaterThan(right);
+    expect(PART_STAGE_ORIGIN.encoder).toContain('丝杆轴线');
+    expect(Math.round(s.grid / 0.1) * 0.1).toBeCloseTo(s.grid, 6);
+  });
+
+  it('展台复用整机几何：只做一次刚性平移，不复制任何造型', () => {
+    expect(sceneContentSource).toContain("case 'encoder'");
+    expect(sceneContentSource).toContain('<EncoderStage />');
+    expect(frame).toContain('export function EncoderStage');
+    expect(frame).toContain('[-E.BEARING_FACE_X, -FRAME.SCREW_H, 0]');
+    expect(frame).toContain('<FloatingBearing x={FRAME.AXLE_TO} />');
+    const stageBody = frame.slice(frame.indexOf('export function EncoderStage'));
+    expect(stageBody).not.toMatch(/cylinderGeometry|boxGeometry|sphereGeometry/);
+  });
+
+  it('本体保持光面编码器外观，标识件用低金属度亮银，颜色只来自 VISUAL', () => {
+    expect(E.BAND_R).toBeGreaterThan(E.BODY_R);
+    expect(E.BAND_T).toBeLessThan(E.BODY_LEN / 4);
+    expect(E.PHASE_CABLE_GAP + E.PHASE_CABLE_R).toBeLessThan(E.CONN_R);
+    expect(E.NAMEPLATE_W).toBeLessThan(E.BODY_LEN);
+    expect(frame).toContain('materials.encoderTrim');
+    expect(frame).toContain('materials.encoderZMark');
+    expect(frame).toContain('materials.encoderPhaseA');
+    expect(frame).toContain('materials.encoderPhaseB');
+    expect(frame).toContain('enc-band-');
+    expect(frame).toContain('enc-phase-');
+    // 防回退：本体不得回到「电机式纵向散热筋」，否则又会被误认成另一个电机
+    expect(frame).not.toContain('enc-knurl-');
+    expect(frame).not.toContain('E.KNURL_');
+    expect(frame).not.toContain('E.CABLE_R'); // 旧单根黑电缆已换成 A/B 分色双线
+    expect(VISUAL.ENCODER_Z_MARK_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.ENCODER_PHASE_A_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(VISUAL.ENCODER_PHASE_B_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
+    const keys = ['encoderTrim:', 'encoderZMark:', 'encoderPhaseA:', 'encoderPhaseB:'];
+    keys.forEach((key) => {
+      const i = materialsSource.indexOf(key);
+      expect(i, `${key} 缺失`).toBeGreaterThan(-1);
+      expect(materialsSource.slice(i, i + 260)).toContain('VISUAL.');
+    });
+    // 无 envMap 场景里 0.8+ metalness 会把亮银压成灰蓝，标识件必须单独降金属度
+    const trimSrc = materialsSource.slice(materialsSource.indexOf('encoderTrim:'), materialsSource.indexOf('encoderTrim:') + 260);
+    const trimMetal = Number(trimSrc.match(/metalness:\s*([0-9.]+)/)?.[1]);
+    expect(trimMetal).toBeLessThan(0.35);
+    expect(trimSrc).toContain('VISUAL.SILVER_COLOR');
   });
 });

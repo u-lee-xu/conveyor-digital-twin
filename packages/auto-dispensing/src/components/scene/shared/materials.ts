@@ -172,6 +172,35 @@ export const materials = {
     metalness: 0.45,
     roughness: 0.5,
   }),
+  /**
+   * 编码器卡环 / 铭牌：低金属度亮银。
+   * 本场景没有 envMap，brightSilver / decal 的 0.8+ metalness 会被压成灰蓝；
+   * 「一眼看见」的标识件必须靠低 metalness 亮色，不能靠堆金属度。
+   */
+  encoderTrim: new THREE.MeshStandardMaterial({
+    color: VISUAL.SILVER_COLOR,
+    metalness: 0.16,
+    roughness: 0.5,
+  }),
+  /** Z 相零位标记：小面积亮点，靠自检定的 emissive 而不是 ACES 削顶的过曝白点 */
+  encoderZMark: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_Z_MARK_COLOR,
+    emissive: VISUAL.ENCODER_Z_MARK_COLOR,
+    emissiveIntensity: 0.45,
+    metalness: 0.1,
+    roughness: 0.4,
+  }),
+  /** A / B 相分色芯线：低金属度亮色，深色背景里能分辨两相 */
+  encoderPhaseA: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_PHASE_A_COLOR,
+    metalness: 0.05,
+    roughness: 0.8,
+  }),
+  encoderPhaseB: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENCODER_PHASE_B_COLOR,
+    metalness: 0.05,
+    roughness: 0.8,
+  }),
   /** 梅花联轴器中间弹性体：聚氨酯（非金属材料感） */
   couplingSpider: new THREE.MeshStandardMaterial({
     color: VISUAL.COUPLING_SPIDER_COLOR,
