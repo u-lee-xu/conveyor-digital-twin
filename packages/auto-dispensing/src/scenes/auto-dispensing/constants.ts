@@ -475,14 +475,18 @@ export const CABINET_BUTTONS = [
   { key: 'confirm', label: '取药确认', color: '#2563a8', x: 0.085, y: 0.160, kind: 'push' },
 ] as const;
 
-/** 手动 / 自动 两位选择开关：φ22 黑色短手柄，手柄角度只读跟随当前 AppMode */
+/**
+ * 手动 / 自动 两位选择开关：φ22 黑色短手柄。
+ * 它是物理输入元件（PLC 输入 X5/X6、C5/C6、M0.5/M0.6 两档互锁），
+ * 角度只由 store 的 `selectorAuto` 档位真值决定，不再只读跟随 AppMode；
+ * 拨动由 ControlCabinet 写 PLC，观众端按广播快照跟随。
+ */
 export const CABINET_SELECTOR = {
   x: 0,
   y: 0.160,
   label: '手动 / 自动',
-  /** 各 AppMode 对应的手柄偏角（rad，面板平面内；scoring 归到中位）。
-   *  两位开关实物左右档接近 ±60°，旧 ±0.7rad(40°) 让拨柄直指上方，不像左右两档。 */
-  angles: { manual: -1.0, sim: 0, scoring: 0, auto: 1.0 },
+  /** 两位开关只有左/右两个档位（rad，面板平面内）；实物左右档接近 ±60°。 */
+  angles: { manual: -1.0, auto: 1.0 },
 } as const;
 
 /** 三个状态指示灯：颜色统一取 VISUAL.LAMP_*，这里只管位置与铭牌 */
@@ -1334,6 +1338,9 @@ export const MODBUS_READ_VARS = {
   BUTTON_RESET: 2,
   BUTTON_ESTOP: 3,
   BUTTON_CONFIRM: 4,      // 取药确认
+  // —— 输入：手动/自动 两位选择开关（5-6，两档互锁）——
+  SEL_MANUAL: 5,          // 旋钮拨到「手动」档
+  SEL_AUTO: 6,            // 旋钮拨到「自动」档
   // —— 输入：限位/传感器（10-17）——
   S_LIMIT_START: 10,      // 原点传感器（滑台回到起点即触发，兼作编码器 Z 相回零）
   S_LIMIT_END: 11,        // 终点传感器（滑台到达放药位触发）
@@ -1409,6 +1416,8 @@ export const S7_VARS = {
   BUTTON_RESET: 'M0.2',
   BUTTON_ESTOP: 'M0.3',
   BUTTON_CONFIRM: 'M0.4',
+  SEL_MANUAL: 'M0.5',
+  SEL_AUTO: 'M0.6',
   S_LIMIT_START: 'M20.0',
   S_LIMIT_END: 'M20.1',
   S_MAG_A_EMPTY: 'M20.2',
@@ -1440,6 +1449,8 @@ export const MITSUBISHI_READ_VARS = {
   BUTTON_RESET: 'X2',
   BUTTON_ESTOP: 'X3',
   BUTTON_CONFIRM: 'X4',
+  SEL_MANUAL: 'X5',
+  SEL_AUTO: 'X6',
   S_LIMIT_START: 'X10',
   S_LIMIT_END: 'X11',
   S_MAG_A_EMPTY: 'X12',

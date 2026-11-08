@@ -374,8 +374,8 @@ describe('控制柜面板：按钮盒几何与配色层次', () => {
     for (let i = 1; i < lower.length; i += 1) {
       expect(lower[i].x - lower[i].r).toBeGreaterThan(lower[i - 1].x + lower[i - 1].r);
     }
-    // 旋钮手柄对每个 AppMode 都有确定档位
-    expect(Object.keys(CABINET_SELECTOR.angles).sort()).toEqual(['auto', 'manual', 'scoring', 'sim']);
+    // 旋钮是与 PLC 输入互锁的物理两档开关，不再跟随 AppMode 停在软件中位
+    expect(Object.keys(CABINET_SELECTOR.angles).sort()).toEqual(['auto', 'manual']);
     expect(CABINET_SELECTOR.angles.manual).toBeLessThan(0);
     expect(CABINET_SELECTOR.angles.auto).toBeGreaterThan(0);
   });

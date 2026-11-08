@@ -42,8 +42,9 @@ export function DispenseStatusPanel() {
   const encoderPulses = useDispensingStore((s) => s.encoderPulses);
   const hopperPills = useDispensingStore((s) => s.hopperPills);
   const binPills = useDispensingStore((s) => s.binPills);
+  const selectorAuto = useDispensingStore((s) => s.selectorAuto);
 
-  const snapshot = { buttons, sensors, encoderPulses };
+  const snapshot = { buttons, sensors, encoderPulses, selectorAuto };
   const binCount = Object.values(binPills).reduce((a, b) => a + b, 0);
 
   return (

@@ -61,6 +61,8 @@ function applyBroadcast(v: Record<string, boolean | number>) {
 
   const tilt = !!v['CYL_TILT'];
   if (s.tiltCyl.tilted !== tilt) s.setTiltCyl(tilt, tilt ? 1 : 0);
+  // 选择开关是布尔输入，缺字段时保留上次档位（与位置数值同一容错口径）
+  if (typeof v['SEL_AUTO'] === 'boolean') s.setSelectorAuto(v['SEL_AUTO']);
   s.setLamps({
     green: !!v['LAMP_GREEN'],
     yellow: !!v['LAMP_YELLOW'],
@@ -87,6 +89,9 @@ function exportSnapshot(): Record<string, boolean | number> {
     LAMP_GREEN: s.lamp.green,
     LAMP_YELLOW: s.lamp.yellow,
     LAMP_RED: s.lamp.red,
+    // 两位选择开关：观众端 3D 旋钮跟随主控拨动的档位（两档互锁）
+    SEL_MANUAL: !s.selectorAuto,
+    SEL_AUTO: s.selectorAuto,
   };
 }
 

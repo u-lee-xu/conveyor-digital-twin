@@ -58,14 +58,14 @@ describe('两位选择开关：短粗梯形拨柄与档位标记', () => {
     expect(cabinetSource).toContain('Math.sin(a) * SW.NOTCH_R');
   });
 
-  it('两位偏角左右对称、接近实物 ±60°，中位仍归零', () => {
+  it('两位偏角左右对称、接近实物 ±60°，只有物理两档无软件中位', () => {
     const a = CABINET_SELECTOR.angles;
-    expect(Object.keys(a).sort()).toEqual(['auto', 'manual', 'scoring', 'sim']);
+    // 选择开关是两路互锁 PLC 输入（X5/X6），不是 AppMode 显示器：
+    // 表里只能有 manual / auto 两档，禁止再出现 sim / scoring 中位。
+    expect(Object.keys(a).sort()).toEqual(['auto', 'manual']);
     expect(a.manual).toBeLessThan(-0.9);
     expect(a.auto).toBeGreaterThan(0.9);
     expect(a.manual).toBeCloseTo(-a.auto, 8);
-    expect(a.sim).toBe(0);
-    expect(a.scoring).toBe(0);
   });
 
   it('旋钮座嵌进安装环、拨柄嵌进旋钮座，贴面净空统一是 SURFACE_GAP', () => {

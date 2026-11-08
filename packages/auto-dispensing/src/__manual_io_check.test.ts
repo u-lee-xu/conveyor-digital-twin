@@ -75,6 +75,7 @@ const cssSource = process.getBuiltinModule('fs').readFileSync(
 function makeInput(): InputSnapshot {
   return {
     buttons: { start: false, stop: false, reset: false, estop: false, confirm: false },
+    selectorAuto: false,
     sensors: {
       limitStart: false,
       limitEnd: false,
@@ -336,10 +337,25 @@ describe('输入点表两列成对排布（防回退）', () => {
     groupKeys.map((g) => [g, MANUAL_INPUT_POINTS.filter((p) => p.group === g).length]),
   ) as Record<string, number>;
 
-  it('每组点数都是偶数，22 个点恰好铺满 11 行、无孤儿行', () => {
-    expect(MANUAL_INPUT_POINTS.length).toBe(22);
+  it('每组点数都是偶数，24 个点恰好铺满 12 行、无孤儿行', () => {
+    expect(MANUAL_INPUT_POINTS.length).toBe(24);
     expect(Object.values(counts).every((n) => n % 2 === 0)).toBe(true);
-    expect(Object.values(counts).reduce((a, b) => a + b / 2, 0)).toBe(11);
+    expect(Object.values(counts).reduce((a, b) => a + b / 2, 0)).toBe(12);
+  });
+
+  it('两位选择开关独占 selector 组，两个档位互锁且地址不重复', () => {
+    expect(counts.selector).toBe(2);
+    const sel = MANUAL_INPUT_POINTS.filter((p) => p.group === 'selector');
+    expect(sel.map((p) => p.key)).toEqual(['SEL_MANUAL', 'SEL_AUTO']);
+    expect(new Set(sel.map((p) => p.addr)).size).toBe(2);
+    expect(IO_GROUP_TITLES.selector).toContain('手动');
+    const manual = makeInput();
+    expect(inputPointLevel('SEL_MANUAL', manual)).toBe(true);
+    expect(inputPointLevel('SEL_AUTO', manual)).toBe(false);
+    const auto = makeInput();
+    auto.selectorAuto = true;
+    expect(inputPointLevel('SEL_MANUAL', auto)).toBe(false);
+    expect(inputPointLevel('SEL_AUTO', auto)).toBe(true);
   });
 
   it('取药仓单点并入主令组凑成 6 点，不再有独立 bin 组', () => {
@@ -417,8 +433,8 @@ describe('PLC 地址改为信号名称悬停浮框', () => {
 describe('悬停浮框三协议地址（防回退）', () => {
   const allPoints = [...MANUAL_OUTPUT_POINTS, ...MANUAL_INPUT_POINTS];
 
-  it('32 个点位都带 S7 地址且与 S7_VARS 同源', () => {
-    expect(allPoints).toHaveLength(32);
+  it('34 个点位都带 S7 地址且与 S7_VARS 同源', () => {
+    expect(allPoints).toHaveLength(34);
     allPoints.forEach((p) => {
       expect(p.s7).toBe(S7_VARS[p.key as keyof typeof S7_VARS]);
       expect(p.s7).toMatch(/^M\d+\.\d$/);
@@ -485,7 +501,7 @@ describe('悬停浮框三协议地址（防回退）', () => {
     expect(controlSource).toContain('ioAddressRows(points)');
     expect(statusSource).toContain('ioAddressRows([point])');
     expect(simSource).toContain('pointAddressRow(addrKey, label)');
-    // 仿真面板已改为「全部 22 输入点 / 10 输出点由点位表 map 渲染」，
+    // 仿真面板已改为「全部 24 输入点 / 10 输出点由点位表 map 渲染」，
     // 不再逐条写死 addrKey 字面量；更细的绑定断言见 __simulation_io_check.test.ts
     expect(simSource).toContain('addrKey={p.key}');
     expect(simSource).toContain('MANUAL_INPUT_POINTS.map');

@@ -22,6 +22,8 @@ const INPUT_SIGNALS: SignalRow[] = [
   { name: '复位按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_RESET, s7: S7_DISPLAY_VARS.BUTTON_RESET, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_RESET, desc: '复位：回起点并清状态（自复位）' },
   { name: '急停按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_ESTOP, s7: S7_DISPLAY_VARS.BUTTON_ESTOP, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_ESTOP, desc: '急停：全停+红灯（自复位）' },
   { name: '取药确认按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_CONFIRM, s7: S7_DISPLAY_VARS.BUTTON_CONFIRM, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_CONFIRM, desc: '取药后确认，进入下一轮（自复位）' },
+  { name: '手动档（选择开关）', modbus: MODBUS_DISPLAY_VARS.SEL_MANUAL, s7: S7_DISPLAY_VARS.SEL_MANUAL, mitsubishi: MITSUBISHI_DISPLAY_VARS.SEL_MANUAL, desc: '控制柜两位旋钮拨到「手动」，与自动档互锁' },
+  { name: '自动档（选择开关）', modbus: MODBUS_DISPLAY_VARS.SEL_AUTO, s7: S7_DISPLAY_VARS.SEL_AUTO, mitsubishi: MITSUBISHI_DISPLAY_VARS.SEL_AUTO, desc: '控制柜两位旋钮拨到「自动」，与手动档互锁' },
   { name: '原点传感器', modbus: MODBUS_DISPLAY_VARS.S_LIMIT_START, s7: S7_DISPLAY_VARS.S_LIMIT_START, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_LIMIT_START, desc: '滑台回到起点触发（±5mm，带滞回）；兼作增量编码器 Z 相回零基准' },
   { name: '终点传感器', modbus: MODBUS_DISPLAY_VARS.S_LIMIT_END, s7: S7_DISPLAY_VARS.S_LIMIT_END, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_LIMIT_END, desc: '滑台到达终点放药位触发（±5mm，带滞回）' },
   { name: 'A仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_A_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_A_EMPTY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_MAG_A_EMPTY, desc: 'A 药仓无药（指示灯闪）' },
