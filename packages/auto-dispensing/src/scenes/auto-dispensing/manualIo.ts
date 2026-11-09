@@ -17,7 +17,7 @@ import {
 } from './constants';
 
 export type IoGroup =
-  | 'motor' | 'cylinder' | 'tilt' | 'lamp'
+  | 'motor' | 'cylinder' | 'tilt' | 'lamp' | 'solenoid'
   | 'button' | 'selector' | 'limit' | 'magazine' | 'reed';
 
 export interface IoPoint {
@@ -68,12 +68,25 @@ export function pointAddressRow(key: string, label: string): IoAddressRow {
 type OutputKey = keyof typeof MITSUBISHI_WRITE_VARS;
 type InputKey = keyof typeof MITSUBISHI_READ_VARS;
 
-/** 输出点顺序 = 面板操作顺序：电机 → 四仓送药缸 → 翻转缸 → 三色灯 */
+/**
+ * 手动面板的 10 个「动作输出点」= 面板操作顺序：电机 → 四仓送药缸 → 翻转缸 → 三色灯。
+ * 手动模式是单电控单点操作台（按键 ≡ 直接置位/复位动作线圈），不展示双电控缩回线圈。
+ */
 const OUTPUT_KEYS: readonly OutputKey[] = [
   'MOTOR_FWD', 'MOTOR_REV',
   'CYL_SEND_A', 'CYL_SEND_B', 'CYL_SEND_C', 'CYL_SEND_D',
   'CYL_TILT',
   'LAMP_GREEN', 'LAMP_YELLOW', 'LAMP_RED',
+];
+
+/**
+ * 双电控专用的 5 只「缩回 / 回位」线圈。
+ * 它们只在仿真面板里出现（可直接置位/复位、LED 回读、地址浮框），
+ * 手动面板保持 10 点紧凑布局不变。语义见 solenoid.ts。
+ */
+const SOLENOID_RETRACT_KEYS: readonly OutputKey[] = [
+  'CYL_SEND_A_RETRACT', 'CYL_SEND_B_RETRACT', 'CYL_SEND_C_RETRACT',
+  'CYL_SEND_D_RETRACT', 'CYL_TILT_RETRACT',
 ];
 
 const OUTPUT_LABELS: Record<OutputKey, string> = {
@@ -87,6 +100,11 @@ const OUTPUT_LABELS: Record<OutputKey, string> = {
   LAMP_GREEN: '绿灯',
   LAMP_YELLOW: '黄灯',
   LAMP_RED: '红灯',
+  CYL_SEND_A_RETRACT: 'A 缸缩回',
+  CYL_SEND_B_RETRACT: 'B 缸缩回',
+  CYL_SEND_C_RETRACT: 'C 缸缩回',
+  CYL_SEND_D_RETRACT: 'D 缸缩回',
+  CYL_TILT_RETRACT: '翻转回位',
 };
 
 const OUTPUT_GROUPS: Record<OutputKey, IoGroup> = {
@@ -95,6 +113,9 @@ const OUTPUT_GROUPS: Record<OutputKey, IoGroup> = {
   CYL_SEND_C: 'cylinder', CYL_SEND_D: 'cylinder',
   CYL_TILT: 'tilt',
   LAMP_GREEN: 'lamp', LAMP_YELLOW: 'lamp', LAMP_RED: 'lamp',
+  CYL_SEND_A_RETRACT: 'solenoid', CYL_SEND_B_RETRACT: 'solenoid',
+  CYL_SEND_C_RETRACT: 'solenoid', CYL_SEND_D_RETRACT: 'solenoid',
+  CYL_TILT_RETRACT: 'solenoid',
 };
 
 /** 输入点顺序 = 地址表顺序：主令 → 限位 → 空仓 → 取药仓 → 磁性开关（位置寄存器不占输入点） */
@@ -137,8 +158,7 @@ function makePoint(
   return { key, label, addr, coil: `C${coil}`, s7: S7_VARS[k], group };
 }
 
-/** 可写输出点：面板每个按键都对应这里的一项 */
-export const MANUAL_OUTPUT_POINTS: readonly IoPoint[] = OUTPUT_KEYS.map((key) =>
+const outputPoints = (keys: readonly OutputKey[]): readonly IoPoint[] => keys.map((key) =>
   makePoint(
     key,
     OUTPUT_LABELS[key],
@@ -147,6 +167,18 @@ export const MANUAL_OUTPUT_POINTS: readonly IoPoint[] = OUTPUT_KEYS.map((key) =>
     OUTPUT_GROUPS[key],
   ),
 );
+
+/** 可写动作输出点（10）：手动/仿真面板每个基础按键都对应这里的一项 */
+export const MANUAL_OUTPUT_POINTS: readonly IoPoint[] = outputPoints(OUTPUT_KEYS);
+
+/** 双电控专用缩回 / 回位线圈（5）：只在仿真面板出现，单电控模式下不参与驱动 */
+export const SOLENOID_OUTPUT_POINTS: readonly IoPoint[] = outputPoints(SOLENOID_RETRACT_KEYS);
+
+/** 全部可写输出点（15）：仿真面板的输出操作区与 IO LED 用它，顺序 = 动作 10 + 缩回 5 */
+export const ALL_OUTPUT_POINTS: readonly IoPoint[] = [
+  ...MANUAL_OUTPUT_POINTS,
+  ...SOLENOID_OUTPUT_POINTS,
+];
 
 /** 只读输入点：传感器 / 主令（32 位 DINT 位置寄存器不占输入点） */
 export const MANUAL_INPUT_POINTS: readonly IoPoint[] = INPUT_KEYS.map((key) =>
@@ -160,8 +192,13 @@ export const MANUAL_INPUT_POINTS: readonly IoPoint[] = INPUT_KEYS.map((key) =>
 );
 
 export const MANUAL_IO_SUMMARY = {
+  /** 手动单点操作台的 10 个动作输出 */
   outputs: MANUAL_OUTPUT_POINTS.length,
   inputs: MANUAL_INPUT_POINTS.length,
+  /** 双电控专用缩回线圈 5 个 */
+  solenoidOutputs: SOLENOID_OUTPUT_POINTS.length,
+  /** 仿真面板可操作的输出点总数（10 + 5） */
+  allOutputs: ALL_OUTPUT_POINTS.length,
 } as const;
 
 /** 面板分组标题：输入点按组给出短标题，避免点位连成一片分不清 */
@@ -170,6 +207,7 @@ export const IO_GROUP_TITLES: Record<IoGroup, string> = {
   cylinder: '送药缸',
   tilt: '翻转缸',
   lamp: '灯塔',
+  solenoid: '双电控缩回线圈',
   button: '主令 / 取药仓',
   selector: '手动 / 自动 选择开关',
   limit: '限位',
@@ -265,8 +303,13 @@ export function inputPointLevel(key: string, s: InputSnapshot): boolean {
   return false;
 }
 
-/** 读一个输出点的实时电平（用于按钮高亮与输出监视 LED） */
+/**
+ * 读一个输出点的实时电平（用于按钮高亮与输出监视 LED）。
+ * 双电控缩回线圈不是「模型姿态」：它是脉冲线圈，电平由 PLC 回读单独显示，
+ * 因此这里必须显式返回 false，不能被 `CYL_SEND_` 前缀误判成 A 缸已伸出。
+ */
 export function outputPointLevel(key: string, s: OutputSnapshot): boolean {
+  if (key.endsWith('_RETRACT')) return false;
   switch (key) {
     case 'MOTOR_FWD': return s.motorFwd;
     case 'MOTOR_REV': return s.motorRev;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  SLIDER_MIN_X, SLIDER_MAX_X, MAG_CAPACITY, MANUAL_JOG, PULSES_PER_M,
+  SLIDER_MIN_X, SLIDER_MAX_X, MAG_CAPACITY, MANUAL_JOG,
   type MagazineId,
 } from '../constants';
 import {
@@ -87,7 +87,7 @@ export function DispenseControlPanel() {
   const encoderDir = useDispensingStore((s) => s.encoderDir);
   const jogRef = useRef<JogState | null>(null);
 
-  /** 发一个点动脉冲：位移恒为 MANUAL_JOG.STEP，编码器按 PULSES_PER_M 同步折算 */
+  /** 发一个点动脉冲：位移恒为 MANUAL_JOG.STEP，位置折算由 store 的 setSliderX 负责 */
   const jogStep = (dir: JogDir) => {
     const s = useDispensingStore.getState();
     s.setSliderX(s.sliderX + dir * MANUAL_JOG.STEP);
@@ -183,7 +183,7 @@ export function DispenseControlPanel() {
           <div className="progress-fill" style={{ width: `${sliderPct}%` }} />
         </div>
         <div className="mt-0.5 text-[0.55rem] leading-tight text-slate-400">
-          {`按键 ≡ 直接置位/复位 PLC 输出；地址悬停信号名称查看，完整映射见「使用说明」。前进/后退单击 ${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm（${Math.round(MANUAL_JOG.STEP * PULSES_PER_M)} 脉冲），按住连续点动。`}
+          {`按键 ≡ 直接置位/复位 PLC 输出；地址悬停信号名称查看，完整映射见「使用说明」。前进/后退单击 ${(MANUAL_JOG.STEP * 1000).toFixed(0)}mm，按住连续点动。`}
         </div>
 
         <div className={divider} />

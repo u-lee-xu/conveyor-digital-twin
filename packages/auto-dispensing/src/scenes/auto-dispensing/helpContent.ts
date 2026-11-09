@@ -54,6 +54,11 @@ const OUTPUT_SIGNALS: SignalRow[] = [
   { name: '灯塔绿', modbus: MODBUS_DISPLAY_VARS.LAMP_GREEN, s7: S7_DISPLAY_VARS.LAMP_GREEN, mitsubishi: MITSUBISHI_DISPLAY_VARS.LAMP_GREEN, desc: '运行中' },
   { name: '灯塔黄', modbus: MODBUS_DISPLAY_VARS.LAMP_YELLOW, s7: S7_DISPLAY_VARS.LAMP_YELLOW, mitsubishi: MITSUBISHI_DISPLAY_VARS.LAMP_YELLOW, desc: '请取药/暂停' },
   { name: '灯塔红', modbus: MODBUS_DISPLAY_VARS.LAMP_RED, s7: S7_DISPLAY_VARS.LAMP_RED, mitsubishi: MITSUBISHI_DISPLAY_VARS.LAMP_RED, desc: '故障/空仓闪' },
+  { name: 'A缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_A_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_A_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_A_RETRACT, desc: '双电控专用：A 送药缸缩回线圈（单电控不使用）' },
+  { name: 'B缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_B_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_B_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_B_RETRACT, desc: '双电控专用：B 送药缸缩回线圈（单电控不使用）' },
+  { name: 'C缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_C_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_C_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_C_RETRACT, desc: '双电控专用：C 送药缸缩回线圈（单电控不使用）' },
+  { name: 'D缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_D_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_D_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_D_RETRACT, desc: '双电控专用：D 送药缸缩回线圈（单电控不使用）' },
+  { name: '翻转回位', modbus: MODBUS_DISPLAY_VARS.CYL_TILT_RETRACT, s7: S7_DISPLAY_VARS.CYL_TILT_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_TILT_RETRACT, desc: '双电控专用：翻转缸回到盛药位线圈（单电控不使用）' },
 ];
 
 const toRows = (rows: SignalRow[]) =>
@@ -69,9 +74,10 @@ export const buildDispensingHelpContent = (): HelpContent => ({
   description: '使用说明与多协议IO地址分配对照表',
   steps: [
     { text: '在「PLC 连接」区域选择协议，填写连接参数，点击连接按钮' },
-    { text: '在 PLC 编程软件/仿真器中运行控制程序（或直接操作输出线圈）' },
-    { text: '3D 场景中的滑台、气缸、料斗、灯塔会实时响应 PLC 的输出信号' },
+    { text: '在 PLC 编程软件/仿真器中运行控制程序，由程序驱动输出线圈' },
+    { text: '3D 场景中的滑台、气缸、料斗、灯塔会实时响应 PLC 的输出信号；仿真面板的输出点在 IO 信号表中只读显示' },
     { text: '原点/终点传感器、磁性开关、空仓等信号实时写回 PLC 输入；位置由一个 32 位 DINT 数据寄存器反馈，不占用任何输入点或线圈' },
+    { text: '仿真面板可切换「电磁阀类型」：单电控电平跟随 / 双电控上升沿自保持，两种 PLC 程序都能对线' },
     { text: '演示模式内置参考流程，无需 PLC 即可观察完整配药过程' },
   ],
   requirements: [
@@ -90,9 +96,23 @@ export const buildDispensingHelpContent = (): HelpContent => ({
       color: 'blue',
       description: '三种协议连接方式',
       details: [
-        '• ModbusTCP：线圈 0~40 只放布尔 IO；位置寄存器 HR120（低 16 位）+ HR121（高 16 位）组成 32 位 DINT，FC03 读 / FC10 一次原子写',
-        '• Siemens S7：S7-1200/1500/300/400，布尔 IO 在 M0.0~M31.1；位置取 M 区 MD120（网关地址 MDI120），按 32 位 DINT 读写',
-        '• 三菱 MX Component：FX 系列经 GX Simulator 2 直连，布尔 IO 用 X0~X31 / Y0~Y11（八进制）；位置只取 D120 低字 + D121 高字，默认不接高速计数器',
+        '• ModbusTCP：线圈 0~45 只放布尔 IO（41~45 为双电控专用缩回线圈）；位置寄存器 HR120（低 16 位）+ HR121（高 16 位）组成 32 位 DINT，FC03 读 / FC10 一次原子写',
+        '• Siemens S7：S7-1200/1500/300/400，布尔 IO 在 M0.0~M31.6；位置取 M 区 MD120（网关地址 MDI120），按 32 位 DINT 读写',
+        '• 三菱 MX Component：FX 系列经 GX Simulator 2 直连，布尔 IO 用 X0~X31 / Y0~Y16（八进制）；位置只取 D120 低字 + D121 高字，默认不接高速计数器',
+      ],
+    },
+    {
+      icon: '🧲',
+      name: '电磁阀类型：单电控 / 双电控',
+      color: 'orange',
+      description: '控制气缸，实质是控制电磁阀',
+      details: [
+        '单电控（弹簧复位）：每个气缸一只动作线圈（C32~C36 / Y2~Y6 / M30.2~M30.6，详见输出信号表）。线圈得电 → 气缸到动作位（推药缸伸出、翻转缸倒药）；线圈失电 → 阀芯弹簧复位、气缸回原位。孪生按电平直接跟随，缩回线圈不参与。',
+        '双电控（记忆型）：每个气缸两只线圈（动作 + 缩回，新增缩回线圈 C41~C45 / Y12~Y16 / M31.2~M31.6）。任一只线圈出现上升沿即切换阀芯；两线圈都断电时仍保持当前伸出 / 缩回状态，直到反向线圈再来一个上升沿。',
+        '仿真面板「电磁阀类型」可实时切换，默认单电控：内置虚拟 PLC 参考程序按单电控编写（动作线圈 ON 伸出、OFF 缩回）。切到双电控后 PLC 程序必须额外输出缩回脉冲，否则气缸不会回位——这正是两种阀在编程上的区别。',
+        '同一气缸两只线圈同时得电属禁止状态：真实双电控阀不允许两端同时通电，孪生保持原姿态并在仿真面板给出红色提示。',
+        '既有 32~40 地址一个都不改，新增缩回线圈只占 41~45（37 为历史预留空洞），因此既有 PLC 程序、地址浮框与地址表仍然有效。',
+        '观众端跟随的是主控 3D 模型的实际姿态快照，不是线圈电平：双电控脉冲断电后观众画面仍保持伸出 / 翻转状态，不会错误回位。',
       ],
     },
     {
@@ -162,7 +182,7 @@ export const buildDispensingHelpContent = (): HelpContent => ({
         title: '输出信号（PLC → 孪生）',
         icon: '📤',
         rows: toRows(OUTPUT_SIGNALS),
-        hint: '按钮与传感器是布尔量，由孪生实时写入；位置是数值量，走 32 位 DINT 数据寄存器，不占输入点。三菱 X/Y 为八进制编号，Modbus 线圈地址从 0 开始。',
+        hint: '前 10 行是动作输出，后 5 行是双电控专用的缩回 / 回位线圈（单电控不使用）。按钮与传感器是布尔量，由孪生实时写入；位置是数值量，走 32 位 DINT 数据寄存器，不占输入点。三菱 X/Y 为八进制编号，Modbus 线圈地址从 0 开始。',
       },
       {
         title: '数据寄存器（孪生 → PLC）',

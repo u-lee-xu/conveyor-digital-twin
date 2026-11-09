@@ -18,7 +18,8 @@ import {
   type MagazineId,
 } from './scenes/auto-dispensing/constants';
 import {
-  MANUAL_OUTPUT_POINTS, MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY,
+  MANUAL_OUTPUT_POINTS, SOLENOID_OUTPUT_POINTS, ALL_OUTPUT_POINTS,
+  MANUAL_INPUT_POINTS, MANUAL_IO_SUMMARY,
   IO_GROUP_TITLES, ENCODER_REGISTER_INFO, DINT_ADDRESS_ROWS,
   inputPointLevel, outputPointLevel, ioAddressRows, pointAddressRow,
   type InputSnapshot, type OutputSnapshot,
@@ -109,7 +110,14 @@ function makeOutput(): OutputSnapshot {
 
 describe('手动 I/O 点位表与协议地址表同源', () => {
   it('输出点逐项对应三菱 Y 地址与 Modbus 线圈号', () => {
-    expect(MANUAL_OUTPUT_POINTS).toHaveLength(Object.keys(MITSUBISHI_WRITE_VARS).length);
+    // 手动单点操作台只展示 10 个动作输出；另外 5 个双电控缩回线圈只在仿真面板出现。
+    expect(MANUAL_OUTPUT_POINTS).toHaveLength(10);
+    expect(SOLENOID_OUTPUT_POINTS).toHaveLength(5);
+    expect(ALL_OUTPUT_POINTS).toHaveLength(Object.keys(MITSUBISHI_WRITE_VARS).length);
+    ALL_OUTPUT_POINTS.forEach((p) => {
+      expect(MITSUBISHI_WRITE_VARS).toHaveProperty(p.key);
+      expect(MODBUS_READ_VARS).toHaveProperty(p.key);
+    });
     MANUAL_OUTPUT_POINTS.forEach((p) => {
       expect(p.addr).toBe(MITSUBISHI_WRITE_VARS[p.key as keyof typeof MITSUBISHI_WRITE_VARS]);
       expect(p.coil).toBe(`C${MODBUS_READ_VARS[p.key as keyof typeof MODBUS_READ_VARS]}`);
@@ -431,10 +439,10 @@ describe('PLC 地址改为信号名称悬停浮框', () => {
 // ============================================================
 
 describe('悬停浮框三协议地址（防回退）', () => {
-  const allPoints = [...MANUAL_OUTPUT_POINTS, ...MANUAL_INPUT_POINTS];
+  const allPoints = [...ALL_OUTPUT_POINTS, ...MANUAL_INPUT_POINTS];
 
-  it('34 个点位都带 S7 地址且与 S7_VARS 同源', () => {
-    expect(allPoints).toHaveLength(34);
+  it('39 个点位（15 输出 + 24 输入）都带 S7 地址且与 S7_VARS 同源', () => {
+    expect(allPoints).toHaveLength(39);
     allPoints.forEach((p) => {
       expect(p.s7).toBe(S7_VARS[p.key as keyof typeof S7_VARS]);
       expect(p.s7).toMatch(/^M\d+\.\d$/);
@@ -501,7 +509,7 @@ describe('悬停浮框三协议地址（防回退）', () => {
     expect(controlSource).toContain('ioAddressRows(points)');
     expect(statusSource).toContain('ioAddressRows([point])');
     expect(simSource).toContain('pointAddressRow(addrKey, label)');
-    // 仿真面板已改为「全部 24 输入点 / 10 输出点由点位表 map 渲染」，
+    // 仿真面板已改为「全部 24 输入点 / 15 输出点由点位表 map 渲染」，
     // 不再逐条写死 addrKey 字面量；更细的绑定断言见 __simulation_io_check.test.ts
     expect(simSource).toContain('addrKey={p.key}');
     expect(simSource).toContain('MANUAL_INPUT_POINTS.map');

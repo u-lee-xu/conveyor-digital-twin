@@ -4,7 +4,8 @@
  * 守住四条硬约束：
  *  1. 主令按钮 / 3D 按钮箱共用一张点位映射，写的是 PLC 输入线圈，不是本地 store 自嗨；
  *  2. 24 个输入点（5 主令 + 2 选择开关档位 + 17 传感器）全部按 PLC 回读显示；
- *  3. 10 个输出点可从界面直接置位/复位，电机正反转互锁，3D 模型按回读联动；
+ *  3. 15 个输出点（10 动作 + 5 双电控缩回）由 PLC 程序驱动，面板只在 IO 信号表
+ *     做只读显示；气缸姿态由 solenoid.ts 按单 / 双电控语义解释；
  *  4. 所有地址来自点位表，面板/组件禁止回填 X/Y/C/M 地址字面量，观众端写入自动短路。
  *
  * 纯模块直接 import 做运行时断言；源码级断言读文件，避免 ?raw 被 stub 成空串。
@@ -56,13 +57,14 @@ describe('仿真 IO 绑定的点位单一来源', () => {
     expect(simCommandPoint('confirm').key).toBe('BUTTON_CONFIRM');
   });
 
-  it('24 输入点 = 5 主令 + 2 选择开关 + 17 传感器，10 输出点互不重叠', () => {
+  it('24 输入点 = 5 主令 + 2 选择开关 + 17 传感器，15 输出点互不重叠', () => {
     expect(MANUAL_INPUT_POINTS).toHaveLength(24);
     expect(MANUAL_OUTPUT_POINTS).toHaveLength(10);
     expect(SIM_COMMAND_POINTS).toHaveLength(5);
     expect(SIM_SELECTOR_POINTS).toHaveLength(2);
     expect(SIM_SENSOR_POINTS).toHaveLength(17);
-    expect(SIM_OUTPUT_POINTS).toHaveLength(10);
+    // 仿真面板多出 5 只双电控专用缩回线圈，手动单点操作台仍是 10 点
+    expect(SIM_OUTPUT_POINTS).toHaveLength(15);
     // 主令与选择开关是人工操作件，绝不能被「传感器轮询写回」反向覆盖
     expect(SIM_SENSOR_POINTS.some((p) => p.key.startsWith('BUTTON_'))).toBe(false);
     expect(SIM_SENSOR_POINTS.some((p) => p.key.startsWith('SEL_'))).toBe(false);
@@ -72,9 +74,9 @@ describe('仿真 IO 绑定的点位单一来源', () => {
     });
   });
 
-  it('每轮 readVars 回读 34 个变量名（24 输入 + 10 输出），无重复', () => {
-    expect(SIM_READ_VAR_NAMES).toHaveLength(34);
-    expect(new Set(SIM_READ_VAR_NAMES).size).toBe(34);
+  it('每轮 readVars 回读 39 个变量名（24 输入 + 15 输出），无重复', () => {
+    expect(SIM_READ_VAR_NAMES).toHaveLength(39);
+    expect(new Set(SIM_READ_VAR_NAMES).size).toBe(39);
     SIM_READ_VAR_NAMES.forEach((name) => expect(MODBUS_READ_VARS).toHaveProperty(name));
   });
 
@@ -110,7 +112,7 @@ describe('仿真 IO 绑定的点位单一来源', () => {
     expect(SIM_OUTPUT_POINTS[1].addr).toBe('Y1');
   });
 
-  it('电机正反转互锁：置位一方必须复位另一方', () => {
+  it('PLC 程序侧电机正反转互锁：置位一方必须复位另一方', () => {
     expect(motorInterlockPartner('MOTOR_FWD')).toBe('MOTOR_REV');
     expect(motorInterlockPartner('MOTOR_REV')).toBe('MOTOR_FWD');
     expect(motorInterlockPartner('CYL_SEND_A')).toBeNull();
@@ -131,12 +133,15 @@ describe('仿真面板所有控件都落到 PLC 地址', () => {
     expect(simSource).not.toContain("start: 'BUTTON_START'");
   });
 
-  it('输出点可直接置位/复位 PLC 输出线圈，电机带互锁', () => {
-    expect(simSource).toContain('toggleOutput(p.key)');
-    expect(simSource).toContain('writeSimPlcVars');
-    expect(simSource).toContain('motorInterlockPartner(key)');
+  it('输出点只做只读显示，不再提供直接置位按钮', () => {
+    expect(simSource).not.toContain('toggleOutput');
+    expect(simSource).not.toContain('输出点直接置位');
+    expect(simSource).not.toContain('SIM_OUTPUT_ACTION_LABELS');
+    expect(simSource).not.toContain('输出点按钮');
+    // IO 信号表是输出点的唯一显示位置：15 个点位全部 map 成只读 LED
     expect(simSource).toContain('SIM_OUTPUT_POINTS.map');
-    expect(simSource).toContain('输出点直接置位');
+    expect(simSource).toContain('<IOLed key={p.key}');
+    expect(simSource).toContain('输出点 15');
   });
 
   it('PLC 输出回读驱动 3D 执行件，主令回读驱动 3D 按钮箱外观', () => {
@@ -185,12 +190,26 @@ describe('3D 按钮箱与 PLC 写入桥接', () => {
     expect(cabinetSource).not.toContain('onDown: () => setButton(b.key, true)');
   });
 
-  it('两位选择开关在仿真面板与 3D 旋钮上都可拨动并写 PLC 输入', () => {
-    expect(simSource).toContain('SIM_SELECTOR_POINTS.map');
+  it('手动 / 自动自锁按钮并入主令卡片：3 列 × 2 行共 6 键', () => {
+    const card = simSource.slice(
+      simSource.indexOf('>主令控制</div>'),
+      simSource.indexOf('<div className="divider !my-1.5" />'),
+    );
+    expect(card).toContain('grid grid-cols-3');
+    expect(card).toContain('SIM_COMMAND_KEYS.map');
+    expect(card).toContain('data-sim-selector');
+    expect(card).toContain('aria-pressed={autoOn}');
+    // 5 个自复位主令 + 1 个自锁按钮，恰好铺满两排
+    expect(SIM_COMMAND_KEYS).toHaveLength(5);
+    expect(simSource).not.toContain('选择开关（写 PLC 输入）');
+  });
+
+  it('手动 / 自动自锁按钮与 3D 旋钮都可拨动并写 PLC 输入', () => {
     expect(simSource).toContain('simSelectorRows()');
-    expect(simSource).toContain('selectSelector(auto)');
-    expect(simSource).toContain('selectorIo(auto)');
-    expect(simSource).toContain('手动 / 自动 选择开关');
+    expect(simSource).toContain('toggleSelector');
+    expect(simSource).toContain('selectorIo(next)');
+    expect(simSource).toContain('手动 / 自动');
+    expect(simSource).not.toContain('SIM_SELECTOR_POINTS.map');
     expect(cabinetSource).toContain('SelectorSwitch auto={selectorAuto}');
     expect(cabinetSource).toContain('toggleSelector');
     expect(cabinetSource).toContain('selectorIo(next)');
@@ -211,7 +230,7 @@ describe('3D 按钮箱与 PLC 写入桥接', () => {
     expect(cabinetSource).toMatch(/toggleSelector[\s\S]{0,160}isViewerRuntime\(\)/);
   });
 
-  it('仿真面板主令/输出控件都带三协议地址悬停浮框（与手动模式同款下划线）', () => {
+  it('仿真面板主令 / 选择开关 / 电磁阀线圈都带三协议地址悬停浮框', () => {
     // underline={false} 只在位置寄存器 badge 上保留，按钮触发区一律默认下划线
     expect((simSource.match(/<AddressHint/g) ?? []).length).toBeGreaterThanOrEqual(4);
     expect(simSource).toContain('rows={simPointRows(point)}');

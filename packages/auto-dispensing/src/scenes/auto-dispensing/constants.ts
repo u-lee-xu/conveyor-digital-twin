@@ -1326,10 +1326,17 @@ export const VISUAL = {
 // ADDRESS PLC 变量地址表
 // ============================================================
 // 与 websocket-server/mock-addresses.js 的 DISPENSING_* 组保持一致（node mock-addresses.js --check 校验）
-// 约定：地址 0-9  物理按钮输入
+// 约定：地址 0-9   物理按钮 / 两位选择开关输入
 //       地址 10-29 传感器/磁性开关输入
-//       地址 30-40 电机/气缸/灯塔输出（可写）
+//       地址 30-40 电机/气缸/灯塔「动作」输出（可写，单电控口径）
+//       地址 41-45 双电控专用的「缩回 / 回位」输出线圈（可写）
 //       位置只走 32 位 DINT 数据寄存器（ENCODER_DINT），不占任何线圈 / 输入点
+//
+// 电磁阀口径（见 solenoid.ts）：控制气缸实质是控制电磁阀。
+//   单电控：一只动作线圈，得电→气缸到动作位，失电→阀芯弹簧复位、气缸回原位；
+//   双电控：每个气缸两只线圈（动作 / 缩回），任一只出现上升沿即切换阀芯，
+//           两线圈都断电仍保持当前位置，直到反向线圈再来一个上升沿。
+// 因此 32-40 的既有地址一律不动，新增的缩回线圈只给双电控 PLC 程序使用。
 
 export const MODBUS_READ_VARS = {
   // —— 输入：按钮（0-4）——
@@ -1373,6 +1380,15 @@ export const MODBUS_READ_VARS = {
   LAMP_GREEN: 38,
   LAMP_YELLOW: 39,
   LAMP_RED: 40,
+  // —— 输出：双电控「缩回 / 回位」线圈（41-45）——
+  // 单电控（弹簧复位）不使用：动作线圈失电即自动复位。
+  // 双电控（记忆型）每个气缸两只线圈，上升沿触发、断电自保持；
+  // 37 是历史预留空洞，保持空置，避免改动既有 PLC 程序的地址编号。
+  CYL_SEND_A_RETRACT: 41,
+  CYL_SEND_B_RETRACT: 42,
+  CYL_SEND_C_RETRACT: 43,
+  CYL_SEND_D_RETRACT: 44,
+  CYL_TILT_RETRACT: 45,
 } as const;
 
 export type DispensingVarName = keyof typeof MODBUS_READ_VARS;
@@ -1440,6 +1456,12 @@ export const S7_VARS = {
   LAMP_GREEN: 'M30.7',
   LAMP_YELLOW: 'M31.0',
   LAMP_RED: 'M31.1',
+  // 双电控专用的缩回 / 回位线圈
+  CYL_SEND_A_RETRACT: 'M31.2',
+  CYL_SEND_B_RETRACT: 'M31.3',
+  CYL_SEND_C_RETRACT: 'M31.4',
+  CYL_SEND_D_RETRACT: 'M31.5',
+  CYL_TILT_RETRACT: 'M31.6',
 } as const;
 
 // ----- 三菱（X/Y） -----
@@ -1475,6 +1497,12 @@ export const MITSUBISHI_WRITE_VARS = {
   LAMP_GREEN: 'Y7',
   LAMP_YELLOW: 'Y10',
   LAMP_RED: 'Y11',
+  // 双电控专用的缩回 / 回位线圈（三菱 X/Y 为八进制，Y11 之后接着 Y12）
+  CYL_SEND_A_RETRACT: 'Y12',
+  CYL_SEND_B_RETRACT: 'Y13',
+  CYL_SEND_C_RETRACT: 'Y14',
+  CYL_SEND_D_RETRACT: 'Y15',
+  CYL_TILT_RETRACT: 'Y16',
 } as const;
 
 export const MODBUS_DISPLAY_VARS = Object.fromEntries(
