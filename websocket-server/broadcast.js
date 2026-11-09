@@ -10,7 +10,9 @@
  *  - 观众端零上行：只有主控连接能 report；观众发来的任何消息一律丢弃。
  *  - 后加入的观众立即收到 lastSnapshot，不会黑屏等待。
  *
- * 配置：edge-broadcast.json 只读取 broadcastPort；设备/地址表由主控前端负责。
+ * 配置：edge-broadcast.json 只读取 broadcastPort；bridgeUrl / activeDevice / devices
+ * 等字段均为历史遗留，运行态不读取。设备/地址表由主控前端负责。
+ * 绑定：中继只对本机同源反代开放，不绑回环会让局域网直连并伪造主控上报。
  */
 const WebSocket = require('ws');
 const fs = require('fs');
@@ -18,6 +20,8 @@ const path = require('path');
 
 const CONFIG_PATH = path.join(__dirname, 'edge-broadcast.json');
 const DEFAULT_CONFIG = { broadcastPort: 8082 };
+/** 安全边界不可配置：不允许从 edge-broadcast.json 放开到 0.0.0.0 */
+const BROADCAST_HOST = '127.0.0.1';
 
 function loadConfig() {
   try {
@@ -42,8 +46,8 @@ class Relay {
   }
 
   start() {
-    const wss = new WebSocket.Server({ port: config.broadcastPort });
-    console.log(`[relay] 状态中继启动 :${config.broadcastPort}（不连接 PLC）`);
+    const wss = new WebSocket.Server({ port: config.broadcastPort, host: BROADCAST_HOST });
+    console.log(`[relay] 状态中继启动 ${BROADCAST_HOST}:${config.broadcastPort}（仅本机可达，不连接 PLC）`);
     wss.on('connection', (ws) => {
       this.viewers.add(ws);
       // 后加入的智能电视 / 手机 / 学生机浏览器立刻拿到当前画面
