@@ -207,22 +207,25 @@ describe('3D 按钮箱与 PLC 写入桥接', () => {
   it('手动 / 自动自锁按钮与 3D 旋钮都可拨动并写 PLC 输入', () => {
     expect(simSource).toContain('simSelectorRows()');
     expect(simSource).toContain('toggleSelector');
-    expect(simSource).toContain('selectorIo(next)');
+    expect(simSource).toContain('writeSimSelector(next)');
     expect(simSource).toContain('手动 / 自动');
     expect(simSource).not.toContain('SIM_SELECTOR_POINTS.map');
     expect(cabinetSource).toContain('SelectorSwitch auto={selectorAuto}');
     expect(cabinetSource).toContain('toggleSelector');
-    expect(cabinetSource).toContain('selectorIo(next)');
+    expect(cabinetSource).toContain('writeSimSelector(next)');
     // 档位地址不回填到 JSX，全部走点位表
     expect(simSource).not.toContain("'X5'");
     expect(simSource).not.toContain("'C5'");
     expect(simSource).not.toContain("'M0.5'");
     // 旋钮只有两个物理档位，不再按 AppMode 停在软件中位
     expect(Object.keys(CABINET_SELECTOR.angles).sort()).toEqual(['auto', 'manual']);
-    // 连接建立后上电同步一次档位，避免虚拟 PLC 两档同时断开与 3D 旋钮不一致
+    // 连接建立后上电同步一次档位，避免虚拟 PLC 两档同时断开与 3D 旋钮不一致；
+    // 档位显示恒取本地旋钮，回读只做互锁校验，不再反向覆盖造成切换回弹
     expect(simSource).toContain('selectorSyncedRef');
-    expect(simSource).toContain('selectorIo(useDispensingStore.getState().selectorAuto)');
+    expect(simSource).toContain('writeSimSelector(useDispensingStore.getState().selectorAuto)');
     expect(simSource).toContain('selectorSyncedRef.current = false');
+    expect(simSource).toContain('const autoOn = selectorAuto');
+    expect(simSource).toContain('selectorHealAtRef');
   });
 
   it('观众端只读：3D 旋钮拨动被 isViewerRuntime 守卫短路', () => {

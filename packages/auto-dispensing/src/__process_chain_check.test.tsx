@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useDispenseLoop } from './scenes/auto-dispensing/hooks/useDispenseLoop';
 import { useDispensingStore } from './stores/useDispensingStore';
+import { useAppStore } from './stores/useAppStore';
 import {
   SLIDER_MIN_X, SLIDER_MAX_X, MAGAZINE_X, MAG_CAPACITY, HOPPER_OFFSET_X,
   CHUTE_EXIT_Z, FEED_PUSH_Z1, PILL_R, PILL_LAND_Y, CHUTE_RAMP_END_Y,
@@ -56,6 +57,8 @@ beforeEach(() => {
   });
   vi.stubGlobal('cancelAnimationFrame', () => undefined);
   useDispensingStore.getState().resetAll();
+  // 工艺链测的是演示模式：状态机只在 mode==='auto' 下运行
+  useAppStore.getState().setMode('auto');
 
   // 订阅状态流：伸缸/缩缸/推出/落斗/阶段切换各记一条事件
   let prev = useDispensingStore.getState();
@@ -85,6 +88,7 @@ afterEach(() => {
   container?.remove();
   vi.unstubAllGlobals();
   nowSpy?.mockRestore();
+  useAppStore.getState().setMode('manual');
 });
 
 describe('自动配药工艺链（真实 hook 时序）', () => {

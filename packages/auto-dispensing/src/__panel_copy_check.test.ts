@@ -95,9 +95,10 @@ describe('主令卡片 3 列 × 2 行，第 6 键是手动 / 自动自锁按钮'
 
   it('自锁按钮点击切换档位，未连接 PLC 时只改本地旋钮', () => {
     expect(card).toContain('onClick={toggleSelector}');
-    expect(simSource).toContain('const next = !autoOn;');
+    expect(simSource).toContain('const autoOn = selectorAuto');
+    expect(simSource).toContain('const next = !useDispensingStore.getState().selectorAuto;');
     expect(simSource).toContain('if (!connected) return;');
-    expect(simSource).toContain('selectorIo(next)');
+    expect(simSource).toContain('writeSimSelector(next)');
   });
 
   it('不再渲染独立的两个档位按钮', () => {

@@ -9,8 +9,8 @@ import {
   LIGHT_DOME_R, LIGHT_DOME_STEP, LIGHT_POLE_H, LIGHT_POLE_Y, VISUAL, SURFACE_GAP,
 } from '../constants';
 import { materials } from '../../../components/scene/shared/materials';
-import { CABINET_BUTTON_IO, selectorIo, type CabinetButtonKey } from '../simulationIo';
-import { writeSimPlcVar, writeSimPlcVars } from '../../../services/simulationPlc';
+import { CABINET_BUTTON_IO, type CabinetButtonKey } from '../simulationIo';
+import { writeSimPlcVar, writeSimSelector } from '../../../services/simulationPlc';
 
 const P = CABINET_PANEL;
 const SW = CABINET_SELECTOR_SHAPE;
@@ -399,16 +399,14 @@ export function ControlCabinet() {
   const stage = useAppStore((s) => s.activeStage);
   const mode = useAppStore((s) => s.mode);
 
-  /** 拨动两位旋钮：仿真模式一帧写 SEL_MANUAL / SEL_AUTO 两个互锁输入线圈。
+  /** 拨动两位旋钮：与仿真面板自锁按钮共用 writeSimSelector，一帧写两路互锁输入。
+   *  档位真值恒为本地 selectorAuto（点击当帧立即翻转），未被 PLC 回读反向覆盖。
    *  观众端是只读跟随页，档位只能来自主控广播快照，禁止本地拨动造成画面与主控不一致。 */
   const toggleSelector = () => {
     if (isViewerRuntime()) return;
     const next = !useDispensingStore.getState().selectorAuto;
     useDispensingStore.getState().setSelectorAuto(next);
-    if (mode === 'sim') {
-      const io = selectorIo(next);
-      void writeSimPlcVars(io.names, io.values);
-    }
+    if (mode === 'sim') void writeSimSelector(next);
   };
   /**
    * 只有整机（AssembledScene）才套 X 负缩放 group；部件展台是正缩放，

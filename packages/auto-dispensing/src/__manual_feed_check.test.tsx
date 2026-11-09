@@ -10,6 +10,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useDispenseLoop } from './scenes/auto-dispensing/hooks/useDispenseLoop';
 import { useDispensingStore } from './stores/useDispensingStore';
+import { useAppStore } from './stores/useAppStore';
 import {
   MAG_CAPACITY, FEED_CYL_TIME, type MagazineId,
 } from './scenes/auto-dispensing/constants';
@@ -51,6 +52,8 @@ beforeEach(() => {
 
   const s = () => useDispensingStore.getState();
   s().resetAll();
+  // 手动模式：状态机不运行，这里只验表现层「伸到位出药 / 缩回解锁」
+  useAppStore.getState().setMode('manual');
   // resetAll 不重置库存，测试间显式补满，避免互相污染
   MAGS.forEach((m) => s().setMagStock(m, MAG_CAPACITY));
 
