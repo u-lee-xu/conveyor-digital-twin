@@ -1571,13 +1571,15 @@ class MitsubishiMX {
 }
 
 const WS_PORT = parseInt(process.env.WS_PORT || '8081', 10);
-const wss = new WebSocket.Server({ port: WS_PORT });
+/** 网关只对本机同源反代开放：不绑回环会让局域网绕过 /ws/plc 直连写 PLC 线圈 */
+const WS_HOST = '127.0.0.1';
+const wss = new WebSocket.Server({ port: WS_PORT, host: WS_HOST });
 const modbusClient = new SimpleModbusTCP();
 const s7Client = new SimpleS7Client();
 const mitsubishiClient = new MitsubishiMX();
 let currentProtocol = null;
 
-console.log('WebSocket服务器启动在端口 ' + WS_PORT);
+console.log(`WebSocket服务器启动在 ${WS_HOST}:${WS_PORT}（仅本机可达）`);
 console.log('支持协议: Modbus TCP, Siemens S7 (ISO over TCP), 三菱 MX Component (via PowerShell)');
 
 async function gracefulShutdown() {

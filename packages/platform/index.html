@@ -6,13 +6,14 @@
     <!-- 空图标：避免浏览器默认请求 /favicon.ico 产生 404 控制台噪声 -->
     <link rel="icon" href="data:," />
     <title>数字孪生仿真平台</title>
+    <!-- 运行态 WebSocket 一律走同源 /ws/plc 与 /ws/relay；下面两条只给 Electron file:// 回退直连本机用 -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
       script-src 'self' 'unsafe-inline' 'unsafe-eval';
       style-src 'self' 'unsafe-inline';
       img-src 'self' data: blob:;
       font-src 'self' data:;
-      connect-src 'self' ws://*:8081 ws://*:8082 ws://*:8083 wss://*:8084 ws://localhost:* ws://127.0.0.1:* wss://*:*;
+      connect-src 'self' ws://127.0.0.1:8081 ws://127.0.0.1:8082;
       worker-src 'self' blob:;
     " />
   </head>

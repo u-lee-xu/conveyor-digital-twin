@@ -6,8 +6,8 @@
  *
  * 起 4 个进程，但浏览器（含智能电视）只需要访问一个地址：
  *   http://<教师机当前任一可达 IP>:5201/
- * 内部链路 8081 / 8082 / 1505 / 5085 全部只在本机使用，WebSocket 由 Vite preview
- * 的 /ws/plc 与 /ws/relay 同源代理转发，CSP 的 'self' 直接放行。
+ * 内部链路 8081 / 8082 / 1505 / 5085 已显式绑定 127.0.0.1，只有 Vite preview
+ * 的 /ws/plc 与 /ws/relay 同源代理能触达，CSP 的 'self' 直接放行。
  *
  * 【不固化 IP】教室/实验室网络会变：DHCP 续租、换 WiFi、有线无线并存、虚拟网卡。因此：
  *  - 实际通信一律同源相对路径（wsEndpoints.ts 用 location.host），与 IP 无关；
@@ -17,6 +17,7 @@
  *    本机自己始终用 127.0.0.1，网络变化后刷新即更新。
  *
  * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC。
+ * 内部端口 8081 / 8082 与同源代理目标硬绑定，检测到不一致会拒绝启动。
  */
 const { spawn } = require('child_process');
 const path = require('path');
@@ -157,9 +158,33 @@ function portBusy(port) {
   });
 }
 
+/**
+ * 内部端口是 vite.config.ts 里 WS_PROXY 的硬编码目标。若环境变量或配置把它们改掉，
+ * 代理会静默打到一个不存在的服务，表现为「页面能开但 PLC 连不上」，所以启动前拦下。
+ */
+function assertInternalPorts() {
+  const wsPort = process.env.WS_PORT;
+  if (wsPort && wsPort !== '8081') {
+    throw new Error(`WS_PORT=${wsPort} 与同源代理目标 127.0.0.1:8081 不一致，请清除 WS_PORT 后重试`);
+  }
+  let broadcastPort = 8082;
+  try {
+    const edge = JSON.parse(fs.readFileSync(path.join(WSS, 'edge-broadcast.json'), 'utf8'));
+    if (typeof edge.broadcastPort === 'number') broadcastPort = edge.broadcastPort;
+  } catch {
+    // 配置文件缺失时 broadcast.js 会用默认 8082
+  }
+  if (broadcastPort !== 8082) {
+    throw new Error(`edge-broadcast.json 的 broadcastPort=${broadcastPort} 与同源代理目标 127.0.0.1:8082 不一致`);
+  }
+}
+
 const children = [];
 function launch(name, command, args, cwd, needed) {
-  if (!needed) { console.log(`[lab] 跳过 ${name}（端口已被占用，沿用已运行实例）`); return; }
+  if (!needed) {
+    console.warn(`[lab] 警告：${name} 端口已被占用，沿用已运行实例；该实例可能不是当前版本，必要时请先停掉旧进程再重启`);
+    return;
+  }
   const child = spawn(command, args, { cwd, stdio: 'inherit', windowsHide: true });
   child.on('exit', (code) => console.log(`[lab] ${name} 退出 (${code})`));
   children.push({ name, child });
@@ -167,6 +192,7 @@ function launch(name, command, args, cwd, needed) {
 }
 
 async function main() {
+  assertInternalPorts();
   const addresses = lanAddresses();
   const recommended = await pickLanIp();
 
@@ -215,8 +241,8 @@ async function main() {
     : [`    http://${recommended}:${PORT}/`];
   lines.forEach((l) => console.log(l));
   console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
-  console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可，其余端口外部访问不到');
-  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505 虚拟 PLC / 5085 状态口');
+  console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可');
+  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505 虚拟 PLC / 5085 状态口，均绑定 127.0.0.1，外部访问不到');
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
   console.log('');
 
