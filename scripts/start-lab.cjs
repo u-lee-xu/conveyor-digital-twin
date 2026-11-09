@@ -5,10 +5,15 @@
  *   npm run start:lab
  *
  * 起 4 个进程，但浏览器（含智能电视）只需要访问一个地址：
- *   http://<教师机IP>:5201/        主控本机 或 观众（自动按来源判定）
- * 内部链路 8081（PLC 网关）/ 8082（状态中继）/ 1505（虚拟 PLC）/ 5085（状态口）
- * 全部只在本机使用，外部设备不直接碰这些端口；WebSocket 由 Vite preview
+ *   http://<教师机当前任一可达 IP>:5201/
+ * 内部链路 8081 / 8082 / 1505 / 5085 全部只在本机使用，WebSocket 由 Vite preview
  * 的 /ws/plc 与 /ws/relay 同源代理转发，CSP 的 'self' 直接放行。
+ *
+ * 【不固化 IP】教室/实验室网络会变：DHCP 续租、换 WiFi、有线无线并存、虚拟网卡。因此：
+ *  - 实际通信一律同源相对路径（wsEndpoints.ts 用 location.host），与 IP 无关；
+ *  - /lab-info.json 由下面的 preview 插件按「每次请求」实时生成，返回当前 Host
+ *    与全部可用网卡候选地址，绝不把某个 IP 写死进 dist 静态文件；
+ *  - 界面底部展示运行时候选并可切换复制，网络变化后刷新即更新。
  *
  * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC。
  */
@@ -25,7 +30,7 @@ const PLATFORM = path.join(ROOT, 'packages/platform');
 const DIST = path.join(PLATFORM, 'dist');
 const PORT = Number(process.env.DT_PORT || 5201);
 
-/** 取默认路由所在网卡的 IPv4，避免误选 WSL/Hyper-V 虚拟网卡或 169.254 APIPA */
+/** 取默认路由所在网卡的 IPv4，只用于控制台「推荐」，不是唯一真值 */
 function pickLanIp() {
   return new Promise((resolve) => {
     let settled = false;
@@ -45,19 +50,71 @@ function pickLanIp() {
   });
 }
 
-function fallbackIp() {
-  const all = [];
-  for (const [name, list] of Object.entries(os.networkInterfaces())) {
-    for (const info of list || []) {
-      if (info.family !== 'IPv4' || info.internal) continue;
-      if (info.address.startsWith('169.254')) continue;
-      all.push({ name, address: info.address });
+/**
+ * 枚举本机所有可用于局域网访问的 IPv4。
+ * 不猜「唯一正确 IP」：多网卡/换网时任何一个都可能是观众实际要走的那条，
+ * 所以每次请求实时读 os.networkInterfaces()，由使用者按现场网络挑选。
+ */
+function lanAddresses() {
+  const list = [];
+  for (const [name, infos] of Object.entries(os.networkInterfaces())) {
+    for (const info of infos || []) {
+      if (String(info.family) !== 'IPv4' || info.internal) continue;
+      if (info.address.startsWith('169.254')) continue; // APIPA 不是可达地址
+      list.push({ name, address: info.address });
     }
   }
+  return [...new Map(list.map((a) => [a.address, a])).values()];
+}
+
+function fallbackIp() {
+  const all = lanAddresses();
   const preferred = all.find((x) => /^192\.168\./.test(x.address))
     || all.find((x) => /^10\./.test(x.address))
     || all[0];
   return preferred ? preferred.address : '127.0.0.1';
+}
+
+/** 从 Host 头取主机名，只去掉末尾端口，IPv6 字面量的方括号要保留 */
+function hostOf(rawHost) {
+  return String(rawHost || '').replace(/:\d+$/, '');
+}
+
+const LOOPBACK_HOSTS = new Set(['', 'localhost', '127.0.0.1', '::1', '[::1]']);
+
+/**
+ * /lab-info.json 动态端点（Vite preview 插件）。
+ * 浏览器 fetch 时按当前请求的 Host + 实时网卡表生成候选地址；
+ * Cache-Control: no-store 是关键，否则浏览器会缓存旧 IP 又变成「固定 IP」。
+ */
+function labInfoPlugin(port) {
+  return {
+    name: 'dt-lab-info-dynamic',
+    configurePreviewServer(server) {
+      server.middlewares.use('/lab-info.json', (req, res) => {
+        const rawHost = typeof req.headers.host === 'string' ? req.headers.host : '';
+        const host = hostOf(rawHost);
+        const scheme = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+        const addresses = lanAddresses();
+        const candidates = addresses.map((a) => `${scheme}://${a.address}:${port}/`);
+        const sameOrigin = rawHost ? `${scheme}://${rawHost}/` : '';
+        // 用 LAN IP / 域名访问本机时优先同源；本机 127.0.0.1 访问时把网卡候选放前面
+        const viewerUrls = [...new Set(
+          LOOPBACK_HOSTS.has(host) ? [...candidates, sameOrigin] : [sameOrigin, ...candidates],
+        )].filter(Boolean);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.end(`${JSON.stringify({
+          port,
+          requestHost: rawHost,
+          host,
+          addresses,
+          viewerUrls,
+          generatedAt: Date.now(),
+        }, null, 2)}\n`);
+      });
+    },
+  };
 }
 
 function portBusy(port) {
@@ -80,16 +137,11 @@ function launch(name, command, args, cwd, needed) {
 }
 
 async function main() {
-  const ip = await pickLanIp();
-  const viewerUrl = `http://${ip}:${PORT}/`;
+  const addresses = lanAddresses();
+  const recommended = await pickLanIp();
 
   if (!fs.existsSync(path.join(DIST, 'index.html'))) {
     console.warn('[lab] 警告：packages/platform/dist 不存在，请先执行 npm run build:platform');
-  } else {
-    fs.writeFileSync(
-      path.join(DIST, 'lab-info.json'),
-      `${JSON.stringify({ viewerUrl, host: ip, port: PORT }, null, 2)}\n`,
-    );
   }
 
   /**
@@ -103,6 +155,7 @@ async function main() {
   const { preview } = require('vite');
   const previewServer = await preview({
     root: PLATFORM,
+    plugins: [labInfoPlugin(PORT)],
     preview: { host: '0.0.0.0', port: PORT, strictPort: true },
   });
   console.log(`[lab] 平台壳 Web 服务已监听 :${PORT}`);
@@ -121,7 +174,12 @@ async function main() {
   console.log('');
   console.log('  数字孪生仿真平台已启动');
   console.log(`  主控本机： http://127.0.0.1:${PORT}/`);
-  console.log(`  观众访问： ${viewerUrl}  （智能电视 / 手机 / 学生机浏览器，打开即只读跟随）`);
+  console.log('  观众访问：按现场网络选以下任一地址，IP 会变，界面底部实时显示并可复制');
+  const lines = addresses.length
+    ? addresses.map((a) => `    http://${a.address}:${PORT}/    ${a.name}`)
+    : [`    http://${recommended}:${PORT}/`];
+  lines.forEach((l) => console.log(l));
+  console.log(`  默认路由网卡推荐： http://${recommended}:${PORT}/`);
   console.log('  内部端口： 8081 网关 / 8082 中继 / 1505 虚拟 PLC / 5085 状态口（仅本机）');
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
   console.log('');

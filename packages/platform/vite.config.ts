@@ -42,7 +42,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5174,
-    allowedHosts: ['siit.duckdns.org'],
+    // 现场网络不固定：教师机 IP、教室 WiFi、内网穿透域名都会变，
+    // 不写死任何 hostname 白名单；dev server 只在内网使用，允许任意 Host 访问。
+    allowedHosts: true,
     proxy: WS_PROXY,
   },
   preview: { host: '0.0.0.0', proxy: WS_PROXY },

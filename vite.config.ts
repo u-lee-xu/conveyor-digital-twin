@@ -25,14 +25,8 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
-    allowedHosts: [
-      'frp-tip.com',
-      '.natfrp.com',
-      '.frp-tip.com',
-      '.nyat.app',
-      'localhost',
-      '10.40.32.59',
-    ],
+    // 现场网络不固定：不写死任何 IP / 域名白名单，dev server 允许任意 Host。
+    allowedHosts: true,
   },
   build: {
     rollupOptions: {

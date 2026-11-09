@@ -33,9 +33,14 @@ export {
   fitMaxDistance, renderPixelRatio,
 } from './styles/aspectFit';
 
-// Runtime（软件 = 主控 / 浏览器 + IP = 观众，判据单一来源）
+// Runtime（软件 = 主控 / 浏览器访问 = 观众，判据单一来源）
 export { detectRuntimeRole, isTeacherRuntime, isViewerRuntime } from './runtime/runtimeRole';
 export type { RuntimeRole } from './runtime/runtimeRole';
+// 观众访问地址：运行时按当前 Host 与网卡表生成候选，不固化 IP
+export {
+  sameOriginViewerUrl, isLoopbackViewerUrl, rankViewerUrls, loadViewerUrls,
+} from './runtime/labInfo';
+export type { LabInfo, LabNetworkAddress } from './runtime/labInfo';
 
 // Types
 export type { Mode } from './types';
