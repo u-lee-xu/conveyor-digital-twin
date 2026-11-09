@@ -6,19 +6,21 @@
  *  - 3D 按钮箱只写本地 store，不写 PLC，且会被 300ms 轮询反向覆盖；
  *  - 传感器 LED 读本地 store，输出点只有只读 LED，10 个输出线圈无法从界面操作。
  *
- * 现在所有控件（UI 主令 / 3D 按钮箱 / 24 输入点 / 10 输出点）统一从
+ * 现在所有控件（UI 主令 / 3D 按钮箱 / 24 输入点 / 15 输出点）统一从
  * `manualIo.ts` 的点位表派生变量名与三协议地址；地址真值仍是 `constants.ts`
  * 三张协议表，本文件与面板都不回填 'X0' / 'C30' / 'M30.0' 之类字面量。
  *
  * 方向约定（与真实 PLC 接线一致）：
  *  - 主令按钮、两位选择开关档位、传感器 = 孪生 → PLC 输入（X0-X31 / C0-C29 / M0-M22）
- *  - 电机、气缸、灯塔 = PLC 输出（Y0-Y10 / C30-C40 / M30-M31），孪生按回读联动，
- *    仿真面板也允许直接置位/复位，便于单点调试与教学演示。
+ *  - 电机、气缸、灯塔及双电控缩回线圈 = PLC 输出（Y0-Y16 / C30-C45 / M30-M31），
+ *    孪生按回读联动，仿真面板也允许直接置位/复位，便于单点调试与教学演示。
+ *  - 10 只气缸线圈如何解释成气缸姿态由 `solenoid.ts` 的纯函数决定：
+ *    单电控电平跟随、双电控上升沿自保持，面板不自己判断语义。
  *
  * 本文件是纯常量 + 纯函数，不 import React / plcService，Node 源码自检可直接引用。
  */
 import {
-  MANUAL_INPUT_POINTS, MANUAL_OUTPUT_POINTS, ioAddressRows, type IoPoint,
+  MANUAL_INPUT_POINTS, ALL_OUTPUT_POINTS, ioAddressRows, type IoPoint,
 } from './manualIo';
 import { CABINET_BUTTONS, type DispensingVarName } from './constants';
 
@@ -76,8 +78,13 @@ export const SIM_SELECTOR_POINTS: readonly IoPoint[] =
 export const SIM_SENSOR_POINTS: readonly IoPoint[] =
   MANUAL_INPUT_POINTS.filter((p) => !COMMAND_VARS.has(p.key) && !SELECTOR_VARS.has(p.key));
 
-/** 输出执行件（10）：PLC → 孪生；仿真面板可直接置位/复位对应输出线圈 */
-export const SIM_OUTPUT_POINTS: readonly IoPoint[] = MANUAL_OUTPUT_POINTS;
+/**
+ * 输出执行件（15）：PLC → 孪生。线圈由真实 PLC 程序驱动，仿真面板不再
+ * 提供置位按钮，只在 IO 信号表用点位表 label 做只读 LED 显示。
+ * 10 个动作线圈 + 5 个双电控专用缩回线圈；单电控模式下缩回线圈不参与
+ * 气缸驱动，语义见 solenoid.ts。
+ */
+export const SIM_OUTPUT_POINTS: readonly IoPoint[] = ALL_OUTPUT_POINTS;
 
 /** 拨动两位选择开关时一帧写两个输入线圈（互锁：必有一真一假） */
 export function selectorIo(auto: boolean): { names: string[]; values: boolean[] } {
@@ -93,24 +100,12 @@ export function simSelectorRows() {
   return ioAddressRows(SIM_SELECTOR_POINTS);
 }
 
-/** 输出按钮短标签（点位表里的 label 用于地址浮框标题） */
-export const SIM_OUTPUT_ACTION_LABELS: Record<string, string> = {
-  MOTOR_FWD: '前进',
-  MOTOR_REV: '后退',
-  CYL_SEND_A: 'A缸',
-  CYL_SEND_B: 'B缸',
-  CYL_SEND_C: 'C缸',
-  CYL_SEND_D: 'D缸',
-  CYL_TILT: '翻转',
-  LAMP_GREEN: '绿灯',
-  LAMP_YELLOW: '黄灯',
-  LAMP_RED: '红灯',
-};
+/** 输出点没有 UI 短标签：面板只在 IO 信号表用点位表 label 做只读显示 */
 
-/** 每轮 readVars 必须回读的全部变量名：24 输入 + 10 输出 = 34 */
+/** 每轮 readVars 必须回读的全部变量名：24 输入 + 15 输出 = 39 */
 export const SIM_READ_VAR_NAMES: readonly string[] = [
   ...MANUAL_INPUT_POINTS.map((p) => p.key),
-  ...MANUAL_OUTPUT_POINTS.map((p) => p.key),
+  ...ALL_OUTPUT_POINTS.map((p) => p.key),
 ];
 
 /** 孪生每轮写回 PLC 的传感器变量名（主令由按钮事件写，不在这里覆盖） */
@@ -129,7 +124,7 @@ export function simPointRows(point: IoPoint) {
   return ioAddressRows([point]);
 }
 
-/** 电机正反转互锁：置位任一方时，另一方必须复位 */
+/** PLC 程序侧电机正反转互锁口径：置位任一方时另一方必须复位；面板不再置位输出 */
 export function motorInterlockPartner(key: string): string | null {
   if (key === 'MOTOR_FWD') return 'MOTOR_REV';
   if (key === 'MOTOR_REV') return 'MOTOR_FWD';

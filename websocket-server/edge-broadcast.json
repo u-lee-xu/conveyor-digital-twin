@@ -60,7 +60,9 @@
         "MSC_TILT_HOLD": 28, "MSC_TILT_DUMP": 29,
         "MOTOR_FWD": 30, "MOTOR_REV": 31,
         "CYL_SEND_A": 32, "CYL_SEND_B": 33, "CYL_SEND_C": 34, "CYL_SEND_D": 35, "CYL_TILT": 36,
-        "LAMP_GREEN": 38, "LAMP_YELLOW": 39, "LAMP_RED": 40
+        "LAMP_GREEN": 38, "LAMP_YELLOW": 39, "LAMP_RED": 40,
+        "CYL_SEND_A_RETRACT": 41, "CYL_SEND_B_RETRACT": 42, "CYL_SEND_C_RETRACT": 43,
+        "CYL_SEND_D_RETRACT": 44, "CYL_TILT_RETRACT": 45
       },
       "words": {
         "ENCODER_PULSES": {
@@ -74,7 +76,9 @@
       "vars": [
         "MOTOR_FWD", "MOTOR_REV",
         "CYL_SEND_A", "CYL_SEND_B", "CYL_SEND_C", "CYL_SEND_D", "CYL_TILT",
-        "LAMP_GREEN", "LAMP_YELLOW", "LAMP_RED"
+        "LAMP_GREEN", "LAMP_YELLOW", "LAMP_RED",
+        "CYL_SEND_A_RETRACT", "CYL_SEND_B_RETRACT", "CYL_SEND_C_RETRACT",
+        "CYL_SEND_D_RETRACT", "CYL_TILT_RETRACT"
       ],
       "wordVars": ["ENCODER_PULSES"]
     }

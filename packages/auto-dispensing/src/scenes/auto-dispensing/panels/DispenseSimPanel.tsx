@@ -7,13 +7,18 @@ import {
 } from '../constants';
 import {
   DINT_ADDRESS_ROWS, ENCODER_REGISTER_INFO, pointAddressRow,
-  MANUAL_INPUT_POINTS, inputPointLevel,
+  MANUAL_INPUT_POINTS, SOLENOID_OUTPUT_POINTS, inputPointLevel,
 } from '../manualIo';
 import {
+  SOLENOID_TYPES, SOLENOID_TYPE_LABELS, SOLENOID_DEFAULT,
+  resolveCylinderLevels, snapshotSolenoidCoils, solenoidConflicts,
+  readCylinderLevels, type CoilLevels,
+} from '../solenoid';
+import {
   CABINET_BUTTON_IO, SIM_COMMAND_KEYS, SIM_COMMAND_LABELS, SIM_COMMAND_COLORS,
-  SIM_SENSOR_VAR_NAMES, SIM_OUTPUT_POINTS, SIM_OUTPUT_ACTION_LABELS,
-  SIM_SELECTOR_POINTS, SELECTOR_IO, simSelectorRows, selectorIo,
-  SIM_READ_VAR_NAMES, simCommandPoint, simPointRows, motorInterlockPartner,
+  SIM_SENSOR_VAR_NAMES, SIM_OUTPUT_POINTS,
+  SELECTOR_IO, simSelectorRows, selectorIo,
+  SIM_READ_VAR_NAMES, simCommandPoint, simPointRows,
   type CabinetButtonKey,
 } from '../simulationIo';
 import { AddressHint } from './AddressHint';
@@ -63,9 +68,10 @@ function commandStyle(key: CabinetButtonKey, on: boolean): CSSProperties {
 /**
  * 仿真模式面板 = 一台可对线的 PLC I/O 教学台：
  *  - 主令按钮 / 3D 按钮箱 → 写 PLC 输入线圈（BUTTON_*，X0-X4 / C0-C4 / M0.x）
+ *  - 手动 / 自动自锁按钮与 3D 旋钮联动，一帧写两个互锁输入线圈
  *  - 原点、终点、空仓、磁性开关 → 孪生状态写回 PLC 输入点，LED 按回读显示
- *  - 前进/后退、送药缸、翻转缸、三色灯 → 可直接置位/复位 PLC 输出线圈，
- *    3D 模型按 readVars 回读联动；电机正反转带互锁。
+ *  - PLC 输出线圈由真实 PLC 程序驱动，面板只在 IO 信号表做只读显示，
+ *    3D 模型按 readVars 回读联动；单 / 双电控由 solenoid.ts 解释。
  * 所有变量名与三协议地址都由 simulationIo / manualIo 点位表派生，禁止回填地址字面量。
  */
 export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected }: {
@@ -86,6 +92,12 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
   const pollingRef = useRef(false);
   /** 连接建立后把物理旋钮档位同步进 PLC 一次；断开重连要重新同步 */
   const selectorSyncedRef = useRef(false);
+  /**
+   * 上一轮 10 只电磁阀线圈电平，供双电控上升沿检测。
+   * 每轮都更新（不区分单 / 双电控），因此从单电控切到双电控时
+   * 不会把「早就为 ON」的线圈误判成一次新的上升沿。
+   */
+  const prevCoilsRef = useRef<CoilLevels>({});
   const protocolRef = useRef(protocol);
   protocolRef.current = protocol;
   const stopPollingRef = useRef<(() => void) | null>(null);
@@ -106,7 +118,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
       if (!plcService.connected || pollingRef.current) return;
       pollingRef.current = true;
       try {
-        // 24 输入 + 10 输出全部回读；协议自带变量表并入，保证三协议都不漏点
+        // 24 输入 + 15 输出全部回读；协议自带变量表并入，保证三协议都不漏点
         const protoVars = getReadVars(protocolRef.current);
         const names = Array.from(new Set([...SIM_READ_VAR_NAMES, ...Object.keys(protoVars)]));
         const res = await plcService.readVars(names);
@@ -129,14 +141,25 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         if (!unchanged) setIoSignals(signals);
         prevSignalsRef.current = signals;
 
-        // ===== PLC → 模型：10 个输出线圈驱动 3D 执行件 =====
+        // ===== PLC → 模型：电机 / 灯塔电平直连，气缸交给电磁阀语义解释 =====
+        // 单电控 = 动作线圈电平跟随（失电弹簧复位）；
+        // 双电控 = 10 只线圈的上升沿切换阀芯，断电后保持当前姿态。
+        // 语义全部在 solenoid.ts 的纯函数里，面板只负责取电平、写 store。
         const store = useDispensingStore.getState();
         store.setMotor(!!v['MOTOR_FWD'], !!v['MOTOR_REV']);
+        const levels = resolveCylinderLevels(
+          store.solenoidType,
+          prevCoilsRef.current,
+          v,
+          readCylinderLevels(store.sendCyl, store.tiltCyl),
+        );
+        // 每轮都刷新基准（不区分单 / 双电控），切换类型时不会产生假上升沿
+        prevCoilsRef.current = snapshotSolenoidCoils(v);
         MAG.forEach((mag) => {
-          const on = !!v[`CYL_SEND_${mag}`];
+          const on = !!levels[mag];
           if (store.sendCyl[mag].extended !== on) store.setSendCyl(mag, on, on ? 1 : 0);
         });
-        const tiltOn = !!v['CYL_TILT'];
+        const tiltOn = !!levels.TILT;
         if (store.tiltCyl.tilted !== tiltOn) store.setTiltCyl(tiltOn, tiltOn ? 1 : 0);
         store.setLamps({ green: !!v['LAMP_GREEN'], yellow: !!v['LAMP_YELLOW'], red: !!v['LAMP_RED'] });
 
@@ -177,6 +200,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     selectorSyncedRef.current = false; // 重连后重新做一次旋钮档位上电同步
+    prevCoilsRef.current = {};         // 重连后重新建立上升沿基准
   }, []);
 
   // 保持 ref 同步
@@ -199,43 +223,39 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
     void writeSimPlcVar(CABINET_BUTTON_IO[key], value);
   }, [connected]);
 
-  /* ---- 输出点：直接置位 / 复位 PLC 输出线圈 ---- */
-  const toggleOutput = useCallback((key: string) => {
-    if (!connected) return;
-    const next = !ioSignals[key];
-    const partner = motorInterlockPartner(key);
-    if (partner && next) {
-      // 正反转互锁：置位一方必须同时复位另一方
-      void writeSimPlcVars([key, partner], [true, false]);
-    } else {
-      void writeSimPlcVar(key, next);
-    }
-  }, [connected, ioSignals]);
-
   const encoderPulses = useDispensingStore((s) => s.encoderPulses);
   const encoderDir = useDispensingStore((s) => s.encoderDir);
   const selectorAuto = useDispensingStore((s) => s.selectorAuto);
+  const solenoidType = useDispensingStore((s) => s.solenoidType);
+  const setSolenoidType = useDispensingStore((s) => s.setSolenoidType);
+  /** 双电控禁止状态：同一气缸两只线圈同时得电，直接由 PLC 回读值派生 */
+  const conflicts = solenoidType === 'double' ? solenoidConflicts(ioSignals) : [];
 
-  /** 拨动两位选择开关：本地 3D 旋钮立即跟随，仿真模式一帧写两个互锁输入线圈 */
-  const selectSelector = useCallback((auto: boolean) => {
-    useDispensingStore.getState().setSelectorAuto(auto);
+  /** 自锁按钮显示的当前档位：连接后以 PLC 回读为准，未连接时读本地旋钮 */
+  const autoOn = connected ? !!ioSignals[SELECTOR_IO.auto] : selectorAuto;
+
+  /** 点击自锁按钮切换手动 / 自动：3D 旋钮立即跟随，一帧写两个互锁输入线圈 */
+  const toggleSelector = useCallback(() => {
+    const next = !autoOn;
+    useDispensingStore.getState().setSelectorAuto(next);
     if (!connected) return;
-    const io = selectorIo(auto);
+    const io = selectorIo(next);
     void writeSimPlcVars(io.names, io.values);
-  }, [connected]);
+  }, [connected, autoOn]);
 
   return (
     <div className="space-y-2">
-      {/* ===== 自复位控制按钮：每个都绑定一个 PLC 输入点 ===== */}
+      {/* ===== 主控指令：5 个自复位主令 + 1 个手动/自动自锁按钮，共 3 列 × 2 行 ===== */}
       <div className="card">
-        <div className="section-title !mb-2">主令控制（自复位 · 写 PLC 输入）</div>
+        <div className="section-title !mb-2">主令控制</div>
         {!connected && (
           <div className="text-[0.55rem] text-amber-400 mb-1.5">
             未连接 PLC：按键不会写入任何地址，请先在上方连接仿真 PLC。
           </div>
         )}
-        {/* 三列两行与 3D 按钮箱「上排 3 + 下排 2」一致；名称/颜色/顺序全部由
-            CABINET_BUTTONS 派生，AddressHint 默认虚线下划线与手动模式观感相同。 */}
+        {/* 三列两行共 6 格：前 5 格是 3D 按钮箱的主令，名称/颜色/顺序由
+            CABINET_BUTTONS 派生；第 6 格是手动 / 自动自锁按钮，与 3D 旋钮联动。
+            AddressHint 默认虚线下划线与手动模式观感相同。 */}
         <div className="grid grid-cols-3 gap-1.5 mb-2">
           {SIM_COMMAND_KEYS.map((key) => {
             const point = simCommandPoint(key);
@@ -257,6 +277,20 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
               </AddressHint>
             );
           })}
+          {/* 第 6 格：自锁按钮。aria-pressed 表达「保持在某一档」，
+              点击切换手动 / 自动，两档三协议地址由点位表派生。 */}
+          <AddressHint title="手动 / 自动" rows={simSelectorRows()} className="block min-w-0">
+            <button
+              data-sim-selector=""
+              aria-label="手动自动选择开关"
+              aria-pressed={autoOn}
+              className={`btn btn-xs w-full touch-manipulation ${autoOn ? 'btn-primary' : 'btn-outline'}`}
+              onClick={toggleSelector}
+              style={{ fontSize: '0.58rem' }}
+            >
+              {autoOn ? '⚙ 自动' : '✋ 手动'}
+            </button>
+          </AddressHint>
         </div>
         <div className="divider !my-1.5" />
         <div className="flex items-center gap-2">
@@ -278,61 +312,57 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         </div>
       </div>
 
-      {/* ===== 手动 / 自动 两位选择开关：两个互锁的 PLC 输入点 ===== */}
+      {/* ===== 电磁阀类型：单电控 / 双电控，决定孪生如何解释 10 只气缸线圈 ===== */}
       <div className="card">
-        <div className="section-title !mb-1.5">手动 / 自动 选择开关（写 PLC 输入）</div>
+        <div className="section-title !mb-1.5">电磁阀类型</div>
         <div className="text-[0.5rem] text-slate-500 mb-1 leading-relaxed">
-          两档互锁，与 3D 控制柜旋钮联动；拨动后对应输入线圈点亮，悬停档位查看三菱 / Modbus / S7 地址。
-          未连接 PLC 时只切换本地旋钮，不写任何地址。
+          控制气缸实质是控制电磁阀：单电控一只线圈，得电动作、失电弹簧复位；
+          双电控两只线圈，分别控制伸出与缩回，任一只上升沿切换阀芯，断电仍保持当前位置。
+          切换只改变孪生对 PLC 线圈的解释，不改动任何地址；悬停下方线圈名查看三协议地址。
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          {SIM_SELECTOR_POINTS.map((p) => {
-            const auto = p.key === SELECTOR_IO.auto;
-            const on = connected ? !!ioSignals[p.key] : (auto ? selectorAuto : !selectorAuto);
-            return (
-              <AddressHint key={p.key} title={p.label} rows={simSelectorRows()}
-                className="block min-w-0">
-                <button
-                  className={`btn btn-xs w-full touch-manipulation ${on ? 'btn-success' : 'btn-outline'}`}
-                  onClick={() => selectSelector(auto)}
-                  aria-label={`${p.label}选择开关`}
-                  style={{ fontSize: '0.6rem' }}
-                >
-                  {auto ? '⚙ 自动' : '✋ 手动'} {on ? '● 接通' : '○ 断开'}
-                </button>
-              </AddressHint>
-            );
-          })}
+          {SOLENOID_TYPES.map((t) => (
+            <button
+              key={t}
+              className={`btn btn-xs w-full touch-manipulation ${solenoidType === t ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setSolenoidType(t)}
+              aria-label={`${SOLENOID_TYPE_LABELS[t]}电磁阀`}
+              style={{ fontSize: '0.6rem' }}
+            >
+              {t === 'single' ? '单电控' : '双电控'} {solenoidType === t ? '● 生效' : '○ 未选'}
+            </button>
+          ))}
         </div>
-      </div>
-
-      {/* ===== 输出点操作：前进 / 后退 / 气缸 / 灯，直接绑定 PLC 输出线圈 ===== */}
-      <div className="card">
-        <div className="section-title !mb-1.5">输出点直接置位（写 PLC 输出）</div>
-        <div className="text-[0.5rem] text-slate-500 mb-1">
-          点一次置位、再点一次复位；按钮与 3D 执行件状态均由 PLC 回读。前进/后退为电机正/反转，带互锁。
-          悬停按钮查看三菱 Y / Modbus 线圈 / S7 地址。
-        </div>
-        <div className="grid grid-cols-5 gap-1.5">
-          {SIM_OUTPUT_POINTS.map((p) => (
-            <AddressHint key={p.key} title={p.label} rows={simPointRows(p)}
-              className="block min-w-0">
-              <button
-                className={`btn btn-xs w-full touch-manipulation ${ioSignals[p.key] ? 'btn-success' : 'btn-outline'}`}
-                onClick={() => toggleOutput(p.key)}
-                aria-label={`${p.label}输出点`}
-                style={{ fontSize: '0.58rem' }}
-              >
-                {SIM_OUTPUT_ACTION_LABELS[p.key]}
-              </button>
+        <div className="mt-1 flex items-center gap-1 flex-wrap">
+          <span className="badge badge-slate">
+            默认 {SOLENOID_DEFAULT === 'single' ? '单电控' : '双电控'}
+          </span>
+          {SOLENOID_OUTPUT_POINTS.map((p) => (
+            <AddressHint key={p.key} title={p.label} rows={simPointRows(p)} className="block min-w-0">
+              <span className={`badge ${solenoidType === 'double' ? 'badge-blue' : 'badge-slate'}`}>
+                {p.label}
+              </span>
             </AddressHint>
           ))}
         </div>
+        <div className="text-[0.5rem] text-slate-500 mt-1 leading-relaxed">
+          {solenoidType === 'single'
+            ? '单电控：缩回线圈不参与驱动，悬停可查看其预留地址。'
+            : '双电控：动作线圈脉冲伸出、缩回线圈脉冲回位；PLC 程序需主动输出缩回脉冲，否则气缸不会回原位。'}
+        </div>
+        {conflicts.length > 0 && (
+          <div className="mt-1 text-[0.5rem] text-red-400 leading-relaxed">
+            ⚠ 禁止状态：{conflicts.join('、')} 两只线圈同时得电，阀芯保持原姿态。
+          </div>
+        )}
       </div>
 
-      {/* ===== 32 位 DINT 位置数据寄存器 ===== */}
+      {/* 输出点不再单独设「直接置位」栏：PLC 输出线圈由真实 PLC 程序驱动，
+          面板只在最后的 IO 信号表里做只读显示，避免同一信号在两处重复。 */}
+
+      {/* ===== 32 位 DINT 位置数据寄存器：只显示数值与方向 ===== */}
       <div className="card">
-        <div className="section-title !mb-1.5">位置数据寄存器（32 位 DINT）</div>
+        <div className="section-title !mb-1.5">位置数据寄存器</div>
         <div className="flex flex-wrap items-center gap-1.5 mb-1">
           <AddressHint
             title="位置寄存器"
@@ -348,22 +378,14 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
             {encoderDir > 0 ? '↑ 前进 +' : encoderDir < 0 ? '↓ 后退 −' : '静止'}
           </span>
         </div>
-        <div className="text-[0.55rem] text-slate-500 leading-relaxed">
-          32 位有符号整数，低字在前，一次原子写；随滑台前进递增、后退递减，回到原点传感器（Z 相）归零。
-          寄存器地址悬停上方数值查看，完整映射见「使用说明」。
-          编码器独立装在 +X 丝杆末端，A/B 相接线与高速计数器 C0 由 PLC 程序处理，孪生不占用输入点；
-          电机为普通正反转布尔控制，非伺服、无速度给定。
-        </div>
       </div>
 
-      {/* ===== IO 信号 LED：全部取 PLC 回读 ===== */}
+      {/* ===== IO 信号 LED：全部取 PLC 回读，输出点只显示不置位 ===== */}
       <div className="card">
-        <div className="section-title !mb-1.5">IO 信号（PLC 回读）</div>
+        <div className="section-title !mb-1.5">IO 信号</div>
         <div className="space-y-1.5">
           <div>
-            <div className="text-[0.5rem] text-slate-500 mb-0.5">
-              输入点 24（主令/选择开关由控件写入 · 传感器由孪生写回 PLC）
-            </div>
+            <div className="text-[0.5rem] text-slate-500 mb-0.5">输入点 24</div>
             <div className="grid grid-cols-3 gap-x-1">
               {MANUAL_INPUT_POINTS.map((p) => (
                 <IOLed key={p.key} label={p.label} active={!!ioSignals[p.key]} addrKey={p.key} />
@@ -374,9 +396,7 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
           <div className="divider !my-0" />
 
           <div>
-            <div className="text-[0.5rem] text-slate-500 mb-0.5">
-              输出点 10（PLC → 孪生 · 可由上方按钮直接置位）
-            </div>
+            <div className="text-[0.5rem] text-slate-500 mb-0.5">输出点 15</div>
             <div className="grid grid-cols-3 gap-x-1">
               {SIM_OUTPUT_POINTS.map((p) => (
                 <IOLed key={p.key} label={p.label} active={!!ioSignals[p.key]} addrKey={p.key} />

@@ -5,13 +5,16 @@
  * 用途：无/未接 PLC 环境下端到端验证自动配药场景"仿真模式"链路
  *   （前端连接面板 → websocket-server 网关 → 本虚拟 PLC → 输出回读驱动 3D）
  *
- * 地址与 packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts 一致（线圈 0-40）：
+ * 地址与 packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts 一致（线圈 0-45）：
  *   0-4   启动/停止/复位/急停/取药确认 —— DT 写入（孪生按钮）
+ *   5-6   手动/自动 两位选择开关        —— DT 写入（两档互锁）
  *   10-16 限位/空仓/取药仓有药          —— DT 写入（生模型反馈）
  *   20-29 送药缸×4 前后 + 翻转缸双位磁性开关 —— DT 写入（生反馈）
  *   30-31 电机正/反转                   —— 本程序驱动
- *   32-36 送药缸 A/B/C/D、翻转缸          —— 本程序驱动
+ *   32-36 送药缸 A/B/C/D、翻转缸动作线圈 —— 本程序驱动
  *   38-40 灯塔 绿/黄/红                 —— 本程序驱动
+ *   41-45 双电控专用缩回 / 回位线圈     —— 本程序不使用（单电控参考程序），
+ *                                          由外部 PLC 程序 / 仿真面板置位，急停时一并清掉
  *   HR120/HR121 = 32 位 DINT 位置寄存器 ENCODER_PULSES（低字在前）—— DT 写入，唯一真值
  *
  * 位置闭环：孪生按滑块位移增减一个 32 位 DINT → 网关用 FC10 一次写 HR120/HR121
@@ -118,6 +121,10 @@ function cyOff() {
   coils[A.CYL_SEND_A] = false; coils[A.CYL_SEND_B] = false;
   coils[A.CYL_SEND_C] = false; coils[A.CYL_SEND_D] = false;
   coils[A.CYL_TILT] = false;
+  // 双电控缩回线圈也要一起清：残留的 ON 脉冲在 Twin 侧会被读成新的上升沿
+  coils[A.CYL_SEND_A_RETRACT] = false; coils[A.CYL_SEND_B_RETRACT] = false;
+  coils[A.CYL_SEND_C_RETRACT] = false; coils[A.CYL_SEND_D_RETRACT] = false;
+  coils[A.CYL_TILT_RETRACT] = false;
 }
 function moveToward(target) {
   const d = target - curPos;

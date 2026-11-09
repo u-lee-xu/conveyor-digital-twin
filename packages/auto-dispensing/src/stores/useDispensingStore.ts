@@ -4,6 +4,7 @@ import {
   PULSES_PER_M, ENCODER_PULSES_MAX, LIMIT_ENTER_TOL, LIMIT_EXIT_TOL,
   type MagazineId,
 } from '../scenes/auto-dispensing/constants';
+import { SOLENOID_DEFAULT, SOLENOID_TYPES, type SolenoidType } from '../scenes/auto-dispensing/solenoid';
 
 export type AppMode = 'manual' | 'auto' | 'sim' | 'scoring';
 
@@ -109,6 +110,13 @@ interface DispensingState {
    */
   selectorAuto: boolean;
 
+  /**
+   * 电磁阀接线类型（单电控 / 双电控）。这是**物理硬件选型**，不是运行态：
+   * `resetAll()` 不重置它，也不随自动流程复位；由仿真面板切换，
+   * 并经广播快照同步到观众端 store，保证主控与观众口径一致。
+   */
+  solenoidType: SolenoidType;
+
   // ---- 自动流程 ----
   autoPhase: AutoPhase;
   autoCycle: number;   // 已完成配方轮数
@@ -151,6 +159,8 @@ interface DispensingState {
   setButton: (btn: keyof DispensingState['buttons'], pressed: boolean) => void;
   /** 拨动两位选择开关；调用方负责同时写 PLC 两个互锁输入点 */
   setSelectorAuto: (auto: boolean) => void;
+  /** 切换电磁阀接线类型；只接受单一来源里声明的两种取值 */
+  setSolenoidType: (type: SolenoidType) => void;
   setAutoPhase: (phase: AutoPhase) => void;
   setDosing: (mag: MagazineId | null, remain: number) => void;
   bumpCycle: () => void;
@@ -228,6 +238,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
 
   buttons: { start: false, stop: false, reset: false, estop: false, confirm: false },
   selectorAuto: false,
+  solenoidType: SOLENOID_DEFAULT,
 
   autoPhase: 'idle',
   autoCycle: 0,
@@ -350,6 +361,9 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
   setLamps: (lamp) => set({ lamp }),
   setButton: (btn, pressed) => set((s) => ({ buttons: { ...s.buttons, [btn]: pressed } })),
   setSelectorAuto: (auto) => set({ selectorAuto: auto }),
+  setSolenoidType: (type) => set({
+    solenoidType: SOLENOID_TYPES.includes(type) ? type : SOLENOID_DEFAULT,
+  }),
   setAutoPhase: (phase) => set({ autoPhase: phase }),
   setDosing: (dosingMag, dosingRemain) => set({ dosingMag, dosingRemain }),
   bumpCycle: () => set((s) => ({ autoCycle: s.autoCycle + 1 })),

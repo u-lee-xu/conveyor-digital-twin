@@ -1,6 +1,6 @@
 import { useDispensingStore } from '../../../stores/useDispensingStore';
 import {
-  RECIPE_LIMIT, MAG_CAPACITY, MAGAZINE_LABELS, ENCODER_DINT, ENCODER_REG_LABEL,
+  RECIPE_LIMIT, MAGAZINE_LABELS, ENCODER_DINT, ENCODER_REG_LABEL,
   type MagazineId,
 } from '../constants';
 import { ReadoutNum, DIRECTION_BADGE_CLS } from './ReadoutNum';
@@ -35,7 +35,7 @@ export function DispenseDemoPanel() {
     <div className="space-y-2">
       {/* 配方设定 */}
       <div className="card">
-        <div className="section-title">配方设定（每仓份数 0-{RECIPE_LIMIT}）</div>
+        <div className="section-title">配方设定</div>
         <div className="space-y-1.5">
           {mags.map((mag) => (
             <div key={mag} className="flex items-center gap-2">
@@ -63,14 +63,14 @@ export function DispenseDemoPanel() {
         </div>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <span className="text-[0.55rem] text-slate-500">
-            配方 = A×{recipe.A} + B×{recipe.B} + C×{recipe.C} + D×{recipe.D}（启动后锁定）
+            配方 = A×{recipe.A} + B×{recipe.B} + C×{recipe.C} + D×{recipe.D}
           </span>
           <button
             className="btn btn-xs btn-outline touch-manipulation shrink-0"
             style={{ fontSize: '0.62rem' }}
             onClick={() => refillAll()}
           >
-            ⊕ 补满四仓（{MAG_CAPACITY}）
+            ⊕ 补满四仓
           </button>
         </div>
         <div className="mt-1 text-[0.55rem] text-slate-500">
@@ -112,7 +112,7 @@ export function DispenseDemoPanel() {
             style={{ fontSize: '0.62rem' }}
             onClick={() => setButton('reset', true)}
           >
-            ↺ 复位（回起点）
+            ↺ 复位
           </button>
           <button
             className="btn btn-xs btn-blue touch-manipulation flex-1"

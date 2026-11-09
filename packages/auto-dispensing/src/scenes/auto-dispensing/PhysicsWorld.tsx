@@ -26,6 +26,9 @@ type DiagnosticsWindow = Window & {
     pendingPills: number; hopperPills: number; sliderX: number; autoPhase: string;
     magStock: Record<MagazineId, number>;
     sendCyl: Record<MagazineId, { extended: boolean; position: number }>;
+    /** 翻转缸姿态与电磁阀接线选型：单 / 双电控 CDP 验收的模型侧真值 */
+    tiltCyl: { tilted: boolean; angle: number };
+    solenoidType: string;
     dispensed: Record<MagazineId, boolean>;
   };
 };
@@ -201,6 +204,8 @@ export function PhysicsWorld() {
           autoPhase: s.autoPhase,
           magStock: { ...s.magStock },
           sendCyl: { ...s.sendCyl },
+          tiltCyl: { ...s.tiltCyl },
+          solenoidType: s.solenoidType,
           dispensed: { ...s.dispensed },
         };
       };

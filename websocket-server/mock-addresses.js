@@ -2,7 +2,7 @@
  * 场景仿真地址表（单一来源）
  *
  * - COAL_ADDRESSES          煤料分拣场景（线圈 0-26）
- * - DISPENSING_ADDRESSES    自动配药场景（线圈 0-40，全部是布尔量）
+ * - DISPENSING_ADDRESSES    自动配药场景（线圈 0-45，全部是布尔量；41-45 是双电控缩回线圈）
  * - DISPENSING_WORDS        自动配药位置寄存器（32 位 DINT，不占线圈/输入点）
  *
  * ⚠️ 同步规则：修改前端 constants.ts 地址后，必须同步本文件；
@@ -38,6 +38,10 @@ const DISPENSING_ADDRESSES = {
   MOTOR_FWD: 30, MOTOR_REV: 31,
   CYL_SEND_A: 32, CYL_SEND_B: 33, CYL_SEND_C: 34, CYL_SEND_D: 35, CYL_TILT: 36,
   LAMP_GREEN: 38, LAMP_YELLOW: 39, LAMP_RED: 40,
+  // 双电控专用「缩回 / 回位」线圈 41-45：既有 32-40 编号一个都不动，
+  // 单电控（弹簧复位）不使用；37 是历史预留空洞，继续空置。
+  CYL_SEND_A_RETRACT: 41, CYL_SEND_B_RETRACT: 42, CYL_SEND_C_RETRACT: 43,
+  CYL_SEND_D_RETRACT: 44, CYL_TILT_RETRACT: 45,
 };
 
 /**
