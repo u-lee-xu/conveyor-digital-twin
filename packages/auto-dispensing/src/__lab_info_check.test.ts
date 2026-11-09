@@ -40,6 +40,14 @@ describe('运行时地址端点：不固化 IP', () => {
     expect(startLab).toContain('no-store');
   });
 
+  it('界面默认显示默认路由网卡的本地 IP，不是枚举到的第一块虚拟网卡', () => {
+    expect(startLab).toContain('defaultRouteIp()');
+    expect(startLab).toContain('primaryAddress');
+    expect(startLab).toContain('a.address === preferred');
+    expect(startLab).toContain('界面默认显示');
+    expect(startLab).toContain('本机自己始终用 127.0.0.1');
+  });
+
   it('不再把启动时猜到的单一 IP 写进 dist/lab-info.json', () => {
     expect(startLab).not.toMatch(/writeFileSync[\s\S]{0,240}lab-info\.json/);
     expect(startLab).not.toContain('JSON.stringify({ viewerUrl, host: ip');
@@ -112,6 +120,15 @@ describe('rankViewerUrls 纯函数', () => {
   it('服务端不可用或只给旧静态 viewerUrl 时仍能给出可用地址', () => {
     expect(rankViewerUrls([], 'http://127.0.0.1:5201/')).toEqual(['http://127.0.0.1:5201/']);
     expect(rankViewerUrls(['http://192.168.3.34:5201/'], '')).toEqual(['http://192.168.3.34:5201/']);
+  });
+
+  it('服务端把本地 IP 排第一时，浏览器端不会把它重排掉', () => {
+    const urls = rankViewerUrls(
+      ['http://10.70.40.241:5201/', 'http://172.31.16.1:5201/', 'http://127.0.0.1:5201/'],
+      'http://127.0.0.1:5201/',
+    );
+    expect(urls[0]).toBe('http://10.70.40.241:5201/');
+    expect(urls[urls.length - 1]).toBe('http://127.0.0.1:5201/');
   });
 
   it('多网卡重复候选去重，顺序稳定', () => {
