@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useDispensingStore, type PendingPill } from '../../../stores/useDispensingStore';
+import { useAppStore } from '../../../stores/useAppStore';
 import {
   SLIDER_MIN_X, SLIDER_MAX_X, MAGAZINE_X, MAG_CAPACITY, HOPPER_OFFSET_X,
   FEED_CYL_TIME, SCREW_DETAIL, type MagazineId,
@@ -89,6 +90,16 @@ const initRef = (): LoopRef => ({
   flashTimer: 0,
 });
 
+/**
+ * 表现层动画总驱动（三个入口共用：独立 App、平台壳 effects、单测）。
+ *
+ * 模式口径（2026-11-09 定稿）：**只有演示模式才自己跑流程**。
+ *  - 演示 auto：状态机按配方驱动整轮「取药 → 倒药 → 回程」。
+ *  - 仿真 sim：3D 部件姿态唯一真值是 PLC 输出回读，本 hook 只做插值，
+ *    绝不替 PLC 程序做业务决策。
+ *  - 手动 manual：单点 I/O 由面板直接写 store，同样不跑状态机。
+ * 气缸/翻转插值、伸到位出药、药片飞行与物理兜底属于表现层，三种模式都保留。
+ */
 export function useDispenseLoop() {
   const ref = useRef<LoopRef>(initRef());
 
@@ -101,13 +112,18 @@ export function useDispenseLoop() {
       last = now;
       const s = useDispensingStore.getState();
       const r = ref.current;
+      const mode = useAppStore.getState().mode;
+      const autoMode = mode === 'auto';
+      const plcMode = mode === 'sim';
 
       // ========== 电机运动（手动/仿真共用：motorFwd/Rev 驱动滑台） ==========
       // 手动点动（jogActive）时 Y0/Y1 线圈仍置位，但位移已由面板按 MANUAL_JOG.STEP
       // 发离散脉冲，这里必须让位，否则 rAF 会用演示速度把「点一次」放大成几十毫米。
       // 演示自动流程 / PLC / 观众广播不置 jogActive，速度仍是原来的 SLIDER_SPEED。
       const moving = s.motorFwd || s.motorRev;
-      if (moving && !s.buttons.estop && !s.jogActive) {
+      // 仿真模式：motorFwd/motorRev 恒来自 PLC 输出线圈回读，本地 estop 输入与
+      // 手动点动标志都不得再干预，否则等于前端替 PLC 程序做了决策。
+      if (moving && (plcMode || (!s.buttons.estop && !s.jogActive))) {
         const dir = s.motorFwd ? 1 : -1;
         s.setSliderX(s.sliderX + dir * SLIDER_SPEED * dt);
       }
@@ -218,8 +234,9 @@ export function useDispenseLoop() {
           } else {
             useDispensingStore.getState().setDumpingPills(next);
           }
-        } else if (r.dumpStarted) {
-          // 药片全部落入取药仓（或本轮无药）：收尾并回位
+        } else if (r.dumpStarted && autoMode) {
+          // 药片全部落入取药仓（或本轮无药）：收尾并回位。
+          // 只有演示模式允许这里主动回位翻转缸；仿真模式姿态归 PLC 输出管。
           r.dumpStarted = false;
           const cur = useDispensingStore.getState();
           cur.setLamp('green', false);
@@ -229,7 +246,19 @@ export function useDispenseLoop() {
         }
       }
 
-      // ========== 演示（auto）流程状态机 ==========
+      // ========== 演示（auto）流程状态机：只有演示模式才自己跑 ==========
+      //
+      // 仿真模式下 BUTTON_START 只是 PLC 的一个输入点，3D 部件动画的唯一真值
+      // 是 PLC 输出线圈（MOTOR_FWD/REV、CYL_*、LAMP_*）。若让状态机在这里跑起来，
+      // 它会自己覆写电机、驱动料斗完成整轮取药/倒药，完全绕过 PLC 程序；
+      // 急停清场段也会与 PLC 输出打架。手动模式则由操作台单点 I/O 直接写 store。
+      // 因此非演示模式在表现层插值做完后直接排下一帧返回，不进入状态机。
+      if (!autoMode) {
+        // 持续跟踪启动电平，避免从仿真切回演示时把「早就按下的启动」误判成新上升沿
+        r.prevStart = s.buttons.start;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
 
       // 启动上升沿 → 快照配方生成队列
       const startPressed = s.buttons.start && !r.prevStart;

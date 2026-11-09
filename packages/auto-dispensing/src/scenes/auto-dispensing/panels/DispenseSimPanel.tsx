@@ -17,7 +17,7 @@ import {
 import {
   CABINET_BUTTON_IO, SIM_COMMAND_KEYS, SIM_COMMAND_LABELS, SIM_COMMAND_COLORS,
   SIM_SENSOR_VAR_NAMES, SIM_OUTPUT_POINTS,
-  SELECTOR_IO, simSelectorRows, selectorIo,
+  SELECTOR_IO, simSelectorRows,
   SIM_READ_VAR_NAMES, simCommandPoint, simPointRows,
   type CabinetButtonKey,
 } from '../simulationIo';
@@ -25,7 +25,7 @@ import { AddressHint } from './AddressHint';
 import { ReadoutNum, DIRECTION_BADGE_WIDE_CLS } from './ReadoutNum';
 import type { ProtocolType } from '../../../services/plc-websocket';
 import { plcService } from '../../../services/plc-websocket';
-import { writeSimPlcVar, writeSimPlcVars } from '../../../services/simulationPlc';
+import { writeSimPlcVar, writeSimSelector } from '../../../services/simulationPlc';
 
 /**
  * 单个 IO 信号 LED：悬停一次给出三菱 / Modbus / S7 三协议地址，
@@ -92,6 +92,8 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
   const pollingRef = useRef(false);
   /** 连接建立后把物理旋钮档位同步进 PLC 一次；断开重连要重新同步 */
   const selectorSyncedRef = useRef(false);
+  /** 互锁自愈限频：PLC 侧被外部清成两档同值时才重写，避免每轮占用写通道 */
+  const selectorHealAtRef = useRef(0);
   /**
    * 上一轮 10 只电磁阀线圈电平，供双电控上升沿检测。
    * 每轮都更新（不区分单 / 双电控），因此从单电控切到双电控时
@@ -125,15 +127,23 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
         if (!res.success || !res.values) return;
 
         // 上电同步：两位选择开关是物理输入元件，连接后必须把本地旋钮档位
-        // 写成一真一假的两路互锁输入，避免虚拟 PLC 里两档同时断开、与 3D 旋钮不一致。
-        // 之后只由拨档事件写，不在这里每轮覆盖（PLC 侧可单独对线）。
+        // 写成一真一假的两路互锁输入，避免 PLC 里两档同时断开、与 3D 旋钮不一致。
+        // 之后不再用回读反向覆盖本地档位：选择开关由人拨，PLC 只读不写。
         if (!selectorSyncedRef.current) {
           selectorSyncedRef.current = true;
-          const initial = selectorIo(useDispensingStore.getState().selectorAuto);
-          await writeSimPlcVars(initial.names, initial.values);
+          selectorHealAtRef.current = Date.now();
+          await writeSimSelector(useDispensingStore.getState().selectorAuto);
         }
 
         const v = res.values;
+        // 互锁自愈：PLC 侧若被外部清成「两档同值」的无效态，按本地物理旋钮
+        // 档位重写一次。回读只用来校验接线与点亮 LED，绝不拿来改本地档位，
+        // 否则刚点完按钮就可能被上一轮旧值拉回，表现为切换不顺畅 / 回弹。
+        if (!!v[SELECTOR_IO.manual] === !!v[SELECTOR_IO.auto]
+          && Date.now() - selectorHealAtRef.current > 1000) {
+          selectorHealAtRef.current = Date.now();
+          await writeSimSelector(useDispensingStore.getState().selectorAuto);
+        }
         const signals: Record<string, boolean> = { ...v };
         // 值未变化时跳过 setState，避免每轮轮询触发面板重渲染
         const prev = prevSignalsRef.current;
@@ -231,17 +241,21 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
   /** 双电控禁止状态：同一气缸两只线圈同时得电，直接由 PLC 回读值派生 */
   const conflicts = solenoidType === 'double' ? solenoidConflicts(ioSignals) : [];
 
-  /** 自锁按钮显示的当前档位：连接后以 PLC 回读为准，未连接时读本地旋钮 */
-  const autoOn = connected ? !!ioSignals[SELECTOR_IO.auto] : selectorAuto;
+  /**
+   * 自锁按钮与 3D 旋钮同源：一律读本地 selectorAuto，点击当帧立即翻转。
+   * 旧版连接后改读 300ms 轮询回读，UI 要等一轮才变、还可能被 PLC 侧旧值拉回，
+   * 而 3D 旋钮已立即跟着本地 store 变，两处不同步就是「切换不顺畅」的根因。
+   * 选择开关是人工操作的物理输入，PLC 只读不写；回读仅用于 LED 校验接线。
+   */
+  const autoOn = selectorAuto;
 
-  /** 点击自锁按钮切换手动 / 自动：3D 旋钮立即跟随，一帧写两个互锁输入线圈 */
+  /** 点击自锁按钮：读实时 store 档位（避免连点用渲染闭包旧值），一帧写两路互锁输入 */
   const toggleSelector = useCallback(() => {
-    const next = !autoOn;
+    const next = !useDispensingStore.getState().selectorAuto;
     useDispensingStore.getState().setSelectorAuto(next);
     if (!connected) return;
-    const io = selectorIo(next);
-    void writeSimPlcVars(io.names, io.values);
-  }, [connected, autoOn]);
+    void writeSimSelector(next);
+  }, [connected]);
 
   return (
     <div className="space-y-2">

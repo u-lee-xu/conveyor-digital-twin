@@ -6,6 +6,7 @@
  * 未连接 PLC 时也不抛异常：面板会显示「未连接」提示，本地操作不产生副作用。
  */
 import { plcService, type PlcResult } from './plc-websocket';
+import { selectorIo } from '../scenes/auto-dispensing/simulationIo';
 
 const NOT_CONNECTED: PlcResult = { success: false, error: '未连接 PLC' };
 
@@ -23,4 +24,14 @@ export function writeSimPlcVar(name: string, value: boolean): Promise<PlcResult>
 export function writeSimPlcVars(names: string[], values: boolean[]): Promise<PlcResult> {
   if (!plcService.connected) return Promise.resolve(NOT_CONNECTED);
   return plcService.writeVars(names, values);
+}
+
+/**
+ * 拨动两位选择开关：UI 自锁按钮、3D 控制柜旋钮、连接上电同步共用这一入口。
+ * 一帧写 SEL_MANUAL / SEL_AUTO 两路互锁输入，保证三个入口口径完全一致；
+ * 未连接 PLC 时 writeSimPlcVars 短路，只切本地旋钮、不写任何地址。
+ */
+export function writeSimSelector(auto: boolean): Promise<PlcResult> {
+  const io = selectorIo(auto);
+  return writeSimPlcVars(io.names, io.values);
 }
