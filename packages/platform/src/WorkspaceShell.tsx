@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene, ModeSelector, HelpPanel, useMobile, relayWsUrl } from '@digital-twin/shared';
+import { PhysicsScene, ModeSelector, HelpPanel, useMobile, relayWsUrl, loadViewerUrls } from '@digital-twin/shared';
 import type { DeviceDefinition } from './types';
 
 interface WorkspaceShellProps {
@@ -30,15 +30,22 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
     return () => { onCleanupRef.current?.(); };
   }, [device.id]);
 
-  /** 给观众的地址：由一键启动脚本写入 dist/lab-info.json；开发态退回 location.host */
-  const [viewerUrl, setViewerUrl] = useState('');
+  /**
+   * 给观众的地址：运行时由同源 location.host + 服务端实时网卡表生成候选，
+   * 绝不读启动时固化的单一 IP。多网卡/换网时老师可点 ⇄ 切换后再复制。
+   */
+  const [viewerUrls, setViewerUrls] = useState<string[]>([]);
+  const [viewerIndex, setViewerIndex] = useState(0);
   useEffect(() => {
-    const fallback = typeof location !== 'undefined' && location.host ? `http://${location.host}/` : '';
-    fetch('/lab-info.json')
-      .then((r) => (r.ok ? r.json() as Promise<{ viewerUrl?: string }> : null))
-      .then((info) => setViewerUrl(info?.viewerUrl || fallback))
-      .catch(() => setViewerUrl(fallback));
+    let cancelled = false;
+    void loadViewerUrls().then((urls) => {
+      if (!cancelled) { setViewerUrls(urls); setViewerIndex(0); }
+    });
+    return () => { cancelled = true; };
   }, []);
+  const viewerUrl = viewerUrls[viewerIndex] ?? '';
+  const copyViewerUrl = () => { if (viewerUrl) void navigator.clipboard?.writeText(viewerUrl); };
+  const cycleViewerUrl = () => setViewerIndex((i) => (i + 1) % Math.max(1, viewerUrls.length));
 
   /**
    * 主控上报：把设备 store 的渲染态单向推给中继，观众端做只读镜像。
@@ -248,14 +255,26 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
               <ModeSelector currentMode={mode} onModeChange={setMode} modes={device.modes} />
               {/* 紧凑布局没有底部地址条的位置，观众访问地址收进抽屉，仍可一键复制 */}
               {viewerUrl && (
-                <button
-                  type="button"
-                  onClick={() => { void navigator.clipboard?.writeText(viewerUrl); }}
-                  title="点击复制观众访问地址"
-                  className="mt-3 w-full truncate rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-left text-[0.7rem] text-blue-300"
-                >
-                  观众访问 {viewerUrl}（点击复制）
-                </button>
+                <div className="mt-3 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={copyViewerUrl}
+                    title="点击复制观众访问地址"
+                    className="min-w-0 flex-1 truncate rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-left text-[0.7rem] text-blue-300"
+                  >
+                    观众访问 {viewerUrl} · 点击复制
+                  </button>
+                  {viewerUrls.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={cycleViewerUrl}
+                      title="切换其它可用网卡地址"
+                      className="shrink-0 rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-2 text-[0.7rem] text-slate-300"
+                    >
+                      {viewerIndex + 1}/{viewerUrls.length} ⇄
+                    </button>
+                  )}
+                </div>
               )}
               <div className="mt-4">
                 {ModePanel && <ModePanel isMobile={true} />}
@@ -271,11 +290,21 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
           <button
             type="button"
             title="点击复制观众地址"
-            onClick={() => { void navigator.clipboard?.writeText(viewerUrl); }}
+            onClick={copyViewerUrl}
             className="font-mono text-blue-300 hover:text-white transition-colors"
           >
             {viewerUrl}
           </button>
+          {viewerUrls.length > 1 && (
+            <button
+              type="button"
+              onClick={cycleViewerUrl}
+              title="切换其它可用网卡地址"
+              className="shrink-0 rounded-md border border-slate-600/50 px-1.5 py-0.5 text-slate-300 hover:text-white transition-colors"
+            >
+              {viewerIndex + 1}/{viewerUrls.length} ⇄
+            </button>
+          )}
         </div>
       )}
       {!isMobile && (
