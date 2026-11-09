@@ -13,7 +13,8 @@
  *  - 实际通信一律同源相对路径（wsEndpoints.ts 用 location.host），与 IP 无关；
  *  - /lab-info.json 由下面的 preview 插件按「每次请求」实时生成，返回当前 Host
  *    与全部可用网卡候选地址，绝不把某个 IP 写死进 dist 静态文件；
- *  - 界面底部展示运行时候选并可切换复制，网络变化后刷新即更新。
+ *  - 界面默认显示默认路由网卡的「本地 IP」，其余网卡候选可切换复制；
+ *    本机自己始终用 127.0.0.1，网络变化后刷新即更新。
  *
  * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC。
  */
@@ -30,24 +31,37 @@ const PLATFORM = path.join(ROOT, 'packages/platform');
 const DIST = path.join(PLATFORM, 'dist');
 const PORT = Number(process.env.DT_PORT || 5201);
 
-/** 取默认路由所在网卡的 IPv4，只用于控制台「推荐」，不是唯一真值 */
-function pickLanIp() {
+/**
+ * 取默认路由所在网卡的 IPv4，即「本机 IP」：不发包，只让内核按路由表选源地址。
+ * 换 WiFi / DHCP 续租后每次调用都会变，所以 /lab-info.json 每次请求都重新取，
+ * 绝不缓存成固定 IP。取不到时返回空串，由 fallbackIp() 兜底。
+ */
+function defaultRouteIp(timeoutMs = 400) {
   return new Promise((resolve) => {
     let settled = false;
     const done = (addr) => { if (!settled) { settled = true; resolve(addr); } };
+    let sock;
+    const close = () => { try { sock?.close(); } catch { /* noop */ } };
     try {
-      const sock = dgram.createSocket('udp4');
+      sock = dgram.createSocket('udp4');
       sock.connect(53, '223.5.5.5', () => {
         const addr = sock.address().address;
-        sock.close();
-        done(addr && !addr.startsWith('169.254') ? addr : fallbackIp());
+        close();
+        done(addr && !addr.startsWith('169.254') ? addr : '');
       });
-      sock.on('error', () => { try { sock.close(); } catch { /* noop */ } done(fallbackIp()); });
-      setTimeout(() => done(fallbackIp()), 800);
+      sock.on('error', () => { close(); done(''); });
+      const timer = setTimeout(() => { close(); done(''); }, timeoutMs);
+      timer.unref?.();
     } catch {
-      done(fallbackIp());
+      close();
+      done('');
     }
   });
+}
+
+/** 控制台推荐地址：默认路由网卡，取不到时退回任一可用网卡 */
+async function pickLanIp() {
+  return (await defaultRouteIp()) || fallbackIp();
 }
 
 /**
@@ -92,26 +106,42 @@ function labInfoPlugin(port) {
     name: 'dt-lab-info-dynamic',
     configurePreviewServer(server) {
       server.middlewares.use('/lab-info.json', (req, res) => {
-        const rawHost = typeof req.headers.host === 'string' ? req.headers.host : '';
-        const host = hostOf(rawHost);
-        const scheme = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-        const addresses = lanAddresses();
-        const candidates = addresses.map((a) => `${scheme}://${a.address}:${port}/`);
-        const sameOrigin = rawHost ? `${scheme}://${rawHost}/` : '';
-        // 用 LAN IP / 域名访问本机时优先同源；本机 127.0.0.1 访问时把网卡候选放前面
-        const viewerUrls = [...new Set(
-          LOOPBACK_HOSTS.has(host) ? [...candidates, sameOrigin] : [sameOrigin, ...candidates],
-        )].filter(Boolean);
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        res.end(`${JSON.stringify({
-          port,
-          requestHost: rawHost,
-          host,
-          addresses,
-          viewerUrls,
-          generatedAt: Date.now(),
-        }, null, 2)}\n`);
+        void (async () => {
+          const rawHost = typeof req.headers.host === 'string' ? req.headers.host : '';
+          const host = hostOf(rawHost);
+          const scheme = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+          // 界面默认显示的是默认路由网卡那个「本地 IP」，不是枚举到的第一块虚拟网卡
+          const preferred = await defaultRouteIp();
+          const all = lanAddresses();
+          const addresses = preferred
+            ? [
+                ...all.filter((a) => a.address === preferred),
+                ...all.filter((a) => a.address !== preferred),
+              ]
+            : all;
+          const primaryAddress = addresses[0]?.address || '';
+          const candidates = addresses.map((a) => `${scheme}://${a.address}:${port}/`);
+          const sameOrigin = rawHost ? `${scheme}://${rawHost}/` : '';
+          // 用 LAN IP / 域名访问本机时优先同源；本机 127.0.0.1 访问时本地 IP 放最前
+          const viewerUrls = [...new Set(
+            LOOPBACK_HOSTS.has(host) ? [...candidates, sameOrigin] : [sameOrigin, ...candidates],
+          )].filter(Boolean);
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.end(`${JSON.stringify({
+            port,
+            requestHost: rawHost,
+            host,
+            primaryAddress,
+            addresses,
+            viewerUrls,
+            generatedAt: Date.now(),
+          }, null, 2)}\n`);
+        })().catch(() => {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end('{"error":"lab-info unavailable"}\n');
+        });
       });
     },
   };
@@ -175,12 +205,18 @@ async function main() {
   console.log('  数字孪生仿真平台已启动');
   console.log(`  主控本机： http://127.0.0.1:${PORT}/`);
   console.log('  观众访问：按现场网络选以下任一地址，IP 会变，界面底部实时显示并可复制');
-  const lines = addresses.length
-    ? addresses.map((a) => `    http://${a.address}:${PORT}/    ${a.name}`)
+  // 与 /lab-info.json 的 primaryAddress 同序：本地 IP 排第一，避免把虚拟网卡当成入口
+  const ordered = [
+    ...addresses.filter((a) => a.address === recommended),
+    ...addresses.filter((a) => a.address !== recommended),
+  ];
+  const lines = ordered.length
+    ? ordered.map((a) => `    http://${a.address}:${PORT}/    ${a.name}${a.address === recommended ? '    ← 默认' : ''}`)
     : [`    http://${recommended}:${PORT}/`];
   lines.forEach((l) => console.log(l));
-  console.log(`  默认路由网卡推荐： http://${recommended}:${PORT}/`);
-  console.log('  内部端口： 8081 网关 / 8082 中继 / 1505 虚拟 PLC / 5085 状态口（仅本机）');
+  console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
+  console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可，其余端口外部访问不到');
+  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505 虚拟 PLC / 5085 状态口');
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
   console.log('');
 
