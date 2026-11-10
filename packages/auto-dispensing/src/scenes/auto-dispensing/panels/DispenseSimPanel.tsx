@@ -329,11 +329,6 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
       {/* ===== 电磁阀类型：单电控 / 双电控，决定孪生如何解释 10 只气缸线圈 ===== */}
       <div className="card">
         <div className="section-title !mb-1.5">电磁阀类型</div>
-        <div className="text-[0.5rem] text-slate-500 mb-1 leading-relaxed">
-          控制气缸实质是控制电磁阀：单电控一只线圈，得电动作、失电弹簧复位；
-          双电控两只线圈，分别控制伸出与缩回，任一只上升沿切换阀芯，断电仍保持当前位置。
-          切换只改变孪生对 PLC 线圈的解释，不改动任何地址；悬停下方线圈名查看三协议地址。
-        </div>
         <div className="grid grid-cols-2 gap-1.5">
           {SOLENOID_TYPES.map((t) => (
             <button
@@ -358,11 +353,6 @@ export function DispenseSimPanel({ onShowHelp, protocol, connected, setConnected
               </span>
             </AddressHint>
           ))}
-        </div>
-        <div className="text-[0.5rem] text-slate-500 mt-1 leading-relaxed">
-          {solenoidType === 'single'
-            ? '单电控：缩回线圈不参与驱动，悬停可查看其预留地址。'
-            : '双电控：动作线圈脉冲伸出、缩回线圈脉冲回位；PLC 程序需主动输出缩回脉冲，否则气缸不会回原位。'}
         </div>
         {conflicts.length > 0 && (
           <div className="mt-1 text-[0.5rem] text-red-400 leading-relaxed">

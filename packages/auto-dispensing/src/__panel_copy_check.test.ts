@@ -5,7 +5,9 @@
  *  1. 手动 / 自动改成一个自锁按钮，并入主令卡片，3 列 × 2 行共 6 键；
  *  2. 输出点不再单独设「直接置位」栏，只在 IO 信号表做只读显示；
  *  3. 选择开关说明、输出点说明、32 位 DINT 说明三段文字全部移除；
- *  4. 四个模式面板的**可见文案**里不出现中文括号及其内容。
+ *  4. 四个模式面板的**可见文案**里不出现中文括号及其内容；
+ *  5. 用户 2026-11-10 追加「不要再UI里填说明」：电磁阀卡片的原理长说明
+ *     与单 / 双电控动态说明一并移除，只留切换按钮、地址浮框与禁止状态告警。
  *
  * 注意：源码注释里仍有大量括号，属于设计说明而非 UI 版面，
  * 因此先剥离注释再断言；地址浮框与「使用说明」文档是完整映射表，不在本自检范围。
@@ -44,6 +46,10 @@ const REMOVED_COPY = [
   '寄存器地址悬停上方数值查看',
   '编码器独立装在 +X 丝杆末端',
   '电机为普通正反转布尔控制，非伺服',
+  '控制气缸实质是控制电磁阀',
+  '悬停下方线圈名查看三协议地址',
+  '单电控：缩回线圈不参与驱动',
+  '双电控：动作线圈脉冲伸出',
 ];
 
 describe('四个模式面板的可见文案不再带括号说明', () => {
@@ -57,6 +63,15 @@ describe('四个模式面板的可见文案不再带括号说明', () => {
 
   it('三段被删的说明文字都不再出现在仿真面板', () => {
     REMOVED_COPY.forEach((text) => expect(simSource).not.toContain(text));
+  });
+
+  it('电磁阀卡片只删说明，切换控件 / 默认 badge / 地址浮框 / 禁止状态告警都还在', () => {
+    expect(simSource).toContain('SOLENOID_TYPES.map');
+    expect(simSource).toContain('setSolenoidType(t)');
+    expect(simSource).toContain('默认 ');
+    expect(simSource).toContain('SOLENOID_OUTPUT_POINTS.map');
+    expect(simSource).toContain('<AddressHint');
+    expect(simSource).toContain('禁止状态：');
   });
 
   it('卡片标题只剩信号名，不带括号内的解释', () => {

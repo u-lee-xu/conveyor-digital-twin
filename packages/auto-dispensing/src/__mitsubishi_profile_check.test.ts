@@ -227,14 +227,21 @@ describe('共享连接面板门控与兼容性', () => {
     expect(panel).toContain('disabled={busy || connected}');
   });
 
-  it('逻辑站号默认 0 只是项目历史值，界面必须提示按实用程序核对', () => {
+  it('逻辑站号默认 0 只是项目历史值，UI 不堆说明、口径由现场手册承载', () => {
     const panel = read('../../shared/src/components/ui/PlcConnectionPanel.tsx');
     expect(panel).toContain("mitsubishi: { host: '127.0.0.1', port: 0 }");
-    expect(panel).toContain('并非通用值');
-    expect(panel).toContain('出现 Open failed 时先核对编号');
-    // 不把本机已配置编号写死进产品：换机器后提示仍然成立
+    // 用户 2026-11-10 口径「不要再UI里填说明」：连接面板只留控件，不放解释段落
+    expect(panel).not.toContain('<p className="mt-2 text-xs text-gray-500">');
+    expect(panel).not.toContain('通信设置实用程序');
+    expect(panel).not.toContain('并非通用值');
+    expect(panel).not.toContain('出现 Open failed 时先核对编号');
+    // 不把本机已配置编号写死进产品：换机器后仍然成立
     expect(panel).not.toContain('LogicalStNo_0001');
     expect(panel).not.toContain('本机已配置逻辑站');
+    // 说明删了，但门控行为（下拉 / 逻辑站号 / 主机置灰）必须原样保留
+    expect(panel).toContain("enableMitsubishiProfile && protocol === 'mitsubishi'");
+    expect(panel).toContain('逻辑站号');
+    expect(panel).toContain(`disabled={busy || connected || (enableMitsubishiProfile && protocol === 'mitsubishi')}`);
   });
 
   it('后端网关零改动，M 区地址不在网关里写死', () => {
