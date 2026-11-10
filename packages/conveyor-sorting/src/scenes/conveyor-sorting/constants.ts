@@ -156,13 +156,13 @@ export const COMPONENT = {
   TOWER_GLOW_OFFSET: 0.025,
   TOWER_POSITION: [1.6, 0.98, -0.5] as [number, number, number],
 
-  // 传感器：LED 移到壳体顶部并放大，机位翻到 -Z 侧后仍从斜上方可见
-  SENSOR_BULB_SCALE: 1.35,
-  SENSOR_BULB_RADIUS: 0.018,
-  SENSOR_BULB_OFFSET_Y: 0.085,
+  // 传感器状态 LED：贴壳体顶面的小灯珠，不再是比壳体还抢眼的大黑球
+  SENSOR_BULB_SCALE: 1,
+  SENSOR_BULB_RADIUS: 0.009,
+  SENSOR_BULB_OFFSET_Y: 0.066,
   SENSOR_BULB_OFFSET_Z: 0,
-  SENSOR_HALO_INNER: 0.026,
-  SENSOR_HALO_OUTER: 0.046,
+  SENSOR_HALO_INNER: 0.012,
+  SENSOR_HALO_OUTER: 0.022,
 } as const;
 
 // ============================================================
@@ -213,7 +213,88 @@ export const CYLINDER_DETAIL = {
   MOUNT_Z1: 0.82,
   MOUNT_Y: 0.96,
   MOUNT_T: 0.016,
+
+  // 磁性开关：嵌在缸体侧面 T 槽里的细长模块，不是顶面的大方块
+  MAGSWITCH_LEN: 0.060,
+  MAGSWITCH_T: 0.010,
+  MAGSWITCH_W: 0.014,
+  // 教学展台里略放大到 7mm，保证「伸出位开关亮」在远景可辨
+  MAGSWITCH_LED_R: 0.007,
+  MAGSWITCH_CABLE_R: 0.0025,
+  // 中心活塞杆：实物镀硬铬亮银且比两根导杆细，旧版 φ70 深色棒过于抢眼
+  ROD_R: 0.022,
+  GUIDE_BUSHING_R: 0.022,
+  GUIDE_BUSHING_LEN: 0.018,
+  PLATE_BOLT_R: 0.005,
+  PLATE_BOLT_X: 0.095,
+  PLATE_BOLT_Z: 0.068,
+  // 部件展台专用展示底座：只读视觉，整机恒不启用
+  STAND_W: 0.30,
+  STAND_D: 0.76,
+  STAND_T: 0.014,
+  STAND_Y: -0.14,
+  // 网格面到缸体底面只有 0.03：托板加矮支柱刚好把缸体垫实，不插进缸体
+  STAND_PILLAR_H: 0.030,
+  STAND_PILLAR_Z: 0.22,
 } as const;
+
+/**
+ * 传感器拟真尺寸：上料 / 物料是同型号漫反射光电开关，色标是独立的颜色传感器。
+ * 与 CYLINDER_DETAIL / BELT_DETAIL 同层，所有可见尺寸只在这里定义一次。
+ */
+export const SENSOR_DETAIL = {
+  // 共用壳体与支架
+  BODY_W: 0.048,
+  BODY_H: 0.062,
+  BODY_D: 0.078,
+  BODY_Y: 0.030,
+  FRONT_Z: 0.039,
+  BACK_Z: -0.039,
+  BRACKET_H: 0.15,
+  BRACKET_W: 0.02,
+  BASE_W: 0.07,
+  BASE_D: 0.05,
+  BASE_T: 0.012,
+  CABLE_R: 0.005,
+  CABLE_LEN: 0.022,
+  LABEL_W: 0.015,
+  LABEL_H: 0.015,
+  LABEL_D: 0.02,
+  // 漫反射光电：双圆透镜 + 灵敏度旋钮 + 状态灯
+  LENS_R: 0.009,
+  LENS_X: 0.011,
+  TRIMMER_R: 0.007,
+  STATUS_R: 0.005,
+  PANEL_W: 0.034,
+  PANEL_H: 0.046,
+  // 色标传感器：更厚机身 + 宽矩形投受光窗 + 可见光斑 + 示教键
+  COLOR_BODY_W: 0.058,
+  COLOR_BODY_H: 0.072,
+  COLOR_BODY_D: 0.086,
+  COLOR_FRONT_Z: 0.043,
+  WINDOW_W: 0.034,
+  WINDOW_H: 0.022,
+  SPOT_R: 0.006,
+  TEACH_W: 0.010,
+  TEACH_H: 0.010,
+  BAR_W: 0.010,
+  BAR_H: 0.024,
+  DISPLAY_W: 0.028,
+  DISPLAY_H: 0.006,
+} as const;
+
+/** 部件展台里可切换的三只传感器型号，键集合与 SENSOR_POSITIONS 一致 */
+export const SENSOR_VARIANTS = {
+  feed: '上料光电',
+  color: '色标传感器',
+  material: '物料光电',
+} as const;
+
+export type SensorVariant = keyof typeof SENSOR_VARIANTS;
+
+export function isSensorVariant(name: string | null | undefined): name is SensorVariant {
+  return !!name && Object.prototype.hasOwnProperty.call(SENSOR_VARIANTS, name);
+}
 
 /**
  * 推板 → 工件跟随的运动学常量。
@@ -409,15 +490,15 @@ export const PART_STAGES: Record<PartKind, PartStage> = {
     label: '输送线本体',
     camera: [2.6, 1.9, 3.6], target: [0, 0.5, 0], fov: 45, grid: 4, gridY: -0.02,
   },
-  // 从 +X 侧 3/4 看：站在 +Z 正后方会被缸体挡住整条推杆 / 推板链。
-  // target.z 取 +0.10（比部件中心更靠后），把整个气缸推到左侧固定面板右边。
-  cylinder: {
-    label: '带导杆推料气缸',
-    camera: [1.55, 0.72, 1.35], target: [0, 0, 0.10], fov: 42, grid: 1.6, gridY: -0.14,
-  },
-  sensor: {
-    label: '光电传感器',
-    camera: [0.38, 0.26, 0.52], target: [0, -0.02, 0], fov: 36, grid: 0.4, gridY: -0.16,
+    // 从 +X 侧 3/4 看：站在 +Z 正后方会被缸体挡住整条推杆 / 推板链。
+    // 展台补了展示底座后把网格与相机一起放宽，保证缸体、推杆、推板、底座全在画面内。
+    cylinder: {
+      label: '带导杆推料气缸',
+      camera: [1.60, 0.78, 1.42], target: [0, -0.02, 0.08], fov: 44, grid: 2, gridY: -0.14,
+    },
+    sensor: {
+      label: '传感器',
+    camera: [0.30, 0.20, 0.40], target: [0, 0.01, 0], fov: 36, grid: 0.3, gridY: -0.16,
   },
   chute: {
     label: '分拣斜槽与收集盒',

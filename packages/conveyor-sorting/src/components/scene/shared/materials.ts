@@ -78,9 +78,9 @@ export const materials = {
     color: VISUAL.BRASS_COLOR, metalness: 0.75, roughness: 0.35,
   }),
 
-  /** 磁性开关（近黑塑料） */
+  /** 磁性开关：石墨灰塑料，与近黑的 T 槽拉开一档，展台里才看得出嵌在槽内 */
   magneticSwitch: new THREE.MeshStandardMaterial({
-    color: VISUAL.MAGSWITCH_COLOR, metalness: 0.35, roughness: 0.6,
+    color: VISUAL.STRUCT_COLOR, metalness: 0.35, roughness: 0.6,
   }),
 
   /** 传感器壳体（浅灰工业塑料） */
@@ -104,6 +104,21 @@ export const materials = {
   sensorLabelMaterial: new THREE.MeshStandardMaterial({
     color: VISUAL.LAMP_YELLOW, emissive: VISUAL.LAMP_YELLOW, emissiveIntensity: 0.8,
     roughness: 0.4, metalness: 0.1,
+  }),
+
+  /** 传感器光学窗口：暗蓝玻璃，投光/受光面同源 */
+  sensorOptics: new THREE.MeshStandardMaterial({
+    color: VISUAL.PROFILE_SLOT_COLOR, metalness: 0.15, roughness: 0.18,
+    ...decalOptions,
+  }),
+  /** 色标传感器可见光斑 / 数值显示：与蓝色工件同色族 */
+  sensorBeam: new THREE.MeshStandardMaterial({
+    color: VISUAL.MATERIAL_BLUE_COLOR, emissive: VISUAL.MATERIAL_BLUE_COLOR,
+    emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.1,
+  }),
+  /** 示教键 / 推板缓冲垫：哑光橡胶 */
+  rubberBumper: new THREE.MeshStandardMaterial({
+    color: VISUAL.STRUCT_COLOR, metalness: 0.0, roughness: 0.95,
   }),
 
   /** 停机 / 运行两种滚筒表面（同一色相，只改金属度与明度档） */

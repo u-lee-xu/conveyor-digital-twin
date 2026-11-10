@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/rapier';
-import { DoubleSide, type Group, type Mesh, type MeshStandardMaterial } from 'three';
+import { DoubleSide, type Group, type MeshStandardMaterial } from 'three';
 import { geometries, materials } from '../../../components/scene/shared';
 import { type CylinderName } from '../../../types/device';
 import {
@@ -80,6 +80,44 @@ function GuideRods() {
   );
 }
 
+/** 端盖上的导向套凸台：让「带导杆」在展台里一眼可辨 */
+function GuideBushings() {
+  const y = C.CYLINDER_BODY_HALF_LEN + 0.035 + D.GUIDE_BUSHING_LEN / 2;
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          geometry={geometries.guideBushing}
+          material={materials.endCap}
+          position={[side * D.GUIDE_ROD_X, y, 0]}
+        />
+      ))}
+    </group>
+  );
+}
+
+/**
+ * 部件展台专用展示底座：整机靠 MountBracket 固定在输送线侧梁上，
+ * 展台没有侧梁，用这块 1:1 托板把缸体垫实，避免整个气缸悬在网格上方。
+ * 只读视觉，不写 store / 不碰 PLC；整机恒不传 previewMount。
+ */
+function PreviewStand() {
+  return (
+    <group position={[0, D.STAND_Y, 0]}>
+      <mesh geometry={geometries.standPlate} material={materials.base} />
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          geometry={geometries.standPillar}
+          material={materials.darkMetal}
+          position={[0, D.STAND_T / 2 + D.STAND_PILLAR_H / 2, side * D.STAND_PILLAR_Z]}
+        />
+      ))}
+    </group>
+  );
+}
+
 /**
  * 安装支座：把悬空的气缸固定到输送线 +Z 侧梁上。
  * 用世界坐标（不套气缸的旋转 group），长度按该气缸实际 Z 位置推导，
@@ -105,15 +143,15 @@ function MountBracket({ cylinderX, cylinderZ }: { cylinderX: number; cylinderZ: 
   );
 }
 
-export function PhysicsCylinder({ name, position, previewExtension }: {
+export function PhysicsCylinder({ name, position, previewExtension, previewMount }: {
   name: CylinderName;
   position: [number, number, number];
   /** 部件展台专用：固定展示行程（只读视觉，不写 store / 不碰 PLC），整机恒传 undefined */
   previewExtension?: number;
+  /** 部件展台专用：垫实缸体的展示底座，整机用 MountBracket，恒不传 */
+  previewMount?: boolean;
 }) {
   const rodRef = useRef<Group>(null);
-  const led1Ref = useRef<Mesh>(null);
-  const led2Ref = useRef<Mesh>(null);
   const pushPlateRef = useRef<RapierRigidBody>(null);
   const isFeed = name === 'feed';
   const targetExtend = isFeed ? CYLINDER_EXTEND_POS_FEED : CYLINDER_EXTEND_POS_SORT;
@@ -128,10 +166,8 @@ export function PhysicsCylinder({ name, position, previewExtension }: {
     return () => ledMats.forEach((m) => m.dispose());
   }, [ledMats]);
 
-  /** 磁性开关 LED：亮态绿、灭态暗玻璃（与配药机指示灯同源） */
-  const paintLed = (ref: RefObject<Mesh | null>, on: boolean) => {
-    if (!ref.current) return;
-    const mat = ref.current.material as MeshStandardMaterial;
+  /** 磁性开关 LED：亮态绿、灭态暗玻璃（改材质实例，两侧灯珠同步变色） */
+  const paintLed = (mat: MeshStandardMaterial, on: boolean) => {
     if (on) {
       mat.color.set(VISUAL.LAMP_GREEN);
       mat.emissive.set(VISUAL.LAMP_GREEN);
@@ -159,8 +195,8 @@ export function PhysicsCylinder({ name, position, previewExtension }: {
       });
     }
 
-    paintLed(led1Ref, ext >= targetExtend - 0.04);
-    paintLed(led2Ref, ext <= CYLINDER_RETRACT_POS + 0.04);
+    paintLed(ledMats[0], ext >= targetExtend - 0.04);
+    paintLed(ledMats[1], ext <= CYLINDER_RETRACT_POS + 0.04);
   });
 
   return (
@@ -181,6 +217,7 @@ export function PhysicsCylinder({ name, position, previewExtension }: {
           <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, -C.CYLINDER_BODY_HALF_LEN, 0]} />
           <mesh geometry={geometries.cylinderEndCap} material={materials.endCap} position={[0, C.CYLINDER_BODY_HALF_LEN, 0]} />
           <CylinderDetail />
+          <GuideBushings />
 
           {/* 黄铜气接头 + 黑色节流调节头 */}
           {[
@@ -194,20 +231,37 @@ export function PhysicsCylinder({ name, position, previewExtension }: {
             </group>
           ))}
 
-          {/* 两只磁性开关（伸出位 / 缩回位） */}
-          {[
-            { y: C.CYLINDER_BODY_HALF_LEN - 0.1, ledRef: led1Ref, mat: ledMats[0], key: 'sw-ext' },
-            { y: -C.CYLINDER_BODY_HALF_LEN + 0.1, ledRef: led2Ref, mat: ledMats[1], key: 'sw-ret' },
-          ].map(({ y, ledRef: ref, mat, key }) => (
-            <group key={key}>
-              <mesh geometry={geometries.magneticSwitch} material={materials.magneticSwitch} position={[0, y, -0.1]}>
-                <mesh ref={ref} geometry={geometries.led} material={mat} position={[0, 0.01, -0.03]} />
-              </mesh>
-            </group>
-          ))}
+          {/* 两只磁性开关嵌在侧面 T 槽里（伸出位 / 缩回位）：细长条 + 出线 + 小 LED。
+              两侧各放一组，整机 -Z 机位与展台 +X 机位都能看到；LED 共用材质实例同步变色。 */}
+          {[-1, 1].flatMap((side) => [
+            { y: C.CYLINDER_BODY_HALF_LEN - 0.10, mat: ledMats[0], key: 'sw-ext' },
+            { y: -C.CYLINDER_BODY_HALF_LEN + 0.10, mat: ledMats[1], key: 'sw-ret' },
+          ].map(({ y, mat, key }) => {
+            const x = side * (C.CYLINDER_BODY_HALF_XZ + D.SLOT_T + D.MAGSWITCH_T / 2 + SURFACE_GAP);
+            return (
+              <group key={`${side}-${key}`}>
+                <mesh
+                  geometry={geometries.magneticSwitch}
+                  material={materials.magneticSwitch}
+                  position={[x, y, 0]}
+                />
+                <mesh
+                  geometry={geometries.led}
+                  material={mat}
+                  position={[x + side * (D.MAGSWITCH_T / 2 + SURFACE_GAP), y, 0]}
+                />
+                <mesh
+                  geometry={geometries.magneticSwitchCable}
+                  material={materials.darkMetal}
+                  position={[x, y - D.MAGSWITCH_LEN / 2 - 0.024, 0]}
+                />
+              </group>
+            );
+          }))}
 
           <group ref={rodRef} position={[0, CYLINDER_RETRACT_POS, 0]}>
-            <mesh geometry={geometries.cylinderRod} material={materials.cylinderRod} position={[0, C.CYLINDER_ROD_LEN / 2, 0]} />
+            {/* 中心活塞杆与两根导杆同为镀硬铬亮银，不再是一根抢眼的深色粗棒 */}
+            <mesh geometry={geometries.cylinderRod} material={materials.brightSilver} position={[0, C.CYLINDER_ROD_LEN / 2, 0]} />
             <GuideRods />
             <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, C.CYLINDER_ROD_LEN, 0]} />
             <mesh
@@ -220,11 +274,33 @@ export function PhysicsCylinder({ name, position, previewExtension }: {
                 C.CYLINDER_PUSH_PLATE_HALF[1] * 2 - 0.02,
               ]} />
             </mesh>
+            {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
+              <mesh
+                key={`plate-bolt-${sx}-${sz}`}
+                geometry={geometries.plateBolt}
+                material={materials.decal}
+                position={[
+                  sx * D.PLATE_BOLT_X,
+                  C.CYLINDER_ROD_LEN + C.CYLINDER_PUSH_PLATE_HALF[2] + 2 * SURFACE_GAP,
+                  sz * D.PLATE_BOLT_Z,
+                ]}
+              />
+            )))}
+            <mesh
+              geometry={geometries.plateBumper}
+              material={materials.rubberBumper}
+              position={[
+                0,
+                C.CYLINDER_ROD_LEN + C.CYLINDER_PUSH_PLATE_HALF[2] + 3 * SURFACE_GAP,
+                0,
+              ]}
+            />
           </group>
         </group>
       </group>
 
       {!COLLIDERS_ONLY && <MountBracket cylinderX={position[0]} cylinderZ={position[2]} />}
+      {previewMount && !COLLIDERS_ONLY && <PreviewStand />}
     </>
   );
 }

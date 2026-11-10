@@ -3,7 +3,7 @@ import { useDeviceStore, useConveyorViewStore } from '../../stores';
 import type { CylinderName, SensorName } from '../../types/device';
 import {
   ASSEMBLY, PART_INSTANCES, PART_STAGES, PART_STAGE_ORIGIN,
-  SORT_CHUTE, CYLINDER_EXTEND_POS_FEED, isPartStage, type PartKind,
+  SORT_CHUTE, CYLINDER_EXTEND_POS_FEED, isPartStage, type PartKind, type SensorVariant,
 } from './constants';
 import { PhysicsConveyorBelt } from './components/PhysicsConveyorBelt';
 import { PhysicsSensor } from './components/PhysicsSensor';
@@ -60,21 +60,23 @@ function renderMountedPart(kind: PartKind, instance: string, tower: TowerState):
 }
 
 /** 展台：同一个部件放在自身局部原点，1:1 真实尺度 */
-function renderBarePart(kind: PartKind, tower: TowerState): ReactNode {
+function renderBarePart(kind: PartKind, tower: TowerState, sensorVariant: SensorVariant): ReactNode {
   switch (kind) {
     case 'belt': return <PhysicsConveyorBelt />;
     case 'chute': return <PhysicsSortChute />;
     case 'table': return <PhysicsMaterialTable position={[0, 0, 0]} />;
-    // 固定伸出：缩回时推杆几乎全藏进缸体，展台里看不出推板 / 双导杆安装链
+    // 固定伸出 + 展示底座：缩回时推杆几乎全藏进缸体，展台里看不出推板 / 双导杆安装链
     case 'cylinder':
       return (
         <PhysicsCylinder
           name="feed"
           position={[0, 0, 0]}
           previewExtension={CYLINDER_EXTEND_POS_FEED}
+          previewMount
         />
       );
-    case 'sensor': return <PhysicsSensor name="feed" position={[0, 0, 0]} />;
+    // 三只型号可切换：色标传感器不再被写死成上料光电
+    case 'sensor': return <PhysicsSensor name={sensorVariant} position={[0, 0, 0]} />;
     case 'tower':
       return (
         <PhysicsSignalTower
@@ -174,13 +176,14 @@ function AssembledScene() {
 function PartStageView({ kind }: { kind: PartKind }) {
   const stage = PART_STAGES[kind];
   const signalTower = useDeviceStore((s) => s.signalTower);
+  const stageSensor = useConveyorViewStore((s) => s.stageSensor);
   return (
     <group userData={{ part: kind, origin: PART_STAGE_ORIGIN[kind], scale: 1 }}>
       <gridHelper
         args={[stage.grid, Math.round(stage.grid / 0.1), '#94a3b8', '#475569']}
         position={[0, stage.gridY, 0]}
       />
-      {renderBarePart(kind, signalTower)}
+      {renderBarePart(kind, signalTower, stageSensor)}
     </group>
   );
 }
