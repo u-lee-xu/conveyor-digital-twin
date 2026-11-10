@@ -27,20 +27,25 @@ const shellHtml = read('../../platform/index.html');
 const platformVite = read('../../platform/vite.config.ts');
 const wsEndpoints = read('../../shared/src/services/wsEndpoints.ts');
 
-const wsServerLine = (src: string): string =>
-  src.split('\n').find((line) => line.includes('new WebSocket.Server({')) ?? '';
+/** 取整段构造参数：加鉴权后选项跨多行，不能只看 new WebSocket.Server({ 那一行 */
+const wsServerOptions = (src: string): string => {
+  const start = src.indexOf('new WebSocket.Server({');
+  if (start < 0) return '';
+  const end = src.indexOf('});', start);
+  return end < 0 ? '' : src.slice(start, end + 3);
+};
 
 describe('内部服务绑定：只监听 127.0.0.1', () => {
   it('PLC 网关 8081 显式绑定回环，且 host 不受环境变量控制', () => {
     expect(server).toContain("const WS_HOST = '127.0.0.1'");
-    expect(wsServerLine(server)).toContain('host: WS_HOST');
+    expect(wsServerOptions(server)).toContain('host: WS_HOST');
     expect(server).not.toMatch(/WS_HOST\s*=\s*process\.env/);
     expect(server).not.toContain("host: '0.0.0.0'");
   });
 
   it('状态中继 8082 显式绑定回环，且不允许从配置放开', () => {
     expect(relay).toContain("const BROADCAST_HOST = '127.0.0.1'");
-    expect(wsServerLine(relay)).toContain('host: BROADCAST_HOST');
+    expect(wsServerOptions(relay)).toContain('host: BROADCAST_HOST');
     expect(relay).not.toMatch(/config\.(broadcastHost|host)/);
     expect(relay).not.toContain("host: '0.0.0.0'");
   });

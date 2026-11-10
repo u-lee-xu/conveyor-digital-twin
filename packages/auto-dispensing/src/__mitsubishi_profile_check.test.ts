@@ -244,10 +244,13 @@ describe('共享连接面板门控与兼容性', () => {
     expect(panel).toContain(`disabled={busy || connected || (enableMitsubishiProfile && protocol === 'mitsubishi')}`);
   });
 
-  it('后端网关零改动，M 区地址不在网关里写死', () => {
+  it('网关不写死 M 区地址；地址表由 connect 下发，且变量名严格查表', () => {
     const gateway = read('../../../websocket-server/server.js');
     expect(gateway).not.toContain("'M100'");
-    expect(gateway).toContain('this.variables[name] || name');
+    // P0-4：双档改造后网关仍按 connect 下发的表翻译，但缺键必须报错，
+    // 不能再 `variables[name] || name` 把抽象变量名当软元件名送出。
+    expect(gateway).toContain('_device(name)');
+    expect(gateway).not.toContain('this.variables[name] || name');
   });
 
   it('帮助页调用点仍是无参，档位不持久化', () => {

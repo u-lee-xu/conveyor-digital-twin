@@ -10,6 +10,12 @@
  *  - 观众端零上行：只有主控连接能 report；观众发来的任何消息一律丢弃。
  *  - 后加入的观众立即收到 lastSnapshot，不会黑屏等待。
  *
+ * 安全边界（2026-11-10 P0-2）：
+ *  - 角色不再由客户端自报。vite 代理按 TCP localAddress + Host 计算 teacher/viewer，
+ *    覆写 x-dt-role / x-dt-proxy / x-dt-internal-token；本服务在 verifyClient 复核
+ *    一次性 token，再把 role 挂到 ws 上。LAN 观众无法自封 teacher。
+ *  - Electron file:// 直连回环时无代理头，按可信本机 teacher 处理。
+ *
  * 配置：edge-broadcast.json 只读取 broadcastPort；bridgeUrl / activeDevice / devices
  * 等字段均为历史遗留，运行态不读取。设备/地址表由主控前端负责。
  * 绑定：中继只对本机同源反代开放，不绑回环会让局域网直连并伪造主控上报。
@@ -17,11 +23,14 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
+const { verifyInternalRequest } = require('./runtime-role');
 
 const CONFIG_PATH = path.join(__dirname, 'edge-broadcast.json');
 const DEFAULT_CONFIG = { broadcastPort: 8082 };
 /** 安全边界不可配置：不允许从 edge-broadcast.json 放开到 0.0.0.0 */
 const BROADCAST_HOST = '127.0.0.1';
+/** 主控刷新 / 切模式会短暂断线，统一给 800ms 宽限，避免观众画面闪一下 */
+const RELEASE_GRACE_MS = 800;
 
 function loadConfig() {
   try {
@@ -46,9 +55,19 @@ class Relay {
   }
 
   start() {
-    const wss = new WebSocket.Server({ port: config.broadcastPort, host: BROADCAST_HOST });
+    const wss = new WebSocket.Server({
+      port: config.broadcastPort,
+      host: BROADCAST_HOST,
+      verifyClient: (info) => {
+        const verdict = verifyInternalRequest(info.req, { allowViewer: true });
+        if (!verdict.ok) console.warn(`[relay] 拒绝越权接入 (${verdict.reason})`);
+        return verdict.ok;
+      },
+    });
     console.log(`[relay] 状态中继启动 ${BROADCAST_HOST}:${config.broadcastPort}（仅本机可达，不连接 PLC）`);
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+      const verdict = verifyInternalRequest(req, { allowViewer: true });
+      ws.role = verdict.role;
       this.viewers.add(ws);
       // 后加入的智能电视 / 手机 / 学生机浏览器立刻拿到当前画面
       if (this.lastSnapshot) ws.send(JSON.stringify(this.lastSnapshot));
@@ -57,6 +76,8 @@ class Relay {
         let msg;
         try { msg = JSON.parse(raw.toString()); } catch { return; }
         if (!msg || typeof msg !== 'object') return;
+        // 观众完全只读：任何上行帧（含伪造 report / leave / set-device）都直接丢弃
+        if (ws.role !== 'teacher') return;
 
         if (msg.type === 'report') {
           // 第一个上报者成为主控；同一教室只认一台主控
@@ -65,7 +86,7 @@ class Relay {
             return;
           }
           this.controller = ws;
-          if (this.leaveTimer) { clearTimeout(this.leaveTimer); this.leaveTimer = null; }
+          this.cancelRelease();
           this.deviceId = msg.deviceId ?? null;
           this.mode = msg.mode ?? null;
           this.publish(this.snapshot(msg.vars || {}, { error: undefined }));
@@ -73,8 +94,8 @@ class Relay {
         }
 
         if (msg.type === 'leave' && this.controller === ws) {
-          this.controller = null;
-          this.clearController();
+          // 与 close 共用宽限：切模式时先 leave 再断线，观众不应立刻卸载场景
+          this.scheduleRelease(ws);
           return;
         }
 
@@ -83,22 +104,29 @@ class Relay {
           this.deviceId = msg.deviceId ?? null;
           this.publish(this.snapshot({}, { error: undefined }));
         }
-        // 其它消息（含观众端上行）一律忽略：观众只读
       });
 
       ws.on('close', () => {
         this.viewers.delete(ws);
-        if (this.controller === ws) {
-          this.controller = null;
-          // 主控刷新页面会短暂断线，给 800ms 宽限避免观众画面闪一下
-          this.leaveTimer = setTimeout(() => {
-            if (this.controller) return;
-            this.clearController();
-          }, 800);
-        }
+        if (this.controller === ws) this.scheduleRelease(ws);
       });
     });
     wss.on('error', (err) => console.error('[relay] 服务错误:', err.message));
+  }
+
+  cancelRelease() {
+    if (this.leaveTimer) { clearTimeout(this.leaveTimer); this.leaveTimer = null; }
+  }
+
+  scheduleRelease(ws) {
+    if (this.controller !== ws) return;
+    this.controller = null;
+    this.cancelRelease();
+    this.leaveTimer = setTimeout(() => {
+      this.leaveTimer = null;
+      if (this.controller) return;
+      this.clearController();
+    }, RELEASE_GRACE_MS);
   }
 
   clearController() {

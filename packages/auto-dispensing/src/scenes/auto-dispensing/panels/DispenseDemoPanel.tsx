@@ -12,7 +12,7 @@ import { ReadoutNum, DIRECTION_BADGE_CLS } from './ReadoutNum';
 export function DispenseDemoPanel() {
   const recipe = useDispensingStore((s) => s.recipe);
   const setRecipe = useDispensingStore((s) => s.setRecipe);
-  const buttons = useDispensingStore((s) => s.buttons);
+  const demoPaused = useDispensingStore((s) => s.demoPaused);
   const setButton = useDispensingStore((s) => s.setButton);
   const autoPhase = useDispensingStore((s) => s.autoPhase);
   const autoCycle = useDispensingStore((s) => s.autoCycle);
@@ -85,7 +85,7 @@ export function DispenseDemoPanel() {
           <button
             className="btn btn-xs btn-success touch-manipulation"
             style={{ fontSize: '0.62rem' }}
-            disabled={running || buttons.estop}
+            disabled={demoPaused === 'estop' || (running && demoPaused === 'none')}
             onClick={() => setButton('start', true)}
           >
             ▶ 启动
@@ -93,7 +93,7 @@ export function DispenseDemoPanel() {
           <button
             className="btn btn-xs btn-warning touch-manipulation"
             style={{ fontSize: '0.62rem' }}
-            disabled={!running}
+            disabled={!running || demoPaused !== 'none'}
             onClick={() => setButton('stop', true)}
           >
             ■ 停止
@@ -117,7 +117,7 @@ export function DispenseDemoPanel() {
           <button
             className="btn btn-xs btn-blue touch-manipulation flex-1"
             style={{ fontSize: '0.62rem' }}
-            disabled={autoPhase !== 'wait_confirm'}
+            disabled={autoPhase !== 'wait_confirm' || demoPaused !== 'none'}
             onClick={() => setButton('confirm', true)}
           >
             ✓ 取药确认

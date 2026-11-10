@@ -39,7 +39,7 @@ const simSource = read('./scenes/auto-dispensing/panels/DispenseSimPanel.tsx');
 const storeSource = read('./stores/useDispensingStore.ts');
 const indexSource = read('./index.ts');
 const helpSource = read('./scenes/auto-dispensing/helpContent.ts');
-const physicsSource = read('./scenes/auto-dispensing/PhysicsWorld.tsx');
+const physicsSource = read('./scenes/auto-dispensing/diagnostics.ts');
 
 const coils = (o: CoilLevels = {}): CoilLevels => ({ ...o });
 const levels = (o: CylinderLevels = {}): CylinderLevels => ({

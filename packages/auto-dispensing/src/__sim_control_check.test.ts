@@ -22,7 +22,7 @@ const cabinet = read('./scenes/auto-dispensing/components/ControlCabinet.tsx');
 const simPlc = read('./services/simulationPlc.ts');
 const app = read('./App.tsx');
 const deviceIndex = read('./index.ts');
-const physics = read('./scenes/auto-dispensing/PhysicsWorld.tsx');
+const physics = read('./scenes/auto-dispensing/diagnostics.ts');
 
 describe('只有演示模式跑本地状态机', () => {
   it('循环从 useAppStore 读模式并分成 autoMode / plcMode', () => {

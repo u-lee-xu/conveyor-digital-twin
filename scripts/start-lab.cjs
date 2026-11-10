@@ -18,6 +18,11 @@
  *
  * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC。
  * 内部端口 8081 / 8082 与同源代理目标硬绑定，检测到不一致会拒绝启动。
+ *
+ * 安全边界（P0-2）：本脚本每次启动签发一次性 DT_INTERNAL_TOKEN，仅 Vite 代理与
+ * 子进程可见；代理按 TCP localAddress + Host 判定 teacher/viewer，/ws/plc 只对
+ * 主控回环开放，LAN 观众只能订阅 /ws/relay。接实体 PLC 时另设
+ * DT_PLC_HOSTS=192.168.1.50（或 websocket-server/plc-hosts.json）放行目标主机。
  */
 const { spawn } = require('child_process');
 const path = require('path');
@@ -25,9 +30,18 @@ const fs = require('fs');
 const os = require('os');
 const dgram = require('dgram');
 const net = require('net');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 const WSS = path.join(ROOT, 'websocket-server');
+const { hostOf, isLoopbackHost } = require(path.join(WSS, 'runtime-role.js'));
+
+/**
+ * P0-2：每次启动签发一次性内部链路 token，只通过环境变量传给 Vite 代理与 4 个子进程。
+ * 它不进 dist、不进浏览器 bundle；代理在 WS 升级时覆写同名请求头。
+ * 单独用 Vite CLI 跑 dev（无 token）时仍按角色把关，只是少了这层来源证明。
+ */
+process.env.DT_INTERNAL_TOKEN = crypto.randomBytes(24).toString('hex');
 const PLATFORM = path.join(ROOT, 'packages/platform');
 const DIST = path.join(PLATFORM, 'dist');
 const PORT = Number(process.env.DT_PORT || 5201);
@@ -90,12 +104,7 @@ function fallbackIp() {
   return preferred ? preferred.address : '127.0.0.1';
 }
 
-/** 从 Host 头取主机名，只去掉末尾端口，IPv6 字面量的方括号要保留 */
-function hostOf(rawHost) {
-  return String(rawHost || '').replace(/:\d+$/, '');
-}
-
-const LOOPBACK_HOSTS = new Set(['', 'localhost', '127.0.0.1', '::1', '[::1]']);
+/** Host 头解析与回环判定统一由 runtime-role.js 提供（与 WS 代理、网关、中继同源） */
 
 /**
  * /lab-info.json 动态端点（Vite preview 插件）。
@@ -125,7 +134,7 @@ function labInfoPlugin(port) {
           const sameOrigin = rawHost ? `${scheme}://${rawHost}/` : '';
           // 用 LAN IP / 域名访问本机时优先同源；本机 127.0.0.1 访问时本地 IP 放最前
           const viewerUrls = [...new Set(
-            LOOPBACK_HOSTS.has(host) ? [...candidates, sameOrigin] : [sameOrigin, ...candidates],
+            isLoopbackHost(host) ? [...candidates, sameOrigin] : [sameOrigin, ...candidates],
           )].filter(Boolean);
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -256,6 +265,8 @@ async function main() {
   console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
   console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可');
   console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505 虚拟 PLC / 5085 状态口，均绑定 127.0.0.1，外部访问不到');
+  console.log('  WS 升级鉴权：LAN 只能订阅中继，PLC 写入通道只对主控回环开放；内部链路 token 每次启动重新签发');
+  console.log(`  PLC 主机白名单：${process.env.DT_PLC_HOSTS ? process.env.DT_PLC_HOSTS : '默认仅回环；接实体 PLC 请设 DT_PLC_HOSTS'}`);
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
   console.log('');
 

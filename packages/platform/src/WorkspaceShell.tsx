@@ -13,7 +13,10 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   /** 桌面端左侧操作面板可收起，露出完整 3D 视口（宽屏设备整机观察用） */
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [relayRejected, setRelayRejected] = useState(false);
   const { mode, setMode } = device.useModeState();
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const onModeChangeRef = useRef(device.onModeChange);
   onModeChangeRef.current = device.onModeChange;
 
@@ -67,17 +70,29 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
         return;
       }
       ws.onopen = () => {
+        setRelayRejected(false);
         const report = () => {
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
           ws.send(JSON.stringify({
             type: 'report',
             deviceId: device.id,
-            mode: String(mode),
+            mode: String(modeRef.current),
             vars: device.exportSnapshot?.() ?? {},
           }));
         };
         report();
         reportTimer = setInterval(report, 100);
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data) as { type?: string };
+          if (msg.type === 'rejected') {
+            clearInterval(reportTimer);
+            setRelayRejected(true);
+          }
+        } catch {
+          // 忽略非法消息
+        }
       };
       ws.onclose = () => {
         clearInterval(reportTimer);
@@ -100,7 +115,7 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
         // 连接已关闭
       }
     };
-  }, [device, mode]);
+  }, [device]);
 
   const activeMode = device.modes.find((m) => m.id === mode) ?? device.modes[0];
   const ModePanel = activeMode?.panel;
@@ -115,6 +130,14 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
       </div>
 
       {Effects && <Effects />}
+
+      {relayRejected && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <span className="block rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[0.7rem] text-amber-300 backdrop-blur">
+            已有主控在演示
+          </span>
+        </div>
+      )}
 
       {!isMobile && panelCollapsed && (
         <button
