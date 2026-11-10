@@ -322,14 +322,6 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
         )}
       </div>
 
-      {enableMitsubishiProfile && protocol === 'mitsubishi' && (
-        <p className="mt-2 text-xs text-gray-500">
-          MX Component 按逻辑站号通信：IP / 串口 / USB 由「通信设置实用程序」的逻辑站配置决定，主机地址不生效。
-          <br />
-          逻辑站号必须与实用程序里已配置的编号一致，默认 0 只是项目历史值、并非通用值；出现 Open failed 时先核对编号，再确认仿真器已启动或实体 PLC 已上线。
-        </p>
-      )}
-
       <div className="flex gap-3 mt-4">
         <button
           onClick={handleConnect}
