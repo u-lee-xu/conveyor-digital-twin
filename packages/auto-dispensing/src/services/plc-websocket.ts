@@ -11,6 +11,8 @@ export interface PlcConfig {
   protocol: ProtocolType;
   rack?: number;
   slot?: number;
+  /** 三菱连接目标：仿真档 X/Y、实体 FX3U/FX5U 档 M 区；随 _lastConfig 一起重放，重连不丢档 */
+  profile?: MitsubishiProfile;
 }
 
 export interface PlcStatus {
@@ -44,18 +46,19 @@ import { plcWsUrl, canOpenPlcChannel } from '@digital-twin/shared';
 const WS_URL = plcWsUrl();
 
 import {
-  MODBUS_READ_VARS, S7_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS, ENCODER_DINT,
+  MODBUS_READ_VARS, S7_VARS, ENCODER_DINT,
+  mitsubishiBoolVarsFor, type MitsubishiProfile,
 } from '../scenes/auto-dispensing/constants';
 
 /**
  * 自动配药布尔 IO 变量名 → 协议地址映射（随 connect 消息下发网关，
- * 网关按此表把变量名翻译为 Modbus 线圈 / S7 M 地址 / 三菱 X/Y 地址）
+ * 网关按此表把变量名翻译为 Modbus 线圈 / S7 M 地址 / 三菱软元件名）。
+ * 三菱表随连接目标档位变化，必须在 _sendConnect 里调用时现算；
+ * 模块级常量在 import 期求值，感知不到用户切换档位。
  */
-
 const CONNECT_VARIABLES = {
   modbus: MODBUS_READ_VARS,
   s7: S7_VARS,
-  mitsubishi: { ...MITSUBISHI_READ_VARS, ...MITSUBISHI_WRITE_VARS },
 };
 
 /**
@@ -240,7 +243,9 @@ export class PlcWebSocketService {
 
   private async _sendConnect(config: PlcConfig): Promise<PlcResult> {
     try {
-      const variables = CONNECT_VARIABLES[config.protocol];
+      const variables = config.protocol === 'mitsubishi'
+        ? mitsubishiBoolVarsFor(config.profile ?? 'simulator')
+        : CONNECT_VARIABLES[config.protocol];
       if (config.protocol === 's7') {
         const result = await this._sendRaw({
           type: 'connect', protocol: 's7', host: config.host,

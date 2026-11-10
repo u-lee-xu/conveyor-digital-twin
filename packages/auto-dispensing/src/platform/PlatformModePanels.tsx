@@ -5,6 +5,7 @@ import { DispenseDemoPanel } from '../scenes/auto-dispensing/panels/DispenseDemo
 import { DispenseSimPanel } from '../scenes/auto-dispensing/panels/DispenseSimPanel';
 import { buildDispensingHelpContent } from '../scenes/auto-dispensing/helpContent';
 import { plcService, type ProtocolType } from '../services/plc-websocket';
+import { useAppStore } from '../stores/useAppStore';
 
 /**
  * 平台模式面板适配层。
@@ -29,6 +30,8 @@ export function PlatformSimPanel() {
   const [protocol, setProtocol] = useState<ProtocolType>('modbus');
   const [connected, setConnected] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const mitsubishiProfile = useAppStore((s) => s.mitsubishiProfile);
+  const setMitsubishiProfile = useAppStore((s) => s.setMitsubishiProfile);
 
   const handleConnect = async (config: PlcConnConfig): Promise<string | null> => {
     const result = await plcService.connect({
@@ -37,6 +40,7 @@ export function PlatformSimPanel() {
       protocol: config.protocol,
       rack: config.rack,
       slot: config.slot,
+      profile: config.profile,
     });
     return result.success ? null : (result.error || '连接失败');
   };
@@ -48,6 +52,9 @@ export function PlatformSimPanel() {
         protocols={['modbus', 's7', 'mitsubishi']}
         protocol={protocol}
         onProtocolChange={setProtocol}
+        enableMitsubishiProfile
+        profile={mitsubishiProfile}
+        onProfileChange={setMitsubishiProfile}
         onConnect={handleConnect}
         onDisconnect={async () => { await plcService.disconnect(); }}
         onConnectedChange={setConnected}

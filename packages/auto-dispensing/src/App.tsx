@@ -60,6 +60,8 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [protocol, setProtocol] = useState<ProtocolType>('modbus');
   const [connected, setConnected] = useState(false);
+  const mitsubishiProfile = useAppStore((s) => s.mitsubishiProfile);
+  const setMitsubishiProfile = useAppStore((s) => s.setMitsubishiProfile);
 
   const handleConnect = async (config: PlcConnConfig): Promise<string | null> => {
     const result = await plcService.connect({
@@ -68,6 +70,7 @@ export default function App() {
       protocol: config.protocol,
       rack: config.rack,
       slot: config.slot,
+      profile: config.profile,
     });
     return result.success ? null : result.error || '连接失败';
   };
@@ -178,6 +181,9 @@ export default function App() {
                 protocols={['modbus', 's7', 'mitsubishi']}
                 protocol={protocol}
                 onProtocolChange={setProtocol}
+                enableMitsubishiProfile
+                profile={mitsubishiProfile}
+                onProfileChange={setMitsubishiProfile}
                 onConnect={handleConnect}
                 onDisconnect={async () => { await plcService.disconnect(); }}
                 onConnectedChange={setConnected}
@@ -244,6 +250,9 @@ export default function App() {
                     protocols={['modbus', 's7', 'mitsubishi']}
                     protocol={protocol}
                     onProtocolChange={setProtocol}
+                    enableMitsubishiProfile
+                    profile={mitsubishiProfile}
+                    onProfileChange={setMitsubishiProfile}
                     onConnect={handleConnect}
                     onDisconnect={async () => { await plcService.disconnect(); }}
                     onConnectedChange={setConnected}

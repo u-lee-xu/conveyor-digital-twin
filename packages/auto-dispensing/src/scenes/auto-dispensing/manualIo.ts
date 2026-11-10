@@ -11,10 +11,12 @@
  */
 import {
   MODBUS_READ_VARS, MITSUBISHI_READ_VARS, MITSUBISHI_WRITE_VARS,
-  MITSUBISHI_DISPLAY_VARS, S7_VARS,
+  S7_VARS,
   ENCODER_DINT, ENCODER_REG_LABEL,
-  type MagazineId,
+  mitsubishiBoolVarsFor,
+  type MagazineId, type MitsubishiProfile, type MitsubishiVarName,
 } from './constants';
+import { currentMitsubishiProfile } from '../../stores/useAppStore';
 
 export type IoGroup =
   | 'motor' | 'cylinder' | 'tilt' | 'lamp' | 'solenoid'
@@ -46,20 +48,32 @@ export interface IoAddressRow {
   s7: string;
 }
 
-/** 点位数组 → 浮框行，手动面板的双点行（滑台正/反转、三色灯）也走这里 */
-export function ioAddressRows(points: readonly IoPoint[]): IoAddressRow[] {
-  return points.map((p) => ({ label: p.label, mitsubishi: p.addr, modbus: p.coil, s7: p.s7 }));
+/**
+ * 点位数组 → 浮框行，手动面板的双点行（滑台正/反转、三色灯）也走这里。
+ * 三菱列按当前连接目标档位取值：仿真档 X/Y、实体 FX3U/FX5U 档 M 区；
+ * Modbus / S7 两列与档位无关。profile 是可选覆盖参数，调用点保持无参。
+ */
+export function ioAddressRows(points: readonly IoPoint[], profile?: MitsubishiProfile): IoAddressRow[] {
+  const m = mitsubishiBoolVarsFor(profile ?? currentMitsubishiProfile());
+  return points.map((p) => ({
+    label: p.label,
+    mitsubishi: m[p.key as MitsubishiVarName],
+    modbus: p.coil,
+    s7: p.s7,
+  }));
 }
 
 /**
  * 变量名 → 浮框行。仿真面板的 IO 信号 LED 用：不管当前连的是哪种协议，
  * 悬停都同时给出三协议地址，不再随协议切换只显示一个。
+ * 三菱列同样按档位解析器取值，默认读 store 当前档位。
  */
-export function pointAddressRow(key: string, label: string): IoAddressRow {
+export function pointAddressRow(key: string, label: string, profile?: MitsubishiProfile): IoAddressRow {
   const k = key as keyof typeof MODBUS_READ_VARS;
+  const m = mitsubishiBoolVarsFor(profile ?? currentMitsubishiProfile());
   return {
     label,
-    mitsubishi: MITSUBISHI_DISPLAY_VARS[k as keyof typeof MITSUBISHI_DISPLAY_VARS],
+    mitsubishi: m[k as MitsubishiVarName],
     modbus: `C${MODBUS_READ_VARS[k]}`,
     s7: S7_VARS[k as keyof typeof S7_VARS],
   };
