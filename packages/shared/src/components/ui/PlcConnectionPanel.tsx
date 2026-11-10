@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import type { ProtocolType } from '../../services/modbus-websocket';
 
+/** 三菱连接目标档位：内联定义，shared 不反向依赖设备包 */
+export type MitsubishiTarget = 'simulator' | 'real';
+
 /** PLC 连接配置 */
 export interface PlcConnConfig {
   host: string;
@@ -8,7 +11,14 @@ export interface PlcConnConfig {
   protocol: ProtocolType;
   rack?: number;
   slot?: number;
+  /** 仅三菱协议、且启用档位的设备才会带上 */
+  profile?: MitsubishiTarget;
 }
+
+const MITSUBISHI_TARGETS: { value: MitsubishiTarget; label: string }[] = [
+  { value: 'simulator', label: 'GX Simulator2 仿真 · X/Y' },
+  { value: 'real', label: '实体 FX3U / FX5U · M 区' },
+];
 
 const PROTOCOL_LABELS: Record<ProtocolType, string> = {
   modbus: 'Modbus TCP',
@@ -34,6 +44,11 @@ interface PlcConnectionPanelProps {
   /** 受控协议（可选，外部需要同步当前协议时传入） */
   protocol?: ProtocolType;
   onProtocolChange?: (protocol: ProtocolType) => void;
+  /** 是否启用三菱连接目标下拉：默认关，其它设备包行为逐像素不变 */
+  enableMitsubishiProfile?: boolean;
+  /** 受控三菱连接目标档位（可选，外部持有全局档位时传入） */
+  profile?: MitsubishiTarget;
+  onProfileChange?: (profile: MitsubishiTarget) => void;
   /** 外部断连通知（设备断连回调中递增该值，触发组件复位连接状态） */
   disconnectTick?: number;
   /** 连接/断开实现（返回错误消息，成功返回 null） */
@@ -56,6 +71,9 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
   disconnectTick,
   protocol: protocolProp,
   onProtocolChange,
+  enableMitsubishiProfile = false,
+  profile: profileProp,
+  onProfileChange,
   onConnect,
   onDisconnect,
   onConnectedChange,
@@ -63,6 +81,7 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
   onHelp,
 }) => {
   const [protocol, setProtocol] = useState<ProtocolType>(initialConfig?.protocol ?? protocols[0] ?? 'modbus');
+  const [profile, setProfile] = useState<MitsubishiTarget>(initialConfig?.profile ?? 'simulator');
   const [host, setHost] = useState(initialConfig?.host ?? DEFAULT_PARAMS[protocol].host);
   const [port, setPort] = useState(String(initialConfig?.port ?? DEFAULT_PARAMS[protocol].port));
   const [rack, setRack] = useState(String(initialConfig?.rack ?? 0));
@@ -99,6 +118,14 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [protocolProp]);
 
+  // 受控三菱档位：外部 store 变化时同步内部下拉
+  useEffect(() => {
+    if (profileProp && profileProp !== profile) {
+      setProfile(profileProp);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileProp]);
+
   const handleProtocolChange = (p: ProtocolType) => {
     setProtocol(p);
     onProtocolChange?.(p);
@@ -127,12 +154,14 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
     const nextPort = Number.parseInt(port, 10);
     const nextRack = Number.parseInt(rack, 10);
     const nextSlot = Number.parseInt(slot, 10);
+    const withProfile = enableMitsubishiProfile && protocol === 'mitsubishi';
     return {
       host: host.trim() || '127.0.0.1',
       port: Number.isFinite(nextPort) ? nextPort : DEFAULT_PARAMS[protocol].port,
       protocol,
       rack: Number.isFinite(nextRack) ? nextRack : 0,
       slot: Number.isFinite(nextSlot) ? nextSlot : 1,
+      ...(withProfile ? { profile } : {}),
     };
   };
 
@@ -145,7 +174,12 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
       const error = await onConnect(config);
       if (error) throw new Error(error);
       setConnected(true);
-      setMessage(`已连接 ${PROTOCOL_LABELS[config.protocol]}: ${config.host}:${config.port}`);
+      if (enableMitsubishiProfile && config.protocol === 'mitsubishi') {
+        const target = config.profile === 'real' ? '实体 FX3U / FX5U' : 'GX Simulator2 仿真';
+        setMessage(`已连接 三菱 MX · 逻辑站 ${config.port} · ${target}`);
+      } else {
+        setMessage(`已连接 ${PROTOCOL_LABELS[config.protocol]}: ${config.host}:${config.port}`);
+      }
     } catch (e) {
       setConnected(false);
       setMessage(e instanceof Error ? e.message : '连接失败');
@@ -218,6 +252,25 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
             ))}
           </select>
         </label>
+        {enableMitsubishiProfile && protocol === 'mitsubishi' && (
+          <label className="text-xs text-gray-300 col-span-2">
+            <span className="block mb-1 text-gray-500">连接目标</span>
+            <select
+              value={profile}
+              onChange={(e) => {
+                const next = e.target.value as MitsubishiTarget;
+                setProfile(next);
+                onProfileChange?.(next);
+              }}
+              disabled={busy || connected}
+              className="w-full rounded-lg bg-gray-900/70 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+            >
+              {MITSUBISHI_TARGETS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -227,12 +280,14 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
             type="text"
             value={host}
             onChange={(e) => { setHost(e.target.value); setSelectedPreset(''); }}
-            disabled={busy || connected}
+            disabled={busy || connected || (enableMitsubishiProfile && protocol === 'mitsubishi')}
             className="w-full rounded-lg bg-gray-900/70 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
           />
         </label>
         <label className="text-xs text-gray-300">
-          <span className="block mb-1 text-gray-500">端口 Port</span>
+          <span className="block mb-1 text-gray-500">
+            {enableMitsubishiProfile && protocol === 'mitsubishi' ? '逻辑站号' : '端口 Port'}
+          </span>
           <input
             type="number"
             value={port}
@@ -266,6 +321,12 @@ export const PlcConnectionPanel: React.FC<PlcConnectionPanelProps> = ({
           </>
         )}
       </div>
+
+      {enableMitsubishiProfile && protocol === 'mitsubishi' && (
+        <p className="mt-2 text-xs text-gray-500">
+          MX Component 按逻辑站号通信：IP / 串口 / USB 由「通信设置实用程序」的逻辑站配置决定，主机地址不生效。
+        </p>
+      )}
 
       <div className="flex gap-3 mt-4">
         <button

@@ -1513,6 +1513,82 @@ export const S7_DISPLAY_VARS = S7_VARS;
 export const MITSUBISHI_DISPLAY_VARS = { ...MITSUBISHI_READ_VARS, ...MITSUBISHI_WRITE_VARS };
 
 // ============================================================
+// 三菱实体 PLC 档（M 区）
+// ============================================================
+
+/**
+ * 三菱连接目标档位。
+ * - simulator：GX Simulator2，X 输入继电器可被上位机 SetDevice 写入，沿用上面的 X/Y 表。
+ * - real：实体 FX3U / FX5U，X 在 END 后会被物理 I/O 刷新覆盖、Y 会被 PLC 程序刷新覆盖，
+ *   双向通信必须改用 M 辅助继电器；位置仍是 D120·D121，与档位无关。
+ * 两档只切换「抽象变量名 → 软元件名」这层映射，39 个抽象键与 3D / IO 逻辑完全一致。
+ */
+export type MitsubishiProfile = 'simulator' | 'real';
+
+export type MitsubishiVarName = keyof typeof MITSUBISHI_DISPLAY_VARS;
+
+/** 实体档输入（孪生 → PLC）：24 点 M100~M123，十进制连续，键集合与仿真档读表完全一致 */
+export const MITSUBISHI_REAL_READ_VARS: Record<keyof typeof MITSUBISHI_READ_VARS, string> = {
+  BUTTON_START: 'M100',
+  BUTTON_STOP: 'M101',
+  BUTTON_RESET: 'M102',
+  BUTTON_ESTOP: 'M103',
+  BUTTON_CONFIRM: 'M104',
+  SEL_MANUAL: 'M105',
+  SEL_AUTO: 'M106',
+  S_LIMIT_START: 'M107',
+  S_LIMIT_END: 'M108',
+  S_MAG_A_EMPTY: 'M109',
+  S_MAG_B_EMPTY: 'M110',
+  S_MAG_C_EMPTY: 'M111',
+  S_MAG_D_EMPTY: 'M112',
+  S_BIN_HAS_DRUG: 'M113',
+  MSC_A_BACK: 'M114',
+  MSC_A_FRONT: 'M115',
+  MSC_B_BACK: 'M116',
+  MSC_B_FRONT: 'M117',
+  MSC_C_BACK: 'M118',
+  MSC_C_FRONT: 'M119',
+  MSC_D_BACK: 'M120',
+  MSC_D_FRONT: 'M121',
+  MSC_TILT_HOLD: 'M122',
+  MSC_TILT_DUMP: 'M123',
+};
+
+/** 实体档输出（PLC → 孪生）：15 点 M130~M144，键集合与仿真档写表完全一致 */
+export const MITSUBISHI_REAL_WRITE_VARS: Record<keyof typeof MITSUBISHI_WRITE_VARS, string> = {
+  MOTOR_FWD: 'M130',
+  MOTOR_REV: 'M131',
+  CYL_SEND_A: 'M132',
+  CYL_SEND_B: 'M133',
+  CYL_SEND_C: 'M134',
+  CYL_SEND_D: 'M135',
+  CYL_TILT: 'M136',
+  LAMP_GREEN: 'M137',
+  LAMP_YELLOW: 'M138',
+  LAMP_RED: 'M139',
+  CYL_SEND_A_RETRACT: 'M140',
+  CYL_SEND_B_RETRACT: 'M141',
+  CYL_SEND_C_RETRACT: 'M142',
+  CYL_SEND_D_RETRACT: 'M143',
+  CYL_TILT_RETRACT: 'M144',
+};
+
+export const MITSUBISHI_REAL_DISPLAY_VARS = {
+  ...MITSUBISHI_REAL_READ_VARS,
+  ...MITSUBISHI_REAL_WRITE_VARS,
+};
+
+/**
+ * 唯一解析器：connect 帧下发的布尔变量表与三协议地址浮框共用。
+ * 网关 MitsubishiMX 用 variables[name] || name 翻译软元件名，表缺键会静默把抽象名当软元件名，
+ * 因此两档键集合必须严格一致（Record<keyof typeof 原表> 已在编译期锁死）。
+ */
+export function mitsubishiBoolVarsFor(profile: MitsubishiProfile): Record<MitsubishiVarName, string> {
+  return profile === 'real' ? MITSUBISHI_REAL_DISPLAY_VARS : MITSUBISHI_DISPLAY_VARS;
+}
+
+// ============================================================
 // 配方
 // ============================================================
 

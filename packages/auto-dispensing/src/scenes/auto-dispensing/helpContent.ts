@@ -2,11 +2,16 @@ import type { HelpContent } from '@digital-twin/shared';
 import {
   MODBUS_DISPLAY_VARS,
   S7_DISPLAY_VARS,
-  MITSUBISHI_DISPLAY_VARS,
   ENCODER_DINT,
   ENCODER_REG_LABEL,
   SCREW_DETAIL, ENCODER_PULSES_PER_REV, PULSES_PER_M, ENCODER_PULSES_MAX, PULSE_LENGTH_MM,
+  mitsubishiBoolVarsFor,
+  type MitsubishiProfile, type MitsubishiVarName,
 } from './constants';
+import { currentMitsubishiProfile } from '../../stores/useAppStore';
+
+/** 两档三菱布尔地址表的统一形态，由 constants.ts 的解析器给出 */
+type MitsubishiVars = Record<MitsubishiVarName, string>;
 
 interface SignalRow {
   name: string;
@@ -16,49 +21,49 @@ interface SignalRow {
   desc: string;
 }
 
-const INPUT_SIGNALS: SignalRow[] = [
-  { name: '启动按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_START, s7: S7_DISPLAY_VARS.BUTTON_START, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_START, desc: '启动配药流程（自复位）' },
-  { name: '停止按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_STOP, s7: S7_DISPLAY_VARS.BUTTON_STOP, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_STOP, desc: '停止：暂停流程，输出清（自复位）' },
-  { name: '复位按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_RESET, s7: S7_DISPLAY_VARS.BUTTON_RESET, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_RESET, desc: '复位：回起点并清状态（自复位）' },
-  { name: '急停按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_ESTOP, s7: S7_DISPLAY_VARS.BUTTON_ESTOP, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_ESTOP, desc: '急停：全停+红灯（自复位）' },
-  { name: '取药确认按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_CONFIRM, s7: S7_DISPLAY_VARS.BUTTON_CONFIRM, mitsubishi: MITSUBISHI_DISPLAY_VARS.BUTTON_CONFIRM, desc: '取药后确认，进入下一轮（自复位）' },
-  { name: '手动档（选择开关）', modbus: MODBUS_DISPLAY_VARS.SEL_MANUAL, s7: S7_DISPLAY_VARS.SEL_MANUAL, mitsubishi: MITSUBISHI_DISPLAY_VARS.SEL_MANUAL, desc: '控制柜两位旋钮拨到「手动」，与自动档互锁' },
-  { name: '自动档（选择开关）', modbus: MODBUS_DISPLAY_VARS.SEL_AUTO, s7: S7_DISPLAY_VARS.SEL_AUTO, mitsubishi: MITSUBISHI_DISPLAY_VARS.SEL_AUTO, desc: '控制柜两位旋钮拨到「自动」，与手动档互锁' },
-  { name: '原点传感器', modbus: MODBUS_DISPLAY_VARS.S_LIMIT_START, s7: S7_DISPLAY_VARS.S_LIMIT_START, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_LIMIT_START, desc: '滑台回到起点触发（±5mm，带滞回）；兼作增量编码器 Z 相回零基准' },
-  { name: '终点传感器', modbus: MODBUS_DISPLAY_VARS.S_LIMIT_END, s7: S7_DISPLAY_VARS.S_LIMIT_END, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_LIMIT_END, desc: '滑台到达终点放药位触发（±5mm，带滞回）' },
-  { name: 'A仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_A_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_A_EMPTY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_MAG_A_EMPTY, desc: 'A 药仓无药（指示灯闪）' },
-  { name: 'B仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_B_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_B_EMPTY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_MAG_B_EMPTY, desc: 'B 药仓无药（指示灯闪）' },
-  { name: 'C仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_C_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_C_EMPTY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_MAG_C_EMPTY, desc: 'C 药仓无药（指示灯闪）' },
-  { name: 'D仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_D_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_D_EMPTY, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_MAG_D_EMPTY, desc: 'D 药仓无药（指示灯闪）' },
-  { name: '取药仓有药', modbus: MODBUS_DISPLAY_VARS.S_BIN_HAS_DRUG, s7: S7_DISPLAY_VARS.S_BIN_HAS_DRUG, mitsubishi: MITSUBISHI_DISPLAY_VARS.S_BIN_HAS_DRUG, desc: '取药仓内有药' },
-  { name: 'A缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_A_BACK, s7: S7_DISPLAY_VARS.MSC_A_BACK, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_A_BACK, desc: 'A 送药缸缩回磁性开关' },
-  { name: 'A缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_A_FRONT, s7: S7_DISPLAY_VARS.MSC_A_FRONT, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_A_FRONT, desc: 'A 送药缸伸出磁性开关' },
-  { name: 'B缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_B_BACK, s7: S7_DISPLAY_VARS.MSC_B_BACK, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_B_BACK, desc: 'B 送药缸缩回磁性开关' },
-  { name: 'B缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_B_FRONT, s7: S7_DISPLAY_VARS.MSC_B_FRONT, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_B_FRONT, desc: 'B 送药缸伸出磁性开关' },
-  { name: 'C缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_C_BACK, s7: S7_DISPLAY_VARS.MSC_C_BACK, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_C_BACK, desc: 'C 送药缸缩回磁性开关' },
-  { name: 'C缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_C_FRONT, s7: S7_DISPLAY_VARS.MSC_C_FRONT, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_C_FRONT, desc: 'C 送药缸伸出磁性开关' },
-  { name: 'D缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_D_BACK, s7: S7_DISPLAY_VARS.MSC_D_BACK, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_D_BACK, desc: 'D 送药缸缩回磁性开关' },
-  { name: 'D缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_D_FRONT, s7: S7_DISPLAY_VARS.MSC_D_FRONT, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_D_FRONT, desc: 'D 送药缸伸出磁性开关' },
-  { name: '翻转盛药位', modbus: MODBUS_DISPLAY_VARS.MSC_TILT_HOLD, s7: S7_DISPLAY_VARS.MSC_TILT_HOLD, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_TILT_HOLD, desc: '翻转缸盛药位磁性开关' },
-  { name: '翻转倒药位', modbus: MODBUS_DISPLAY_VARS.MSC_TILT_DUMP, s7: S7_DISPLAY_VARS.MSC_TILT_DUMP, mitsubishi: MITSUBISHI_DISPLAY_VARS.MSC_TILT_DUMP, desc: '翻转缸倒药位磁性开关' },
+const buildInputSignals = (m: MitsubishiVars): SignalRow[] => [
+  { name: '启动按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_START, s7: S7_DISPLAY_VARS.BUTTON_START, mitsubishi: m.BUTTON_START, desc: '启动配药流程（自复位）' },
+  { name: '停止按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_STOP, s7: S7_DISPLAY_VARS.BUTTON_STOP, mitsubishi: m.BUTTON_STOP, desc: '停止：暂停流程，输出清（自复位）' },
+  { name: '复位按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_RESET, s7: S7_DISPLAY_VARS.BUTTON_RESET, mitsubishi: m.BUTTON_RESET, desc: '复位：回起点并清状态（自复位）' },
+  { name: '急停按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_ESTOP, s7: S7_DISPLAY_VARS.BUTTON_ESTOP, mitsubishi: m.BUTTON_ESTOP, desc: '急停：全停+红灯（自复位）' },
+  { name: '取药确认按钮', modbus: MODBUS_DISPLAY_VARS.BUTTON_CONFIRM, s7: S7_DISPLAY_VARS.BUTTON_CONFIRM, mitsubishi: m.BUTTON_CONFIRM, desc: '取药后确认，进入下一轮（自复位）' },
+  { name: '手动档（选择开关）', modbus: MODBUS_DISPLAY_VARS.SEL_MANUAL, s7: S7_DISPLAY_VARS.SEL_MANUAL, mitsubishi: m.SEL_MANUAL, desc: '控制柜两位旋钮拨到「手动」，与自动档互锁' },
+  { name: '自动档（选择开关）', modbus: MODBUS_DISPLAY_VARS.SEL_AUTO, s7: S7_DISPLAY_VARS.SEL_AUTO, mitsubishi: m.SEL_AUTO, desc: '控制柜两位旋钮拨到「自动」，与手动档互锁' },
+  { name: '原点传感器', modbus: MODBUS_DISPLAY_VARS.S_LIMIT_START, s7: S7_DISPLAY_VARS.S_LIMIT_START, mitsubishi: m.S_LIMIT_START, desc: '滑台回到起点触发（±5mm，带滞回）；兼作增量编码器 Z 相回零基准' },
+  { name: '终点传感器', modbus: MODBUS_DISPLAY_VARS.S_LIMIT_END, s7: S7_DISPLAY_VARS.S_LIMIT_END, mitsubishi: m.S_LIMIT_END, desc: '滑台到达终点放药位触发（±5mm，带滞回）' },
+  { name: 'A仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_A_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_A_EMPTY, mitsubishi: m.S_MAG_A_EMPTY, desc: 'A 药仓无药（指示灯闪）' },
+  { name: 'B仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_B_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_B_EMPTY, mitsubishi: m.S_MAG_B_EMPTY, desc: 'B 药仓无药（指示灯闪）' },
+  { name: 'C仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_C_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_C_EMPTY, mitsubishi: m.S_MAG_C_EMPTY, desc: 'C 药仓无药（指示灯闪）' },
+  { name: 'D仓空仓', modbus: MODBUS_DISPLAY_VARS.S_MAG_D_EMPTY, s7: S7_DISPLAY_VARS.S_MAG_D_EMPTY, mitsubishi: m.S_MAG_D_EMPTY, desc: 'D 药仓无药（指示灯闪）' },
+  { name: '取药仓有药', modbus: MODBUS_DISPLAY_VARS.S_BIN_HAS_DRUG, s7: S7_DISPLAY_VARS.S_BIN_HAS_DRUG, mitsubishi: m.S_BIN_HAS_DRUG, desc: '取药仓内有药' },
+  { name: 'A缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_A_BACK, s7: S7_DISPLAY_VARS.MSC_A_BACK, mitsubishi: m.MSC_A_BACK, desc: 'A 送药缸缩回磁性开关' },
+  { name: 'A缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_A_FRONT, s7: S7_DISPLAY_VARS.MSC_A_FRONT, mitsubishi: m.MSC_A_FRONT, desc: 'A 送药缸伸出磁性开关' },
+  { name: 'B缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_B_BACK, s7: S7_DISPLAY_VARS.MSC_B_BACK, mitsubishi: m.MSC_B_BACK, desc: 'B 送药缸缩回磁性开关' },
+  { name: 'B缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_B_FRONT, s7: S7_DISPLAY_VARS.MSC_B_FRONT, mitsubishi: m.MSC_B_FRONT, desc: 'B 送药缸伸出磁性开关' },
+  { name: 'C缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_C_BACK, s7: S7_DISPLAY_VARS.MSC_C_BACK, mitsubishi: m.MSC_C_BACK, desc: 'C 送药缸缩回磁性开关' },
+  { name: 'C缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_C_FRONT, s7: S7_DISPLAY_VARS.MSC_C_FRONT, mitsubishi: m.MSC_C_FRONT, desc: 'C 送药缸伸出磁性开关' },
+  { name: 'D缸退回位', modbus: MODBUS_DISPLAY_VARS.MSC_D_BACK, s7: S7_DISPLAY_VARS.MSC_D_BACK, mitsubishi: m.MSC_D_BACK, desc: 'D 送药缸缩回磁性开关' },
+  { name: 'D缸伸出位', modbus: MODBUS_DISPLAY_VARS.MSC_D_FRONT, s7: S7_DISPLAY_VARS.MSC_D_FRONT, mitsubishi: m.MSC_D_FRONT, desc: 'D 送药缸伸出磁性开关' },
+  { name: '翻转盛药位', modbus: MODBUS_DISPLAY_VARS.MSC_TILT_HOLD, s7: S7_DISPLAY_VARS.MSC_TILT_HOLD, mitsubishi: m.MSC_TILT_HOLD, desc: '翻转缸盛药位磁性开关' },
+  { name: '翻转倒药位', modbus: MODBUS_DISPLAY_VARS.MSC_TILT_DUMP, s7: S7_DISPLAY_VARS.MSC_TILT_DUMP, mitsubishi: m.MSC_TILT_DUMP, desc: '翻转缸倒药位磁性开关' },
 ];
 
-const OUTPUT_SIGNALS: SignalRow[] = [
-  { name: '电机正转', modbus: MODBUS_DISPLAY_VARS.MOTOR_FWD, s7: S7_DISPLAY_VARS.MOTOR_FWD, mitsubishi: MITSUBISHI_DISPLAY_VARS.MOTOR_FWD, desc: '滑台正向移动（起点→终点）' },
-  { name: '电机反转', modbus: MODBUS_DISPLAY_VARS.MOTOR_REV, s7: S7_DISPLAY_VARS.MOTOR_REV, mitsubishi: MITSUBISHI_DISPLAY_VARS.MOTOR_REV, desc: '滑台反向移动（终点→起点）' },
-  { name: 'A送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_A, s7: S7_DISPLAY_VARS.CYL_SEND_A, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_A, desc: 'A 药仓推药气缸（伸=推 1 粒）' },
-  { name: 'B送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_B, s7: S7_DISPLAY_VARS.CYL_SEND_B, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_B, desc: 'B 药仓推药气缸（伸=推 1 粒）' },
-  { name: 'C送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_C, s7: S7_DISPLAY_VARS.CYL_SEND_C, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_C, desc: 'C 药仓推药气缸（伸=推 1 粒）' },
-  { name: 'D送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_D, s7: S7_DISPLAY_VARS.CYL_SEND_D, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_D, desc: 'D 药仓推药气缸（伸=推 1 粒）' },
-  { name: '翻转缸', modbus: MODBUS_DISPLAY_VARS.CYL_TILT, s7: S7_DISPLAY_VARS.CYL_TILT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_TILT, desc: '料斗翻转倒药（终点）' },
-  { name: '灯塔绿', modbus: MODBUS_DISPLAY_VARS.LAMP_GREEN, s7: S7_DISPLAY_VARS.LAMP_GREEN, mitsubishi: MITSUBISHI_DISPLAY_VARS.LAMP_GREEN, desc: '运行中' },
-  { name: '灯塔黄', modbus: MODBUS_DISPLAY_VARS.LAMP_YELLOW, s7: S7_DISPLAY_VARS.LAMP_YELLOW, mitsubishi: MITSUBISHI_DISPLAY_VARS.LAMP_YELLOW, desc: '请取药/暂停' },
-  { name: '灯塔红', modbus: MODBUS_DISPLAY_VARS.LAMP_RED, s7: S7_DISPLAY_VARS.LAMP_RED, mitsubishi: MITSUBISHI_DISPLAY_VARS.LAMP_RED, desc: '故障/空仓闪' },
-  { name: 'A缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_A_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_A_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_A_RETRACT, desc: '双电控专用：A 送药缸缩回线圈（单电控不使用）' },
-  { name: 'B缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_B_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_B_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_B_RETRACT, desc: '双电控专用：B 送药缸缩回线圈（单电控不使用）' },
-  { name: 'C缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_C_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_C_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_C_RETRACT, desc: '双电控专用：C 送药缸缩回线圈（单电控不使用）' },
-  { name: 'D缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_D_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_D_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_SEND_D_RETRACT, desc: '双电控专用：D 送药缸缩回线圈（单电控不使用）' },
-  { name: '翻转回位', modbus: MODBUS_DISPLAY_VARS.CYL_TILT_RETRACT, s7: S7_DISPLAY_VARS.CYL_TILT_RETRACT, mitsubishi: MITSUBISHI_DISPLAY_VARS.CYL_TILT_RETRACT, desc: '双电控专用：翻转缸回到盛药位线圈（单电控不使用）' },
+const buildOutputSignals = (m: MitsubishiVars): SignalRow[] => [
+  { name: '电机正转', modbus: MODBUS_DISPLAY_VARS.MOTOR_FWD, s7: S7_DISPLAY_VARS.MOTOR_FWD, mitsubishi: m.MOTOR_FWD, desc: '滑台正向移动（起点→终点）' },
+  { name: '电机反转', modbus: MODBUS_DISPLAY_VARS.MOTOR_REV, s7: S7_DISPLAY_VARS.MOTOR_REV, mitsubishi: m.MOTOR_REV, desc: '滑台反向移动（终点→起点）' },
+  { name: 'A送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_A, s7: S7_DISPLAY_VARS.CYL_SEND_A, mitsubishi: m.CYL_SEND_A, desc: 'A 药仓推药气缸（伸=推 1 粒）' },
+  { name: 'B送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_B, s7: S7_DISPLAY_VARS.CYL_SEND_B, mitsubishi: m.CYL_SEND_B, desc: 'B 药仓推药气缸（伸=推 1 粒）' },
+  { name: 'C送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_C, s7: S7_DISPLAY_VARS.CYL_SEND_C, mitsubishi: m.CYL_SEND_C, desc: 'C 药仓推药气缸（伸=推 1 粒）' },
+  { name: 'D送药缸', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_D, s7: S7_DISPLAY_VARS.CYL_SEND_D, mitsubishi: m.CYL_SEND_D, desc: 'D 药仓推药气缸（伸=推 1 粒）' },
+  { name: '翻转缸', modbus: MODBUS_DISPLAY_VARS.CYL_TILT, s7: S7_DISPLAY_VARS.CYL_TILT, mitsubishi: m.CYL_TILT, desc: '料斗翻转倒药（终点）' },
+  { name: '灯塔绿', modbus: MODBUS_DISPLAY_VARS.LAMP_GREEN, s7: S7_DISPLAY_VARS.LAMP_GREEN, mitsubishi: m.LAMP_GREEN, desc: '运行中' },
+  { name: '灯塔黄', modbus: MODBUS_DISPLAY_VARS.LAMP_YELLOW, s7: S7_DISPLAY_VARS.LAMP_YELLOW, mitsubishi: m.LAMP_YELLOW, desc: '请取药/暂停' },
+  { name: '灯塔红', modbus: MODBUS_DISPLAY_VARS.LAMP_RED, s7: S7_DISPLAY_VARS.LAMP_RED, mitsubishi: m.LAMP_RED, desc: '故障/空仓闪' },
+  { name: 'A缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_A_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_A_RETRACT, mitsubishi: m.CYL_SEND_A_RETRACT, desc: '双电控专用：A 送药缸缩回线圈（单电控不使用）' },
+  { name: 'B缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_B_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_B_RETRACT, mitsubishi: m.CYL_SEND_B_RETRACT, desc: '双电控专用：B 送药缸缩回线圈（单电控不使用）' },
+  { name: 'C缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_C_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_C_RETRACT, mitsubishi: m.CYL_SEND_C_RETRACT, desc: '双电控专用：C 送药缸缩回线圈（单电控不使用）' },
+  { name: 'D缸缩回', modbus: MODBUS_DISPLAY_VARS.CYL_SEND_D_RETRACT, s7: S7_DISPLAY_VARS.CYL_SEND_D_RETRACT, mitsubishi: m.CYL_SEND_D_RETRACT, desc: '双电控专用：D 送药缸缩回线圈（单电控不使用）' },
+  { name: '翻转回位', modbus: MODBUS_DISPLAY_VARS.CYL_TILT_RETRACT, s7: S7_DISPLAY_VARS.CYL_TILT_RETRACT, mitsubishi: m.CYL_TILT_RETRACT, desc: '双电控专用：翻转缸回到盛药位线圈（单电控不使用）' },
 ];
 
 const toRows = (rows: SignalRow[]) =>
@@ -68,8 +73,37 @@ const toRows = (rows: SignalRow[]) =>
     description: r.desc,
   }));
 
-/** 自动配药帮助内容（共享帮助面板注入） */
-export const buildDispensingHelpContent = (): HelpContent => ({
+/**
+ * 实体档说明由仿真档文案按「三菱段」定向替换派生：
+ * 仿真档源码里的 X/Y 字面量保持单一来源（自检会扫源码），
+ * 实体档渲染输出不出现八进制 / X0~X31 / Y12~Y16 等仿真口径。
+ */
+const REAL_WORDING: readonly (readonly [string, string])[] = [
+  ['FX 系列经 GX Simulator 2 直连，布尔 IO 用 X0~X31 / Y0~Y16（八进制）；位置只取 D120 低字 + D121 高字，默认不接高速计数器',
+    'FX3U / FX5U 经 MX Component 逻辑站接入，布尔 IO 用 M100~M123 / M130~M144（M 区十进制）；位置仍只取 D120 低字 + D121 高字'],
+  ['C32~C36 / Y2~Y6 / M30.2~M30.6', 'C32~C36 / M132~M136 / M30.2~M30.6'],
+  ['C41~C45 / Y12~Y16 / M31.2~M31.6', 'C41~C45 / M140~M144 / M31.2~M31.6'],
+  ['真实设备侧：编码器 A/B 相两条线接 X0/X1、由高速计数器 C0 计数，PLC 程序把 C0 当前值映射/缩放到该 DINT 寄存器；数字孪生不绑定物理输入点，也不模拟高速脉冲。',
+    '实体档布尔 IO 全部走 M 区；编码器高速计数与缩放仍由 PLC 程序负责，位置只写 D120/D121；数字孪生不绑定物理输入点，也不模拟高速脉冲。'],
+  ['三菱 X/Y、Modbus 线圈号', '三菱 M 区、Modbus 线圈号'],
+  ['三菱 X/Y 为八进制编号', '实体档三菱布尔 IO 为 M 区十进制编号（M100~M144）'],
+];
+
+const applyWording = (text: string, wording: readonly (readonly [string, string])[]): string =>
+  wording.reduce((s, [from, to]) => s.replace(from, to), text);
+
+const wordingFor = (text: string, profile: MitsubishiProfile): string =>
+  profile === 'real' ? applyWording(text, REAL_WORDING) : text;
+
+type Notes = NonNullable<HelpContent['notes']>;
+
+const realNotes = (sim: Notes): Notes =>
+  sim.map((n) => ({ ...n, details: n.details.map((d) => applyWording(d, REAL_WORDING)) }));
+
+/** 自动配药帮助内容（共享帮助面板注入）；三菱列与说明按当前连接目标档位显示 */
+export const buildDispensingHelpContent = (
+  profile: MitsubishiProfile = currentMitsubishiProfile(),
+): HelpContent => ({
   title: '自动配药系统 - 帮助',
   description: '使用说明与多协议IO地址分配对照表',
   steps: [
@@ -89,7 +123,8 @@ export const buildDispensingHelpContent = (): HelpContent => ({
     '停止=暂停（位置保持），复位=回起点清状态，急停=立即全停+红灯。',
     `位置反馈：原点/终点各一个接近开关；${ENCODER_REG_LABEL} 组成 32 位有符号 DINT（${ENCODER_PULSES_PER_REV} 脉冲/转 × ${SCREW_DETAIL.LEAD * 1000}mm 导程 → 1 脉冲 ≈ ${PULSE_LENGTH_MM.toFixed(4)}mm），前进 +、后退 -，回原点传感器时归零，不占输入点。`,
   ],
-  notes: [
+  notes: (() => {
+    const sim: Notes = [
     {
       icon: '🔌',
       name: '支持的协议',
@@ -168,21 +203,23 @@ export const buildDispensingHelpContent = (): HelpContent => ({
         '复位：回起点并清空流程状态，之后方可重新启动；不改变药仓余量。',
       ],
     },
-  ],
+    ];
+    return profile === 'real' ? realNotes(sim) : sim;
+  })(),
   addresses: {
     columns: ['ModbusTCP', 'Siemens S7', '三菱 FX'],
     sections: [
       {
         title: '输入信号（孪生 → PLC）',
         icon: '📥',
-        rows: toRows(INPUT_SIGNALS),
-        hint: '面板上悬停（或键盘聚焦）「启动」「A 缸后」「滑台」等信号名称，浮框会一次给出该点的三菱 X/Y、Modbus 线圈号与 Siemens S7 M 区地址；本表是完整映射。',
+        rows: toRows(buildInputSignals(mitsubishiBoolVarsFor(profile))),
+        hint: wordingFor('面板上悬停（或键盘聚焦）「启动」「A 缸后」「滑台」等信号名称，浮框会一次给出该点的三菱 X/Y、Modbus 线圈号与 Siemens S7 M 区地址；本表是完整映射。', profile),
       },
       {
         title: '输出信号（PLC → 孪生）',
         icon: '📤',
-        rows: toRows(OUTPUT_SIGNALS),
-        hint: '前 10 行是动作输出，后 5 行是双电控专用的缩回 / 回位线圈（单电控不使用）。按钮与传感器是布尔量，由孪生实时写入；位置是数值量，走 32 位 DINT 数据寄存器，不占输入点。三菱 X/Y 为八进制编号，Modbus 线圈地址从 0 开始。',
+        rows: toRows(buildOutputSignals(mitsubishiBoolVarsFor(profile))),
+        hint: wordingFor('前 10 行是动作输出，后 5 行是双电控专用的缩回 / 回位线圈（单电控不使用）。按钮与传感器是布尔量，由孪生实时写入；位置是数值量，走 32 位 DINT 数据寄存器，不占输入点。三菱 X/Y 为八进制编号，Modbus 线圈地址从 0 开始。', profile),
       },
       {
         title: '数据寄存器（孪生 → PLC）',

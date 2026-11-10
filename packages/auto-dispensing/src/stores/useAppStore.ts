@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { VIEW_PRESETS, PART_STAGES } from '../scenes/auto-dispensing/constants';
+import { VIEW_PRESETS, PART_STAGES, type MitsubishiProfile } from '../scenes/auto-dispensing/constants';
 
 export type AppMode = 'manual' | 'auto' | 'sim' | 'scoring';
 
@@ -44,6 +44,9 @@ interface AppStoreState {
   setMode: (mode: AppMode) => void;
   isConnected: boolean;
   setConnected: (connected: boolean) => void;
+  /** 三菱连接目标：仿真档沿用 X/Y，实体 FX3U/FX5U 档改用 M 区；不持久化，刷新回默认仿真档 */
+  mitsubishiProfile: MitsubishiProfile;
+  setMitsubishiProfile: (profile: MitsubishiProfile) => void;
   /** 仿真模式 - 运行状态 */
   simRunning: boolean;
   simEStop: boolean;
@@ -73,6 +76,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setMode: (mode) => set({ mode }),
   isConnected: false,
   setConnected: (isConnected) => set({ isConnected }),
+  mitsubishiProfile: 'simulator',
+  setMitsubishiProfile: (mitsubishiProfile) => set({ mitsubishiProfile }),
   simRunning: false,
   simEStop: false,
   setSimRunning: (simRunning) => set({ simRunning }),
@@ -102,3 +107,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     syncUrl(get().activeView, null, mirrored);
   },
 }));
+
+/**
+ * 三菱档位的唯一 store-read 入口。
+ * 地址浮框 / 帮助页是被多处消费的无参纯函数（且自检会扫描调用点字符串），
+ * 由它们在函数体内读档，避免给所有调用点加参数、也避免层层透传。
+ */
+export const currentMitsubishiProfile = (): MitsubishiProfile =>
+  useAppStore.getState().mitsubishiProfile ?? 'simulator';
