@@ -208,7 +208,16 @@ export const CYLINDER_DETAIL = {
   BOLT_XZ: 0.062,
   GUIDE_ROD_R: 0.014,    // 双导杆（防推板转动，实物带导杆气缸标配）
   GUIDE_ROD_X: 0.088,
-  GUIDE_ROD_LEN: 0.60,
+  /**
+   * 三根杆（中心活塞杆 + 双导杆）插进缸体内的尾段。
+   * 杆系整体随 rodRef 平移，但根部必须始终留在缸体里，否则伸出行程会把
+   * 杆整根拉出端盖、出现「推杆和缸体断开」的空隙。
+   * 约束：EXTEND_FEED - TAIL <= 端盖外沿(0.345)，且 RETRACT - TAIL >= -0.345
+   *       => 0.06 <= TAIL <= 0.125，取 0.10；__model_detail_check.test.ts 锁死。
+   */
+  ROD_TAIL: 0.10,
+  /** 三根杆统一长度：推板位置 + 尾部插入段，导杆与活塞杆同源 */
+  GUIDE_ROD_LEN: COMPONENT.CYLINDER_ROD_LEN + 0.10,
   MOUNT_Z0: 0.36,        // 安装支座从带侧梁外沿伸到缸体下方
   MOUNT_Z1: 0.82,
   MOUNT_Y: 0.96,

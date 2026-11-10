@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   CYLINDER_DETAIL, SENSOR_DETAIL, SENSOR_VARIANTS, PART_STAGES,
-  SENSOR_POSITIONS, isSensorVariant,
+  SENSOR_POSITIONS, isSensorVariant, COMPONENT,
+  CYLINDER_EXTEND_POS_FEED, CYLINDER_RETRACT_POS,
 } from './scenes/conveyor-sorting/constants';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -163,5 +164,29 @@ describe('展台型号切换：store 深链、UI 锚点、场景同源', () => {
     expect(sceneSource).toContain('s.stageSensor');
     expect(sceneSource).toContain('renderBarePart(kind, signalTower, stageSensor)');
     expect(bareBody).toContain('name={sensorVariant}');
+  });
+});
+
+/** 端盖外沿（缸体半长 + 端盖半厚） */
+const CAP_Y = COMPONENT.CYLINDER_BODY_HALF_LEN + 0.035;
+/** rodRef 原点为 ext 时，三根杆根部在缸体局部坐标中的位置 */
+const rodRootAt = (ext: number) => ext + COMPONENT.CYLINDER_ROD_LEN - CYLINDER_DETAIL.GUIDE_ROD_LEN;
+
+describe('杆系连续性：任意行程下推杆都不与缸体断开', () => {
+  it('三根杆长度同源，尾部插入段由 ROD_TAIL 定义', () => {
+    expect(CYLINDER_DETAIL.GUIDE_ROD_LEN)
+      .toBe(COMPONENT.CYLINDER_ROD_LEN + CYLINDER_DETAIL.ROD_TAIL);
+    expect(CYLINDER_DETAIL.ROD_TAIL).toBeGreaterThan(0);
+    expect(geoSource).toContain('D.GUIDE_ROD_LEN');
+    expect(cylinderSource).toContain('C.CYLINDER_ROD_LEN - D.GUIDE_ROD_LEN / 2');
+    expect(cylinderSource).toContain('<GuideRods />');
+  });
+
+  it('最大伸出时杆根仍插在前端盖内，不会拉出空隙', () => {
+    expect(rodRootAt(CYLINDER_EXTEND_POS_FEED)).toBeLessThanOrEqual(CAP_Y);
+  });
+
+  it('完全缩回时杆根不穿出后端盖', () => {
+    expect(rodRootAt(CYLINDER_RETRACT_POS)).toBeGreaterThanOrEqual(-CAP_Y);
   });
 });
