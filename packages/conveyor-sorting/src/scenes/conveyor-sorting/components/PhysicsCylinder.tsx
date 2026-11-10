@@ -260,8 +260,12 @@ export function PhysicsCylinder({ name, position, previewExtension, previewMount
           }))}
 
           <group ref={rodRef} position={[0, CYLINDER_RETRACT_POS, 0]}>
-            {/* 中心活塞杆与两根导杆同为镀硬铬亮银，不再是一根抢眼的深色粗棒 */}
-            <mesh geometry={geometries.cylinderRod} material={materials.brightSilver} position={[0, C.CYLINDER_ROD_LEN / 2, 0]} />
+            {/* 三根杆同长同中心、根部插进缸体：随 rodRef 平移也不会与端盖断开 */}
+            <mesh
+              geometry={geometries.cylinderRod}
+              material={materials.brightSilver}
+              position={[0, C.CYLINDER_ROD_LEN - D.GUIDE_ROD_LEN / 2, 0]}
+            />
             <GuideRods />
             <mesh geometry={geometries.cylinderPushPlate} material={materials.endCap} position={[0, C.CYLINDER_ROD_LEN, 0]} />
             <mesh

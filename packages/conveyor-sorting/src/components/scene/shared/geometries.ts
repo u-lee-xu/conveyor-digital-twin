@@ -81,7 +81,8 @@ export const geometries = {
   /**
    * 气缸推杆（标准长度）
    */
-  cylinderRod: new THREE.CylinderGeometry(D.ROD_R, D.ROD_R, 0.7, 16),
+  /** 与双导杆同长同源：尾部 ROD_TAIL 始终插在缸体内，任意行程都不与端盖断开 */
+  cylinderRod: new THREE.CylinderGeometry(D.ROD_R, D.ROD_R, D.GUIDE_ROD_LEN, 16),
   
   /**
    * 气缸推杆（加长版）
