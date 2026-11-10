@@ -335,6 +335,124 @@ export type ConveyorViewKey = keyof typeof VIEW_PRESETS;
 export const VIEW_BUTTONS: ConveyorViewKey[] = ['overview', 'top', 'feed', 'sorting', 'tower'];
 
 // ============================================================
+// ASSEMBLY 装配层 / PART STAGE 部件展台
+//
+// 与自动配药 constants.ts 同一套三层结构：
+//   部件层（组件内相对自身原点的局部几何） → 装配层（本区块位置表） → 场景层（SceneContent）。
+//
+// 展台把**同一个组件**放到局部原点 1:1 渲染，只换相机与标尺网格，不复制任何几何，
+// 因此整机与展台不会出现两套形状/尺寸/材质漂移。气缸 / 传感器这类多实例部件
+// 由 PART_INSTANCES 给出各实例的世界位置，仍从上面的 LAYOUT 常量派生。
+// ============================================================
+
+export type Vec3 = [number, number, number];
+export type PartKind = 'belt' | 'cylinder' | 'sensor' | 'chute' | 'tower' | 'table';
+
+export interface PartPlacement {
+  /** 部件局部原点在整机世界坐标中的位置 */
+  position: Vec3;
+  /** 局部原点的定义（组件实现必须遵守） */
+  origin: string;
+}
+
+/** 整机装配表：SceneContent 里不再出现散落的裸坐标 */
+export const ASSEMBLY: Record<PartKind, PartPlacement> = {
+  belt: {
+    position: [0, 0, 0],
+    origin: '输送线中心地面；+X 沿输送方向，y=0 为可调地脚底面',
+  },
+  chute: {
+    position: [0, 0, 0],
+    origin: '两条分拣槽共用带面基准；y=0 为地面，槽面按 ENTRY_Y / EXIT_Y 定义',
+  },
+  table: {
+    position: [...MATERIAL_TABLE_POSITION] as Vec3,
+    origin: '物料台台面中心；y=0 为台面，支腿沿 -Y 下探',
+  },
+  cylinder: {
+    position: [...CYLINDER_POSITIONS.feed] as Vec3,
+    origin: '气缸轴线中心；组件内 rotation=[π/2,0,π] 把局部 +Y 映射到世界 -Z 推料方向',
+  },
+  sensor: {
+    position: [...SENSOR_POSITIONS.feed] as Vec3,
+    origin: '传感器壳体中心；安装支架沿 -Y 下探到安装板',
+  },
+  tower: {
+    position: [...COMPONENT.TOWER_POSITION] as Vec3,
+    origin: '底座法兰底面；y=0 为地面，三色灯罩沿 +Y 分层',
+  },
+};
+
+/** 多实例部件：整机各实例的世界位置（键集合与 useDeviceStore 的实体名一致） */
+export const PART_INSTANCES: {
+  cylinder: Record<'feed' | 'sorting1' | 'sorting2', Vec3>;
+  sensor: Record<'feed' | 'color' | 'material', Vec3>;
+} = {
+  cylinder: { ...CYLINDER_POSITIONS },
+  sensor: { ...SENSOR_POSITIONS },
+};
+
+export interface PartStage {
+  label: string;
+  camera: Vec3;
+  target: Vec3;
+  fov: number;
+  /** 标尺网格边长（格数 = 边长 / 0.1，即每格 0.1m） */
+  grid: number;
+  /** 网格所在局部 y（贴部件底面，避免穿过部件） */
+  gridY: number;
+}
+
+/** ?stage=<key>：单个部件居中、1:1 真实尺度、0.1m 标尺网格 + 专用近景相机 */
+export const PART_STAGES: Record<PartKind, PartStage> = {
+  belt: {
+    label: '输送线本体',
+    camera: [2.6, 1.9, 3.6], target: [0, 0.5, 0], fov: 45, grid: 4, gridY: -0.02,
+  },
+  // 从 +X 侧 3/4 看：站在 +Z 正后方会被缸体挡住整条推杆 / 推板链。
+  // target.z 取 +0.10（比部件中心更靠后），把整个气缸推到左侧固定面板右边。
+  cylinder: {
+    label: '带导杆推料气缸',
+    camera: [1.55, 0.72, 1.35], target: [0, 0, 0.10], fov: 42, grid: 1.6, gridY: -0.14,
+  },
+  sensor: {
+    label: '光电传感器',
+    camera: [0.38, 0.26, 0.52], target: [0, -0.02, 0], fov: 36, grid: 0.4, gridY: -0.16,
+  },
+  chute: {
+    label: '分拣斜槽与收集盒',
+    camera: [1.75, 1.25, 1.65], target: [0.40, 0.65, -0.55], fov: 45, grid: 2.4, gridY: 0.42,
+  },
+  tower: {
+    label: '三色信号灯',
+    camera: [0.55, 0.62, 1.35], target: [0, 0.35, 0], fov: 38, grid: 1, gridY: -0.02,
+  },
+  table: {
+    label: '上料物料台',
+    camera: [0.95, 0.55, 1.20], target: [0, -0.40, 0], fov: 40, grid: 1, gridY: -0.90,
+  },
+};
+
+/** 展台部件的局部原点定义：截图 / 自检时明确「这个部件以哪个面为基准」 */
+export const PART_STAGE_ORIGIN: Record<PartKind, string> = {
+  belt: ASSEMBLY.belt.origin,
+  cylinder: ASSEMBLY.cylinder.origin,
+  sensor: ASSEMBLY.sensor.origin,
+  chute: ASSEMBLY.chute.origin,
+  tower: ASSEMBLY.tower.origin,
+  table: ASSEMBLY.table.origin,
+};
+
+/**
+ * 展台键校验：必须用 hasOwnProperty，不能写成 !!PART_STAGES[name]。
+ * 普通对象的 `__proto__` / `constructor` 会沿原型链取到真值，
+ * 会让 ?stage=__proto__ 这类输入绕过校验并污染相机目标。
+ */
+export function isPartStage(name: string | null | undefined): name is PartKind {
+  return !!name && Object.prototype.hasOwnProperty.call(PART_STAGES, name);
+}
+
+// ============================================================
 // PHYSICS 物理参数
 // ============================================================
 

@@ -205,7 +205,10 @@ describe('场景容器与机位：两个入口渲染一致', () => {
   it('传送带容器把背景和三点布光接到共享令牌上', () => {
     expect(wrapperSource).toContain('background={VISUAL.SCENE_BACKGROUND}');
     expect(wrapperSource).toContain('lighting={VISUAL.SCENE_LIGHTING}');
-    expect(wrapperSource).toContain('orbitTarget={SCENE_TARGET}');
+    // 展台下观察点换成 PART_STAGES 的专用 target，整机仍回落到 SCENE_TARGET
+    expect(wrapperSource).toContain('orbitTarget=');
+    expect(wrapperSource).toContain('SCENE_TARGET');
+    expect(wrapperSource).toContain('PART_STAGES[activeStage]');
     expect(wrapperSource).toContain('ConveyorViewSwitcher');
     // 动态工件落在倾斜薄板上需要更细的接触求解
     expect(wrapperSource).toContain('timeStep={1 / 60}');
