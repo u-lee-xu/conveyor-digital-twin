@@ -227,6 +227,16 @@ describe('共享连接面板门控与兼容性', () => {
     expect(panel).toContain('disabled={busy || connected}');
   });
 
+  it('逻辑站号默认 0 只是项目历史值，界面必须提示按实用程序核对', () => {
+    const panel = read('../../shared/src/components/ui/PlcConnectionPanel.tsx');
+    expect(panel).toContain("mitsubishi: { host: '127.0.0.1', port: 0 }");
+    expect(panel).toContain('并非通用值');
+    expect(panel).toContain('出现 Open failed 时先核对编号');
+    // 不把本机已配置编号写死进产品：换机器后提示仍然成立
+    expect(panel).not.toContain('LogicalStNo_0001');
+    expect(panel).not.toContain('本机已配置逻辑站');
+  });
+
   it('后端网关零改动，M 区地址不在网关里写死', () => {
     const gateway = read('../../../websocket-server/server.js');
     expect(gateway).not.toContain("'M100'");
