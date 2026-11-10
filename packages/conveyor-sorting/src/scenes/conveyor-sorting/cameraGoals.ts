@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { VIEW_PRESETS, type ConveyorViewKey } from './constants';
+import { VIEW_PRESETS, PART_STAGES, isPartStage, type ConveyorViewKey } from './constants';
 
 /**
  * 机位目标解析与阻尼插值（纯函数，不碰 React hook）。
@@ -18,7 +18,19 @@ export interface Goal {
   fov: number;
 }
 
-export function resolveViewGoal(key: ConveyorViewKey): Goal {
+/**
+ * 展台优先短路：一旦选中部件，整机机位 view 不再参与取景，
+ * 与自动配药 resolveViewTuples(view, stage, mirrored) 的优先级一致。
+ */
+export function resolveViewGoal(key: ConveyorViewKey, stage: string | null = null): Goal {
+  if (isPartStage(stage)) {
+    const p = PART_STAGES[stage];
+    return {
+      position: new THREE.Vector3(p.camera[0], p.camera[1], p.camera[2]),
+      target: new THREE.Vector3(p.target[0], p.target[1], p.target[2]),
+      fov: p.fov,
+    };
+  }
   const v = VIEW_PRESETS[key];
   return {
     position: new THREE.Vector3(v.camera[0], v.camera[1], v.camera[2]),

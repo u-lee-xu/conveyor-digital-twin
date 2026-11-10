@@ -105,7 +105,12 @@ function MountBracket({ cylinderX, cylinderZ }: { cylinderX: number; cylinderZ: 
   );
 }
 
-export function PhysicsCylinder({ name, position }: { name: CylinderName; position: [number, number, number] }) {
+export function PhysicsCylinder({ name, position, previewExtension }: {
+  name: CylinderName;
+  position: [number, number, number];
+  /** 部件展台专用：固定展示行程（只读视觉，不写 store / 不碰 PLC），整机恒传 undefined */
+  previewExtension?: number;
+}) {
   const rodRef = useRef<Group>(null);
   const led1Ref = useRef<Mesh>(null);
   const led2Ref = useRef<Mesh>(null);
@@ -143,7 +148,8 @@ export function PhysicsCylinder({ name, position }: { name: CylinderName; positi
    * 在同一帧使用完全相同的 extension，推板不可能插进工件。
    */
   useFrame(() => {
-    const ext = readCylinderExtensions()[name];
+    // 展台里用固定展示行程把整条推杆 / 推板链拉出来；整机仍只读共享快照
+    const ext = previewExtension ?? readCylinderExtensions()[name];
     const plateZ = getPushPlateCenterZ(position[2], ext);
 
     if (rodRef.current) rodRef.current.position.y = ext;

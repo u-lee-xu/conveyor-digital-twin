@@ -18,6 +18,10 @@ interface PhysicsSceneProps {
   orbitTarget?: [number, number, number];
   /** 可选：Rapier 固定步长；需要更精细接触求解的场景可传 1/60 */
   timeStep?: number;
+  /** 可选：部件展台的 1:1 近景需要更近的缩放下限；不传保持旧版 2 */
+  minDistance?: number;
+  /** 可选：展台自带 0.1m 标尺网格时关掉整机地面；不传保持旧版 true */
+  showGround?: boolean;
 }
 
 const LEGACY_BACKGROUND = '#1e293b';
@@ -30,6 +34,8 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
   cameraFov = 45,
   orbitTarget,
   timeStep = 1 / 30,
+  minDistance = 2,
+  showGround = true,
 }) => {
   const [isHidden, setIsHidden] = useState(false);
 
@@ -67,7 +73,7 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
                 color={lighting.fillColor}
               />
             )}
-            <PhysicsGround />
+            {showGround && <PhysicsGround />}
             <SceneContent />
           </Physics>
         </Suspense>
@@ -76,7 +82,7 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
           target={orbitTarget}
           enableDamping
           dampingFactor={0.05}
-          minDistance={2}
+          minDistance={minDistance}
           maxDistance={20}
           maxPolarAngle={Math.PI / 2}
         />

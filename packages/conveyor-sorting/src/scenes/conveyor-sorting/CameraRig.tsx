@@ -10,14 +10,15 @@ import { dampCameraToward, resolveViewGoal, type ControlsLike, type Goal } from 
  */
 export function CameraRig() {
   const activeView = useConveyorViewStore((s) => s.activeView);
+  const activeStage = useConveyorViewStore((s) => s.activeStage);
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const controls = useThree((s) => s.controls) as unknown as ControlsLike | null;
   const goalRef = useRef<Goal | null>(null);
 
   useEffect(() => {
     if (!controls) return;
-    goalRef.current = resolveViewGoal(activeView);
-  }, [activeView, controls]);
+    goalRef.current = resolveViewGoal(activeView, activeStage);
+  }, [activeView, activeStage, controls]);
 
   useFrame((_, dt) => {
     const goal = goalRef.current;
