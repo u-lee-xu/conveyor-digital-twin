@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useDeviceStore, useConveyorViewStore } from '../stores';
 import {
-  VIEW_PRESETS, VIEW_BUTTONS, PART_STAGES,
+  VIEW_PRESETS, VIEW_BUTTONS, PART_STAGES, SENSOR_VARIANTS,
 } from '../scenes/conveyor-sorting/constants';
 
 /** 与自动配药 ViewSwitcher 同款右上角工具栏（同一套 card / btn 外观） */
@@ -38,6 +38,8 @@ export function ConveyorViewSwitcher({ showPanelToggle = false }: { showPanelTog
   const activeStage = useConveyorViewStore((s) => s.activeStage);
   const setView = useConveyorViewStore((s) => s.setView);
   const setStage = useConveyorViewStore((s) => s.setStage);
+  const stageSensor = useConveyorViewStore((s) => s.stageSensor);
+  const setStageSensor = useConveyorViewStore((s) => s.setStageSensor);
   const panelCollapsed = useConveyorViewStore((s) => s.panelCollapsed);
   const setPanelCollapsed = useConveyorViewStore((s) => s.setPanelCollapsed);
   const showLabels = useDeviceStore((s) => s.showLabels);
@@ -79,6 +81,18 @@ export function ConveyorViewSwitcher({ showPanelToggle = false }: { showPanelTog
             <option key={key} value={key}>{stage.label}</option>
           ))}
         </select>
+        {activeStage === 'sensor' && (
+          <select
+            data-dt-stage-sensor
+            value={stageSensor}
+            style={selectStyle}
+            onChange={(e) => setStageSensor(e.target.value)}
+          >
+            {Object.entries(SENSOR_VARIANTS).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        )}
         {activeStage && (
           <button type="button" data-dt-stage-back style={btn(false)} onClick={() => setStage(null)}>返回整机</button>
         )}

@@ -182,7 +182,7 @@ describe('交互与容器：?stage= 深链、UI 下拉、共享容器默认值�
     expect(storeSource).toContain('activeStage: PartKind | null');
     expect(storeSource).toContain('window.history.replaceState(window.history.state');
     expect(storeSource).toContain('set({ activeView, activeStage: null })');
-    expect(storeSource).toContain('syncUrl(get().activeView, stage)');
+    expect(storeSource).toContain('syncUrl(get().activeView, stage, get().stageSensor)');
   });
 
   it('工具栏保留五个机位，并新增部件展台下拉与返回整机', () => {
