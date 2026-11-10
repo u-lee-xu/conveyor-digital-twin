@@ -99,4 +99,15 @@ describe('启动脚本：端口漂移 fail-fast，占用不再静默复用', () 
     expect(edge).not.toContain('bridgeUrl');
     expect(JSON.parse(edge).broadcastPort).toBe(8082);
   });
+
+  it(':5201 占用先预检并给出可直接访问的提示，不再抛 Vite 原始异常', () => {
+    expect(startLab).toContain('if (await portBusy(PORT))');
+    expect(startLab).toContain('实验室很可能已经在运行');
+    expect(startLab).toContain('npm run start:lab');
+    expect(startLab).toContain('process.exitCode = 1');
+    const pre = startLab.indexOf('if (await portBusy(PORT))');
+    const post = startLab.indexOf("const { preview } = require('vite')");
+    expect(pre).toBeGreaterThan(-1);
+    expect(post).toBeGreaterThan(pre);
+  });
 });
