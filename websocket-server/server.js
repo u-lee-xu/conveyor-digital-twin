@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 const { clampDint32, splitDint32, joinDint32, toSigned16, toUnsigned16 } = require('./dint32');
+const { verifyInternalRequest } = require('./runtime-role');
 
 // 获取桌面路径，用于输出延迟测试报告
 function getDesktopPath() {
@@ -535,9 +536,9 @@ class SimpleModbusTCP {
       const values = {};
       for (const name of varNames) {
         const addr = vars[name];
-        if (addr !== undefined && addr < result.values.length) {
-          values[name] = !!result.values[addr];
-        }
+        if (addr === undefined) return { success: false, error: `未知变量名: ${name}` };
+        if (addr >= result.values.length) return { success: false, error: `线圈读数不足: ${name}` };
+        values[name] = !!result.values[addr];
       }
       return { success: true, values };
     } catch (e) {
@@ -566,9 +567,8 @@ class SimpleModbusTCP {
       const vars = this.variables || PNEUMATIC_MODBUS_VARS;
       for (let i = 0; i < varNames.length; i++) {
         const addr = vars[varNames[i]];
-        if (addr !== undefined) {
-          await this.writeCoil(addr, !!values[i]);
-        }
+        if (addr === undefined) return { success: false, error: `未知变量名: ${varNames[i]}` };
+        await this.writeCoil(addr, !!values[i]);
       }
       return { success: true };
     } catch (e) {
@@ -800,8 +800,11 @@ class SimpleS7Client {
               }
 
               this.nodes7.setTranslationCB((tag) => {
+                // P0-4：地址表缺项不再静默把逻辑名当 S7 地址（会读到完全无关的存储区）
+                if (Object.prototype.hasOwnProperty.call(this.variables, tag)) return this.variables[tag];
                 const word = this.wordVariables[tag];
-                return this.variables[tag] || (word && word.s7 && word.s7.address) || tag;
+                if (word && word.s7 && word.s7.address) return word.s7.address;
+                throw new Error(`未知 S7 变量: ${tag}`);
               });
 
               // 布尔变量与 32 位 DINT 数值变量一起注册进轮询列表；
@@ -1156,14 +1159,21 @@ class MitsubishiMX {
     }
   }
 
-  _buildPSScript(station) {
+  /**
+   * PS 桥脚本正文只含常量，绝不拼接任何来自 WebSocket 的字段（P0-1）。
+   * 逻辑站号由 spawn 的 env 传入，并在 PS 里强制 [int] 转换，即使环境变量被污染
+   * 也只是数值，无法变成可执行语句。
+   */
+  _buildPSScript() {
     return [
       '[Console]::InputEncoding = [System.Text.Encoding]::UTF8',
       '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
       '$ErrorActionPreference = "Stop"',
       `try {`,
+      `  $station = [int]$env:DT_MX_STATION`,
+      `  if ($station -lt 0 -or $station -gt 1023) { throw 'Logical station number out of range' }`,
       `  $p = New-Object -ComObject 'ActUtlType.ActUtlType'`,
-      `  $p.ActLogicalStationNumber = ${station}`,
+      `  $p.ActLogicalStationNumber = $station`,
       `  $r = $p.Open(); if ($r -ne 0) { throw 'Open failed (logical station not configured or MX Component not installed)' }`,
       `  $v = -1; $r = $p.GetDevice('D0', [ref]$v)`,
       `  if ($r -ne 0) { throw "GetDevice failed (code=$r, is GX Simulator2 running?)" }`,
@@ -1199,7 +1209,8 @@ class MitsubishiMX {
       `      'write' {`,
       `        $r = $p.SetDevice($cmd.device, $cmd.value)`,
       `        if ($r -eq 0) { Write-Host '{"ok":true}' }`,
-      `        else { Write-Host ('{"ok":false,"err":"' + $r + '"}') }`,
+      // 失败必须带 error 字段：_resolvePending 只认 error，否则写失败会被吞成成功（P1-1）
+      `        else { Write-Host (@{ ok = $false; error = "SetDevice failed (code=$r)" } | ConvertTo-Json -Compress) }`,
       `      }`,
       `      'write-batch' {`,
       `        $e = @()`,
@@ -1208,7 +1219,7 @@ class MitsubishiMX {
       `          if ($r -ne 0) { $e += ($cmd.devices[$i] + ':' + $r) }`,
       `        }`,
       `        if ($e.Count -eq 0) { Write-Host '{"ok":true}' }`,
-      `        else { Write-Host ('{"ok":false,"err":"' + ($e -join ',') + '"}') }`,
+      `        else { Write-Host (@{ ok = $false; error = ($e -join ',') } | ConvertTo-Json -Compress) }`,
       `      }`,
       `      'exit' {`,
       `        $null = $p.Close()`,
@@ -1282,18 +1293,23 @@ class MitsubishiMX {
   async connect(host, port) {
     await this._lock();
     try {
+      // P0-1：逻辑站号必须是一个有界整数，绝不允许字符串/NaN/Infinity 进入 PS 链路
+      const station = port ?? 0;
+      if (!Number.isInteger(station) || station < 0 || station > 1023) {
+        return { success: false, error: '三菱逻辑站号必须是 0~1023 的整数' };
+      }
       if (this._ps) {
         this._killPS();
       }
 
-      this._station = port ?? 0;
+      this._station = station;
       this._psExe = process.env.SystemRoot
         ? path.join(process.env.SystemRoot, 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
         : 'powershell.exe';
 
       console.log(`[三菱MX] 正在启动持久化PS进程，站号=${this._station}`);
 
-      const script = this._buildPSScript(this._station);
+      const script = this._buildPSScript();
       const tmpFile = path.join(__dirname, '_mx_bridge.ps1');
       fs.writeFileSync(tmpFile, script, 'utf-8');
 
@@ -1306,6 +1322,8 @@ class MitsubishiMX {
         ], {
           stdio: ['pipe', 'pipe', 'pipe'],
           windowsHide: true,
+          // 站号只走环境量，脚本正文不含任何客户端数据
+          env: { ...process.env, DT_MX_STATION: String(this._station) },
         });
 
         const startTimeout = setTimeout(() => {
@@ -1414,7 +1432,7 @@ class MitsubishiMX {
     await this._lock();
     try {
       const startTime = Date.now();
-      const devices = varNames.map(name => this.variables[name] || name);
+      const devices = varNames.map(name => this._device(name));
 
       const result = await this._sendCommand({ type: 'read', devices });
 
@@ -1429,8 +1447,13 @@ class MitsubishiMX {
       let trueCount = 0;
       for (let i = 0; i < varNames.length; i++) {
         const val = result[devices[i]];
-        values[varNames[i]] = !!val;
-        if (val) trueCount++;
+        // PS 的 GetDevice 失败哨兵是 -1；!!(-1) 会把读失败伪造成 ON（P1-1）
+        if (val === undefined || val === null || val === -1) {
+          return { success: false, error: `读软元件失败: ${devices[i]}` };
+        }
+        const on = Number(val) !== 0;
+        values[varNames[i]] = on;
+        if (on) trueCount++;
       }
       console.log('[三菱MX] 读取完成: ' + trueCount + '/' + varNames.length + ' 个为true, 延迟=' + latency + 'ms');
       return { success: true, values };
@@ -1447,9 +1470,13 @@ class MitsubishiMX {
     await this._lock();
     try {
       const startTime = Date.now();
-      const device = this.variables[varName] || varName;
+      const device = this._device(varName);
 
-      await this._sendCommand({ type: 'write', device, value: value ? 1 : 0 });
+      const result = await this._sendCommand({ type: 'write', device, value: value ? 1 : 0 });
+      // PS 失败帧带 error → _resolvePending 会 reject；这里再兜一层 ok 检查（P1-1）
+      if (result.ok === false) {
+        return { success: false, error: result.error || 'SetDevice 写入失败' };
+      }
 
       const latency = Date.now() - startTime;
       this.latencyStats.write.push(latency);
@@ -1473,7 +1500,7 @@ class MitsubishiMX {
     await this._lock();
     try {
       const startTime = Date.now();
-      const devices = varNames.map(name => this.variables[name] || name);
+      const devices = varNames.map(name => this._device(name));
       const vals = values.map(v => v ? 1 : 0);
 
       const result = await this._sendCommand({ type: 'write-batch', devices, values: vals });
@@ -1490,7 +1517,7 @@ class MitsubishiMX {
         return { success: true };
       } else {
         console.error('[三菱MX] 批量写入失败:', varNames, result.err);
-        return { success: false, error: result.err };
+        return { success: false, error: result.error || result.err || '批量写入失败' };
       }
     } catch (e) {
       console.error('[三菱MX] 批量写入失败:', varNames, e.message);
@@ -1506,6 +1533,17 @@ class MitsubishiMX {
     const base = parseInt(String(m.address).replace(/^D/i, ''), 10);
     if (!Number.isFinite(base)) return null;
     return [`D${base}`, `D${base + 1}`];
+  }
+
+  /**
+   * 变量名 → 软元件名（P0-4）：查不到映射一律报错，绝不能把抽象变量名
+   * 当成软元件名直接送给 MX Component / nodes7。
+   */
+  _device(name) {
+    if (!Object.prototype.hasOwnProperty.call(this.variables, name)) {
+      throw new Error(`未知变量名: ${name}（不在 connect 下发的地址表内）`);
+    }
+    return this.variables[name];
   }
 
   /** 读 32 位 DINT：只取 D 寄存器数值，不占用 X 输入点、不接高速计数器 */
@@ -1562,7 +1600,7 @@ class MitsubishiMX {
       }
       const result = await this._sendCommand({ type: 'write-batch', devices, values: words });
       if (result.ok) return { success: true };
-      return { success: false, error: result.err || 'D 寄存器写入失败' };
+      return { success: false, error: result.error || result.err || 'D 寄存器写入失败' };
     } catch (e) {
       console.error('[三菱MX] 数值写入失败:', e.message);
       return { success: false, error: e.message };
@@ -1570,28 +1608,249 @@ class MitsubishiMX {
   }
 }
 
+/* ==========================================================================
+ * 网关接入边界（P0-1 / P0-3 / P0-4 / P1-2）
+ *
+ * 旧实现只有一个模块级 currentProtocol + 三个共享客户端：任意第二个连接发 connect
+ * 就能改协议、改地址表、把 PLC 重连到别的主机；任意连接发 disconnect 会切断所有人；
+ * 未连接时读写还会被 else 分支静默路由到 S7。现在改为：
+ *   - 协议白名单 + connect 帧逐字段校验 + PLC 主机白名单；
+ *   - 每个 WS 连接一份 session，同一时刻只有一个主控（controller）持有 PLC 会话；
+ *   - 其余本机连接只读镜像主控会话，写帧一律拒绝；
+ *   - 所有分支显式 switch，null / 未知协议统一报「未连接」或「未知协议」。
+ * ========================================================================== */
+
 const WS_PORT = parseInt(process.env.WS_PORT || '8081', 10);
 /** 网关只对本机同源反代开放：不绑回环会让局域网绕过 /ws/plc 直连写 PLC 线圈 */
 const WS_HOST = '127.0.0.1';
-const wss = new WebSocket.Server({ port: WS_PORT, host: WS_HOST });
-const modbusClient = new SimpleModbusTCP();
-const s7Client = new SimpleS7Client();
-const mitsubishiClient = new MitsubishiMX();
-let currentProtocol = null;
+
+const PROTOCOLS = new Set(['modbus', 's7', 'mitsubishi']);
+const ALLOWED_TYPES = new Set([
+  'connect', 'disconnect', 'get-status',
+  'read-coils', 'write-coil', 'write-coils',
+  'read-vars', 'write-var', 'write-vars',
+  'read-words', 'write-words',
+]);
+const WRITE_TYPES = new Set(['write-coil', 'write-coils', 'write-var', 'write-vars', 'write-words']);
+const MAX_VAR_KEYS = 256;
+const MAX_NAME_BATCH = 128;
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const NAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const HOST_RE = /^[A-Za-z0-9._:[\]-]{1,253}$/;
+const DEVICE_RE = /^[A-Za-z][A-Za-z0-9_.:]{0,63}$/;
+
+function isRecord(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function fail(message) { return { success: false, error: message }; }
+function intBetween(value, min, max, label) {
+  if (!Number.isInteger(value)) throw new Error(`${label} 必须是整数`);
+  if (value < min || value > max) throw new Error(`${label} 超出范围 ${min}~${max}`);
+  return value;
+}
+
+/** 变量表复制成无原型对象，杜绝 __proto__ 污染与「查不到就当软元件名」的回退 */
+function copyVarTable(raw, protocol, label) {
+  if (raw === undefined) return null;
+  if (!isRecord(raw)) throw new Error(`${label} 必须是对象`);
+  const keys = Object.keys(raw);
+  if (keys.length > MAX_VAR_KEYS) throw new Error(`${label} 变量过多`);
+  const out = Object.create(null);
+  for (const key of keys) {
+    if (!NAME_RE.test(key) || UNSAFE_KEYS.has(key)) throw new Error(`${label} 变量名非法: ${key}`);
+    const value = raw[key];
+    if (protocol === 'modbus') {
+      out[key] = intBetween(value, 0, 0xffff, `${label}.${key}`);
+    } else {
+      if (typeof value !== 'string' || !DEVICE_RE.test(value)) throw new Error(`${label}.${key} 地址非法`);
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function copyWordTable(raw, label) {
+  if (raw === undefined) return null;
+  if (!isRecord(raw)) throw new Error(`${label} 必须是对象`);
+  const keys = Object.keys(raw);
+  if (keys.length > MAX_VAR_KEYS) throw new Error(`${label} 变量过多`);
+  const out = Object.create(null);
+  for (const key of keys) {
+    if (!NAME_RE.test(key) || UNSAFE_KEYS.has(key)) throw new Error(`${label} 变量名非法: ${key}`);
+    const spec = raw[key];
+    if (!isRecord(spec)) throw new Error(`${label}.${key} 必须是对象`);
+    if (spec.type !== undefined && spec.type !== 'dint32') throw new Error(`${label}.${key}.type 非法`);
+    if (spec.wordOrder !== undefined && spec.wordOrder !== 'low-first') throw new Error(`${label}.${key}.wordOrder 非法`);
+    const copy = { type: 'dint32', wordOrder: 'low-first' };
+    for (const proto of PROTOCOLS) {
+      const p = spec[proto];
+      if (p === undefined) continue;
+      if (!isRecord(p)) throw new Error(`${label}.${key}.${proto} 必须是对象`);
+      const words = intBetween(p.words, 1, 64, `${label}.${key}.${proto}.words`);
+      if (proto === 'modbus') {
+        copy[proto] = { address: intBetween(p.address, 0, 0xffff, `${label}.${key}.${proto}.address`), words };
+      } else {
+        if (typeof p.address !== 'string' || !DEVICE_RE.test(p.address)) {
+          throw new Error(`${label}.${key}.${proto}.address 非法`);
+        }
+        copy[proto] = { address: p.address, words };
+      }
+    }
+    out[key] = copy;
+  }
+  return out;
+}
+
+/**
+ * PLC 主机白名单：默认只允许回环（虚拟 PLC / PLCSIM / MX Component 都走本机）。
+ * 接实体 PLC 时用 DT_PLC_HOSTS=192.168.1.50,plc.local 或 websocket-server/plc-hosts.json
+ * 显式放行；DT_PLC_HOSTS=* 恢复「允许任意主机」，仅在完全可信的内网使用。
+ * 这样即使拿到 WS 通道也不能指使网关去连任意内网设备（SSRF + 写线圈）。
+ */
+function loadPlcHostAllowlist() {
+  const env = String(process.env.DT_PLC_HOSTS || '').trim();
+  if (env === '*') return null;
+  const list = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+  const add = (item) => {
+    if (typeof item !== 'string' || !HOST_RE.test(item.trim())) throw new Error(`PLC 主机白名单含非法条目: ${item}`);
+    list.add(item.trim().toLowerCase());
+  };
+  for (const item of env.split(',').map((s) => s.trim()).filter(Boolean)) add(item);
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'plc-hosts.json'), 'utf8'));
+    const entries = Array.isArray(cfg) ? cfg : (cfg && cfg.hosts) || [];
+    for (const item of entries) add(item);
+  } catch (e) {
+    if (!e || e.code !== 'ENOENT') console.warn('[WS] plc-hosts.json 读取失败:', e.message);
+  }
+  return list;
+}
+
+const PLC_HOSTS = loadPlcHostAllowlist();
+
+function validateConnect(frame) {
+  const protocol = frame.protocol === undefined ? 'modbus' : frame.protocol;
+  if (typeof protocol !== 'string' || !PROTOCOLS.has(protocol)) throw new Error(`未知协议: ${String(protocol)}`);
+  const rawHost = frame.host === undefined ? '127.0.0.1' : frame.host;
+  if (typeof rawHost !== 'string') throw new Error('connect.host 非法');
+  // 三菱 MX 的 host 不生效（逻辑站里配置），面板可能下发空串，统一回落本机
+  const host = rawHost.trim() || '127.0.0.1';
+  if (!HOST_RE.test(host)) throw new Error('connect.host 非法');
+  if (PLC_HOSTS && !PLC_HOSTS.has(host.toLowerCase())) {
+    throw new Error(`目标主机 ${host} 不在允许列表（DT_PLC_HOSTS）`);
+  }
+  let port;
+  if (protocol === 'mitsubishi') {
+    port = frame.port === undefined ? 0 : intBetween(frame.port, 0, 1023, 'connect.port(逻辑站号)');
+  } else {
+    const fallback = protocol === 's7' ? 102 : 502;
+    port = frame.port === undefined ? fallback : intBetween(frame.port, 1, 65535, 'connect.port');
+  }
+  const rack = frame.rack === undefined ? 0 : intBetween(frame.rack, 0, 7, 'connect.rack');
+  const slot = frame.slot === undefined ? 1 : intBetween(frame.slot, 0, 31, 'connect.slot');
+  return {
+    protocol, host, port, rack, slot,
+    variables: copyVarTable(frame.variables, protocol, 'connect.variables'),
+    wordVariables: copyWordTable(frame.wordVariables, 'connect.wordVariables'),
+  };
+}
+
+function validateNames(raw, table, label) {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_NAME_BATCH) {
+    throw new Error(`${label} 必须是 1~${MAX_NAME_BATCH} 项数组`);
+  }
+  const out = [];
+  for (const name of raw) {
+    if (typeof name !== 'string' || !NAME_RE.test(name)) throw new Error(`${label} 含非法变量名`);
+    if (!table || !Object.prototype.hasOwnProperty.call(table, name)) {
+      throw new Error(`未知变量名: ${name}（不在 connect 下发的地址表内）`);
+    }
+    out.push(name);
+  }
+  return out;
+}
+
+function validateBoolValue(value, label) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return value !== 0;
+  throw new Error(`${label} 必须是布尔或数值`);
+}
+
+function validateBoolValues(raw, expected, label) {
+  if (!Array.isArray(raw) || raw.length !== expected) throw new Error(`${label} 长度与 names 不一致`);
+  return raw.map((v, i) => validateBoolValue(v, `${label}[${i}]`));
+}
+
+function validateNumberValues(raw, expected, label) {
+  if (!Array.isArray(raw) || raw.length !== expected) throw new Error(`${label} 长度与 names 不一致`);
+  return raw.map((v, i) => {
+    const num = Number(v);
+    if (!Number.isFinite(num)) throw new Error(`${label}[${i}] 必须是有限数值`);
+    return num;
+  });
+}
+
+const wss = new WebSocket.Server({
+  port: WS_PORT,
+  host: WS_HOST,
+  // 第二道防线：代理层已按 localAddress 拦截 LAN；网关再复核一次角色与一次性 token
+  verifyClient: (info) => {
+    const verdict = verifyInternalRequest(info.req, { allowViewer: false });
+    if (!verdict.ok) console.warn(`[WS] 拒绝越权接入 (${verdict.reason})`);
+    return verdict.ok;
+  },
+});
+
+const clients = {
+  modbus: new SimpleModbusTCP(),
+  s7: new SimpleS7Client(),
+  mitsubishi: new MitsubishiMX(),
+};
+const DEFAULT_VARS = {
+  modbus: Object.assign(Object.create(null), PNEUMATIC_MODBUS_VARS),
+  s7: Object.assign(Object.create(null), S7_VARIABLES),
+  mitsubishi: Object.assign(Object.create(null), MITSUBISHI_VARIABLES),
+};
+
+/** per-connection session；controller 是当前唯一持有 PLC 链路的 WS 连接 */
+const sessions = new Map();
+let controller = null;
+
+function sessionOf(ws) {
+  let s = sessions.get(ws);
+  if (!s) {
+    s = { protocol: null, variables: null, wordVariables: null, client: null };
+    sessions.set(ws, s);
+  }
+  return s;
+}
+function activeSession() { return controller ? sessions.get(controller) || null : null; }
+
+async function releaseController(ws) {
+  if (!ws || controller !== ws) return;
+  const s = sessions.get(ws);
+  controller = null;
+  if (s) {
+    if (s.client) {
+      try { await s.client.disconnect(); } catch { /* 断开失败也要释放会话 */ }
+    }
+    s.protocol = null;
+    s.variables = null;
+    s.wordVariables = null;
+    s.client = null;
+  }
+  console.log('[WS] PLC 主控会话已释放');
+}
 
 console.log(`WebSocket服务器启动在 ${WS_HOST}:${WS_PORT}（仅本机可达）`);
 console.log('支持协议: Modbus TCP, Siemens S7 (ISO over TCP), 三菱 MX Component (via PowerShell)');
+console.log(`[WS] PLC 主机白名单: ${PLC_HOSTS ? [...PLC_HOSTS].join(', ') : '允许任意主机 (DT_PLC_HOSTS=*)'}`);
 
 async function gracefulShutdown() {
   console.log('正在优雅关闭...');
-  if (currentProtocol === 's7' && s7Client.connected) {
-    await s7Client.disconnect();
-  } else if (currentProtocol === 'modbus' && modbusClient.connected) {
-    await modbusClient.disconnect();
-  } else if (currentProtocol === 'mitsubishi' && mitsubishiClient.connected) {
-    await mitsubishiClient.disconnect();
+  const s = activeSession();
+  if (s && s.client && s.client.connected) {
+    try { await s.client.disconnect(); } catch { /* noop */ }
   }
-  mitsubishiClient.shutdown();
+  clients.mitsubishi.shutdown();
   wss.close();
   process.exit(0);
 }
@@ -1607,152 +1866,146 @@ process.stdin.on('data', (data) => {
 
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
-process.on('exit', () => { mitsubishiClient.shutdown(); });
+process.on('exit', () => { clients.mitsubishi.shutdown(); });
+
+/** 帧分发：所有分支显式 switch，不允许 null / 未知协议落到 else 兜底 */
+async function dispatch(ws, d) {
+  const type = d.type;
+
+  if (type === 'get-status') {
+    const s = activeSession();
+    return {
+      success: true,
+      connected: !!(s && s.client && s.client.connected),
+      protocol: s ? s.protocol : null,
+    };
+  }
+
+  if (type === 'connect') {
+    if (controller && controller !== ws && controller.readyState === WebSocket.OPEN) {
+      return fail('已有主控连接 PLC，请先断开原连接');
+    }
+    if (controller && controller !== ws) await releaseController(controller);
+    const cfg = validateConnect(d);
+    if (controller === ws) await releaseController(ws);
+
+    const client = clients[cfg.protocol];
+    const variables = cfg.variables || DEFAULT_VARS[cfg.protocol];
+    const wordVariables = cfg.wordVariables || Object.create(null);
+    client.variables = variables;
+    client.wordVariables = wordVariables;
+
+    let result;
+    switch (cfg.protocol) {
+      case 'modbus':
+        result = await client.connect(cfg.host, cfg.port);
+        break;
+      case 's7':
+        result = await client.connect(cfg.host, cfg.port, cfg.rack, cfg.slot);
+        break;
+      case 'mitsubishi':
+        result = await client.connect(cfg.host, cfg.port);
+        break;
+      default:
+        return fail('未知协议');
+    }
+    if (!result || !result.success) return result || fail('连接失败');
+
+    controller = ws;
+    const session = sessionOf(ws);
+    session.protocol = cfg.protocol;
+    session.variables = variables;
+    session.wordVariables = wordVariables;
+    session.client = client;
+    console.log(`[WS] PLC 主控已建立: ${cfg.protocol} @ ${cfg.host}:${cfg.port}`);
+    return { success: true };
+  }
+
+  if (type === 'disconnect') {
+    if (controller && controller !== ws) return fail('当前连接不是 PLC 主控');
+    if (!controller) return { success: true };
+    await releaseController(controller);
+    return { success: true };
+  }
+
+  const session = activeSession();
+  if (!session || !session.protocol || !session.client) {
+    return fail('PLC 未连接，请先发送 connect');
+  }
+  // 非主控连接只能读；写帧（含 disconnect）一律拒绝，杜绝第二个本地标签页串扰
+  if (WRITE_TYPES.has(type) && controller !== ws) {
+    return fail('当前连接不是 PLC 主控（只读）');
+  }
+  const protocol = session.protocol;
+  const client = session.client;
+
+  switch (type) {
+    case 'write-coil': {
+      if (protocol !== 'modbus') return fail(`${protocol} 协议请使用 write-var`);
+      const address = intBetween(d.address, 0, 0xffff, 'address');
+      return client.writeCoil(address, validateBoolValue(d.value, 'value'));
+    }
+    case 'write-coils': {
+      if (protocol !== 'modbus') return fail(`${protocol} 协议请使用 write-vars`);
+      const address = intBetween(d.address, 0, 0xffff, 'address');
+      const raw = Array.isArray(d.values) ? d.values : [];
+      if (raw.length === 0 || raw.length > 1968) return fail('批量线圈数量超出 1~1968');
+      return client.writeCoils(address, validateBoolValues(raw, raw.length, 'values'));
+    }
+    case 'read-coils': {
+      if (protocol !== 'modbus') return fail(`${protocol} 协议请使用 read-vars`);
+      const address = intBetween(d.address, 0, 0xffff, 'address');
+      const length = intBetween(d.length, 1, 2000, 'length');
+      return client.readCoils(address, length);
+    }
+    case 'write-var': {
+      const names = validateNames([d.name], session.variables, 'name');
+      return client.writeVar(names[0], validateBoolValue(d.value, 'value'));
+    }
+    case 'write-vars': {
+      const names = validateNames(d.names, session.variables, 'names');
+      return client.writeVars(names, validateBoolValues(d.values, names.length, 'values'));
+    }
+    case 'read-vars': {
+      const names = validateNames(d.names, session.variables, 'names');
+      return client.readVars(names);
+    }
+    case 'read-words': {
+      const names = validateNames(d.names, session.wordVariables, 'names');
+      return client.readWords(names);
+    }
+    case 'write-words': {
+      const names = validateNames(d.names, session.wordVariables, 'names');
+      return client.writeWords(names, validateNumberValues(d.values, names.length, 'values'));
+    }
+    default:
+      return fail('未知消息类型');
+  }
+}
 
 wss.on('connection', (ws) => {
+  sessionOf(ws);
   ws.on('message', async (message) => {
     let parsedData = null;
     try {
       parsedData = JSON.parse(message);
-      let result;
-
-      switch (parsedData.type) {
-        case 'connect':
-          currentProtocol = parsedData.protocol || 'modbus';
-          if (currentProtocol === 's7') {
-            s7Client.variables = parsedData.variables || S7_VARIABLES;
-            s7Client.wordVariables = parsedData.wordVariables || {};
-            result = await s7Client.connect(
-              parsedData.host,
-              parsedData.port,
-              parsedData.rack || 0,
-              parsedData.slot || 1
-            );
-          } else if (currentProtocol === 'mitsubishi') {
-            mitsubishiClient.variables = parsedData.variables || MITSUBISHI_VARIABLES;
-            mitsubishiClient.wordVariables = parsedData.wordVariables || {};
-            result = await mitsubishiClient.connect(parsedData.host, parsedData.port ?? 0);
-          } else {
-            modbusClient.variables = parsedData.variables || PNEUMATIC_MODBUS_VARS;
-            modbusClient.wordVariables = parsedData.wordVariables || {};
-            result = await modbusClient.connect(parsedData.host, parsedData.port || 502);
-          }
-          break;
-
-        case 'disconnect':
-          if (currentProtocol === 's7') {
-            result = await s7Client.disconnect();
-          } else if (currentProtocol === 'mitsubishi') {
-            result = await mitsubishiClient.disconnect();
-          } else {
-            result = await modbusClient.disconnect();
-          }
-          currentProtocol = null;
-          break;
-
-        case 'write-coil':
-          if (currentProtocol === 's7') {
-            result = { success: false, error: 'S7协议使用write-var替代write-coil' };
-          } else if (currentProtocol === 'mitsubishi') {
-            result = { success: false, error: '三菱MC协议使用write-var替代write-coil' };
-          } else {
-            result = await modbusClient.writeCoil(parsedData.address, parsedData.value);
-          }
-          break;
-
-        case 'write-coils':
-          if (currentProtocol === 's7') {
-            result = { success: false, error: 'S7协议使用write-vars替代write-coils' };
-          } else if (currentProtocol === 'mitsubishi') {
-            result = { success: false, error: '三菱MC协议使用write-vars替代write-coils' };
-          } else {
-            result = await modbusClient.writeCoils(parsedData.address, parsedData.values);
-          }
-          break;
-
-        case 'read-coils':
-          if (currentProtocol === 's7') {
-            result = { success: false, error: 'S7协议使用read-vars替代read-coils' };
-          } else if (currentProtocol === 'mitsubishi') {
-            result = { success: false, error: '三菱MC协议使用read-vars替代read-coils' };
-          } else {
-            result = await modbusClient.readCoils(parsedData.address, parsedData.length);
-          }
-          break;
-
-        case 'write-var':
-          if (currentProtocol === 'mitsubishi') {
-            result = await mitsubishiClient.writeVar(parsedData.name, parsedData.value);
-          } else if (currentProtocol === 'modbus') {
-            result = await modbusClient.writeVar(parsedData.name, parsedData.value);
-          } else {
-            result = await s7Client.writeVar(parsedData.name, parsedData.value);
-          }
-          break;
-
-        case 'write-vars':
-          if (currentProtocol === 'mitsubishi') {
-            result = await mitsubishiClient.writeVars(parsedData.names, parsedData.values);
-          } else if (currentProtocol === 'modbus') {
-            result = await modbusClient.writeVars(parsedData.names, parsedData.values);
-          } else {
-            result = await s7Client.writeVars(parsedData.names, parsedData.values);
-          }
-          break;
-
-        case 'read-vars':
-          if (currentProtocol === 'mitsubishi') {
-            result = await mitsubishiClient.readVars(parsedData.names);
-          } else if (currentProtocol === 'modbus') {
-            result = await modbusClient.readVars(parsedData.names);
-          } else {
-            result = await s7Client.readVars(parsedData.names);
-          }
-          break;
-
-        case 'read-words':
-          if (currentProtocol === 'mitsubishi') {
-            result = await mitsubishiClient.readWords(parsedData.names);
-          } else if (currentProtocol === 'modbus') {
-            result = await modbusClient.readWords(parsedData.names);
-          } else {
-            result = await s7Client.readWords(parsedData.names);
-          }
-          break;
-
-        case 'write-words':
-          if (currentProtocol === 'mitsubishi') {
-            result = await mitsubishiClient.writeWords(parsedData.names, parsedData.values);
-          } else if (currentProtocol === 'modbus') {
-            result = await modbusClient.writeWords(parsedData.names, parsedData.values);
-          } else {
-            result = await s7Client.writeWords(parsedData.names, parsedData.values);
-          }
-          break;
-
-        case 'get-status':
-          if (currentProtocol === 's7') {
-            result = { success: true, connected: s7Client.connected, protocol: 's7' };
-          } else if (currentProtocol === 'mitsubishi') {
-            result = { success: true, connected: mitsubishiClient.connected, protocol: 'mitsubishi' };
-          } else {
-            result = { success: true, connected: modbusClient.connected, protocol: 'modbus' };
-          }
-          break;
-
-        default:
-          result = { success: false, error: '未知消息类型' };
+      if (!isRecord(parsedData) || typeof parsedData.type !== 'string' || !ALLOWED_TYPES.has(parsedData.type)) {
+        throw new Error(`未知消息类型: ${String(parsedData && parsedData.type)}`);
       }
-
+      const result = await dispatch(ws, parsedData);
       ws.send(JSON.stringify({ id: parsedData.id, type: parsedData.type, ...result }));
     } catch (error) {
-      ws.send(JSON.stringify({ id: parsedData?.id || 'unknown', success: false, error: error.message }));
+      ws.send(JSON.stringify({
+        id: (parsedData && parsedData.id) || 'unknown',
+        success: false,
+        error: error.message,
+      }));
     }
   });
 
   ws.on('close', () => {
-    // 多客户端共享网关：客户端断开不再释放 PLC 连接，
-    // 会话保留供其他客户端/广播服务复用（显式 disconnect 消息才断开）
-    console.log('[WS] 客户端断开（PLC 会话保留，供其他客户端复用）');
+    // 主控断开即释放 PLC 会话；不再把全局会话留给下一个连接复用，
+    // 避免「主控唯一 PLC 客户端」的口径被悄悄破坏。
+    void releaseController(ws).finally(() => sessions.delete(ws));
   });
 });

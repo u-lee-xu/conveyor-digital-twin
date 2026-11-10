@@ -15,25 +15,11 @@ import {
   notePillFrame, notePillSpawned, notePillLanded, notePillResolvedByFallback,
   type WorldPoint,
 } from './physicsGeometry';
+import {
+  installDispensingDiagnostics, type DiagnosticsWindow,
+} from './diagnostics';
 
 const MAGS: MagazineId[] = ['A', 'B', 'C', 'D'];
-
-/** 开发期只读诊断入口（CDP 自检用；不参与任何业务逻辑） */
-type DiagnosticsWindow = Window & {
-  __dtPhysics?: () => ReturnType<typeof getPhysicsStats>;
-  __dtPillTrace?: () => ReturnType<typeof getPillTrace>;
-  __dtDispensing?: () => {
-    pendingPills: number; hopperPills: number; sliderX: number; autoPhase: string;
-    /** 运行模式与电机电平：CDP 验证「仿真模式不跑本地状态机、只认 PLC 输出」用 */
-    mode: string; motorFwd: boolean; motorRev: boolean; selectorAuto: boolean;
-    magStock: Record<MagazineId, number>;
-    sendCyl: Record<MagazineId, { extended: boolean; position: number }>;
-    /** 翻转缸姿态与电磁阀接线选型：单 / 双电控 CDP 验收的模型侧真值 */
-    tiltCyl: { tilted: boolean; angle: number };
-    solenoidType: string;
-    dispensed: Record<MagazineId, boolean>;
-  };
-};
 
 /**
  * 静态物理世界：四条水平托板 + 四条落料斜槽 + 八根侧导轨。
@@ -197,24 +183,7 @@ export function PhysicsWorld() {
       const w = window as DiagnosticsWindow;
       w.__dtPhysics = getPhysicsStats;
       w.__dtPillTrace = getPillTrace;
-      w.__dtDispensing = () => {
-        const s = useDispensingStore.getState();
-        return {
-          pendingPills: s.pendingPills.length,
-          hopperPills: s.hopperPills,
-          sliderX: s.sliderX,
-          autoPhase: s.autoPhase,
-          mode: useAppStore.getState().mode,
-          motorFwd: s.motorFwd,
-          motorRev: s.motorRev,
-          selectorAuto: s.selectorAuto,
-          magStock: { ...s.magStock },
-          sendCyl: { ...s.sendCyl },
-          tiltCyl: { ...s.tiltCyl },
-          solenoidType: s.solenoidType,
-          dispensed: { ...s.dispensed },
-        };
-      };
+      installDispensingDiagnostics();
     }
     return () => setPhysicsActive(false);
   }, []);

@@ -466,6 +466,8 @@ export function ControlCabinet() {
         // 本地 store 仅做即时外观反馈，下一轮 readVars 回读会把它对齐到 PLC 真值。
         // 其余模式仍只驱动本地演示状态机，不发起网络写入。
         const press = (down: boolean) => {
+          // 观众端只读跟随：3D 按钮箱任何按下/松开都不得写本地 store 或 PLC 线圈
+          if (isViewerRuntime()) return;
           setButton(key, down);
           if (mode === 'sim') void writeSimPlcVar(CABINET_BUTTON_IO[key], down);
         };

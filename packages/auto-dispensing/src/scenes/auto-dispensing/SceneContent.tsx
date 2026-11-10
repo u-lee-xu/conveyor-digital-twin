@@ -1,10 +1,11 @@
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { Physics } from '@react-three/rapier';
 import { PhysicsGround, isViewerRuntime } from '@digital-twin/shared';
 import { useDispensingStore } from '../../stores/useDispensingStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { CameraRig } from './CameraRig';
 import { PhysicsWorld } from './PhysicsWorld';
+import { installDispensingDiagnostics } from './diagnostics';
 import { PHYSICS } from './physicsGeometry';
 import {
   PILL_R, PILL_H, VISUAL, SCENE_SCALE,
@@ -229,6 +230,12 @@ function SceneBody({ stage, part }: { stage: string | null; part: string | null 
  * 不受整机 group 的 X 负缩放（镜像布局）影响。
  * 展台是 1:1 局部尺度，物理地面会遮住 y<0 的台座/立柱，故展台下不渲染。
  */
+/** 观众端不挂 Rapier，但仍安装与主控同一份只读诊断入口，供 CDP 复核快照跟随 */
+function ViewerDiagnostics() {
+  useEffect(() => { installDispensingDiagnostics(); }, []);
+  return null;
+}
+
 export function DispensingSceneContent() {
   const stage = useAppStore((s) => s.activeStage);
   const part = useAppStore((s) => s.activePart);
@@ -236,6 +243,7 @@ export function DispensingSceneContent() {
   if (isViewerRuntime()) {
     return (
       <>
+        <ViewerDiagnostics />
         <CameraRig />
         <SceneBody stage={stage} part={part} />
       </>

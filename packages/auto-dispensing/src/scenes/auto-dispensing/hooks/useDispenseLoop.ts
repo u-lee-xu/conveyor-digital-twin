@@ -260,12 +260,32 @@ export function useDispenseLoop() {
         return;
       }
 
-      // 启动上升沿 → 快照配方生成队列
+      // ========== 演示（auto）主令：一次性脉冲消费 ==========
+      // 五个主令都是「按下置位、状态机消费后立即置回 false」的一次性脉冲，
+      // 与 3D 按钮箱 onDown/onUp 自复位、wait_confirm 段 confirm 的 consume 同一口径。
+      // 按钮不再永久锁存：否则 estop / stop 守卫每帧都 return，流程再也到不了复位 / 启动。
       const startPressed = s.buttons.start && !r.prevStart;
       r.prevStart = s.buttons.start;
 
-      // 急停在任意阶段立即停止，并清掉所有在途药片
+      // 复位优先级最高（在急停 / 停止守卫之前）：清按钮、清暂停、清在途、回 idle。
+      // resetAll() 会连 start 电平一起清掉，因此复位后必须重新按启动；
+      // 上升沿上面已按帧初电平算完，不受 resetAll 影响。
+      if (s.buttons.reset) {
+        useDispensingStore.getState().setButton('reset', false);
+        useDispensingStore.getState().resetAll();
+        r.queue = [];
+        r.queueIndex = 0;
+        r.remain = 0;
+        r.pillFlying = false;
+        r.dumpStarted = false;
+        r.flashTimer = 0;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      // 急停在任意阶段立即停止：清场 + 回 idle + 暂停；只能由复位解除，再按启动重跑。
       if (s.buttons.estop) {
+        useDispensingStore.getState().setButton('estop', false);
         useDispensingStore.setState({
           motorFwd: false,
           motorRev: false,
@@ -280,26 +300,52 @@ export function useDispenseLoop() {
           dispensed: { A: false, B: false, C: false, D: false },
           autoPhase: 'idle',
         });
+        useDispensingStore.getState().setDemoPaused('estop');
+        r.queue = [];
+        r.queueIndex = 0;
+        r.remain = 0;
         r.pillFlying = false;
         r.dumpStarted = false;
+        r.flashTimer = 0;
         raf = requestAnimationFrame(tick);
         return;
       }
 
       const st = useDispensingStore.getState();
 
-      // 停止按钮 → 暂停：停电机、清目标（保持位置）
+      // 停止按钮 → 真正暂停自动循环：停电机、清目标（保持位置）。
+      // 由 demoPaused 记住暂停，消费按钮后下一帧不会自动继续（等于没停）。
       if (s.buttons.stop && st.autoPhase !== 'idle') {
+        useDispensingStore.getState().setButton('stop', false);
         useDispensingStore.setState({ motorFwd: false, motorRev: false, targetX: null });
+        useDispensingStore.getState().setDemoPaused('stop');
         raf = requestAnimationFrame(tick);
         return;
       }
 
-      if (st.autoPhase === 'idle') {
-        // 复位按钮 → 归零
-        if (s.buttons.reset) {
-          useDispensingStore.getState().resetAll();
+      // 启动：消费脉冲；解除「停止」暂停以恢复，急停锁存必须由复位解除。
+      // 消费后下一帧 buttons.start 为 false，prevStart 随之回落，再次按下可重新产生上升沿。
+      if (s.buttons.start) {
+        useDispensingStore.getState().setButton('start', false);
+        if (useDispensingStore.getState().demoPaused === 'stop') {
+          useDispensingStore.getState().setDemoPaused('none');
         }
+      }
+
+      // 暂停门控：状态机主体不推进（表现层插值已在上面完成，三模式共用）。
+      // 暂停期间残留的主令脉冲一律消费掉，避免恢复后误触发（误停 / 自动连跑）。
+      if (useDispensingStore.getState().demoPaused !== 'none') {
+        const pausedStore = useDispensingStore.getState();
+        if (s.buttons.confirm) pausedStore.setButton('confirm', false);
+        if (s.buttons.stop) pausedStore.setButton('stop', false);
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      // 非运行阶段误按的停止也消费掉，避免残留电平。
+      if (s.buttons.stop) useDispensingStore.getState().setButton('stop', false);
+
+      if (st.autoPhase === 'idle') {
         if (startPressed) {
           const recipe = st.recipe;
           r.queue = MAG_IDS.filter((m) => recipe[m] > 0);

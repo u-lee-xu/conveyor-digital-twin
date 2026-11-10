@@ -63,6 +63,14 @@
         "to": "websocket-server/server.js"
       },
       {
+        "from": "../../websocket-server/dint32.js",
+        "to": "websocket-server/dint32.js"
+      },
+      {
+        "from": "../../websocket-server/runtime-role.js",
+        "to": "websocket-server/runtime-role.js"
+      },
+      {
         "from": "../../websocket-server/node_modules",
         "to": "websocket-server/node_modules"
       }

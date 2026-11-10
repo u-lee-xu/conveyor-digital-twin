@@ -122,6 +122,12 @@ interface DispensingState {
   autoCycle: number;   // 已完成配方轮数
   dosingMag: MagazineId | null;
   dosingRemain: number;
+  /**
+   * 演示循环显式暂停态：'none' 运行 / 'stop' 停止暂停 / 'estop' 急停锁存。
+   * 主令按钮是一次性脉冲，必须由这个字段记住「已停」而不能靠按钮电平，
+   * 否则消费按钮后下一帧会自动继续（等于没停）。急停只能由复位解除。
+   */
+  demoPaused: 'none' | 'stop' | 'estop';
 
   // ---- 动作 ----
   /** 设置滑块位置：位移增量驱动编码器寄存器，并刷新原点/终点传感器 */
@@ -164,6 +170,7 @@ interface DispensingState {
   setAutoPhase: (phase: AutoPhase) => void;
   setDosing: (mag: MagazineId | null, remain: number) => void;
   bumpCycle: () => void;
+  setDemoPaused: (paused: 'none' | 'stop' | 'estop') => void;
   resetAuto: () => void;
   /** 复位全部（回起点，清状态，编码器归零） */
   resetAll: () => void;
@@ -244,6 +251,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
   autoCycle: 0,
   dosingMag: null,
   dosingRemain: 0,
+  demoPaused: 'none',
 
   /**
    * 滑台位置的唯一写入口。所有来源（手动按钮、演示状态机、PLC 输出、观众广播）
@@ -367,6 +375,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
   setAutoPhase: (phase) => set({ autoPhase: phase }),
   setDosing: (dosingMag, dosingRemain) => set({ dosingMag, dosingRemain }),
   bumpCycle: () => set((s) => ({ autoCycle: s.autoCycle + 1 })),
+  setDemoPaused: (demoPaused) => set({ demoPaused }),
   resetAuto: () =>
     set({
       autoPhase: 'idle',
@@ -375,6 +384,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
       targetX: null,
       motorFwd: false,
       motorRev: false,
+      demoPaused: 'none',
     }),
   resetAll: () =>
     set((s) => ({
@@ -413,6 +423,7 @@ export const useDispensingStore = create<DispensingState>((set, get) => ({
       autoPhase: 'idle',
       dosingMag: null,
       dosingRemain: 0,
+      demoPaused: 'none',
     })),
 }));
 

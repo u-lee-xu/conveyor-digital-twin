@@ -10,6 +10,7 @@ import { ScoringModePanel } from './platform/ScoringModePanel';
 import { useTrafficStore } from './scenes/traffic-light/useTrafficStore';
 import { buildTrafficHelpContent } from './scenes/traffic-light/helpContent';
 import { TrafficSceneWrapper } from './platform/TrafficSceneWrapper';
+import { TrafficScoringGate } from './platform/TrafficScoringGate';
 
 function useTrafficModeState(): PlatformModeState {
   const mode = useAppStore((s) => s.mode);
@@ -43,6 +44,7 @@ export const trafficLightDevice: DeviceDefinition = {
   ],
   SceneContent: TrafficSceneContent,
   SceneWrapper: TrafficSceneWrapper,
+  effects: TrafficScoringGate,
   useModeState: useTrafficModeState,
   onModeChange: () => {
     useTrafficStore.getState().setScoringRunning(false);
