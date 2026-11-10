@@ -208,6 +208,19 @@ async function main() {
    */
   process.env.VITE_CJS_IGNORE_WARNING = 'true';
   console.log(`[lab] 正在启动平台壳 Web 服务 :${PORT}`);
+
+  /**
+   * strictPort 下 Vite 会直接抛 "Port 5201 is already in use"，用户只看到原始异常，
+   * 不知道旧实例其实还活着、直接访问即可。先预检一次，给出可操作的提示。
+   * 必须在 preview() 之前，避免半初始化；也避免继续拉起 4 个内部服务与旧实例混跑。
+   */
+  if (await portBusy(PORT)) {
+    console.error(`[lab] :${PORT} 已被占用，实验室很可能已经在运行。`);
+    console.error(`[lab] 直接访问 http://127.0.0.1:${PORT}/ 即可；若要重启，先停掉占用 :${PORT} 的进程，再执行 npm run start:lab。`);
+    process.exitCode = 1;
+    return;
+  }
+
   const { preview } = require('vite');
   const previewServer = await preview({
     root: PLATFORM,
