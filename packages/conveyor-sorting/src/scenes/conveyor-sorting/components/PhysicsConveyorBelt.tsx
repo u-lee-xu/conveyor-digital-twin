@@ -86,7 +86,9 @@ function RollerEnds({ zSign }: { zSign: 1 | -1 }) {
 
 /** 支腿：方型材 + 可调地脚 + 两端横撑（地脚底面略微下探，避免与地面共面） */
 function SupportLegs() {
-  const xs = [-L / 2 + 0.12, L / 2 - 0.12];
+  // 支腿从端部内缩：端部主动滚筒（x=L/2-0.1）与侧装电机悬出一小截，
+  // 否则斜视投影会把电机压在支腿上，读成「电机挂在腿上」。
+  const xs = [-L / 2 + BELT_DETAIL.LEG_INSET, L / 2 - BELT_DETAIL.LEG_INSET];
   const zs = [-RAIL_Z, RAIL_Z];
   return (
     <group>
@@ -112,22 +114,54 @@ function SupportLegs() {
   );
 }
 
-/** 驱动端减速电机：法兰 + 电机筒体 + 散热环，装在输送线 +X 端外侧 */
+/**
+ * 驱动端减速电机：侧装在 +X 端主动滚筒外侧，轴线沿 Z 与滚筒同轴。
+ *
+ * 旧版把电机挂在端部封板正中央、轴线沿 X（输送方向），既与滚筒轴垂直、
+ * 又没有减速箱或联轴器，等于悬在端头的一根黑棒，物理上驱动不了滚筒。
+ * 现在法兰贴侧梁外表面，减速箱输出轴穿过侧梁与最后一根滚筒的轴头同轴，
+ * 电机筒体沿 Z 向外伸出，并补顶部接线盒。
+ */
 function DriveMotor() {
-  const x = L / 2 + BELT_DETAIL.END_PLATE_T + BELT_DETAIL.MOTOR_LEN / 2;
+  const M = BELT_DETAIL;
+  // 最后一根滚筒即主动滚筒：与它同 X、同 Y
+  const driveX = L / 2 - 0.1;
+  // 侧梁外表面是安装基准，电机不再悬在端头
+  const sideZ = RAIL_Z + M.RAIL_T / 2 + SURFACE_GAP;
+  const plateZ = M.MOTOR_PLATE_T / 2 + SURFACE_GAP;
+  const gearZ = M.MOTOR_PLATE_T + M.MOTOR_GEARBOX_LEN / 2;
+  const motorZ = M.MOTOR_PLATE_T + M.MOTOR_GEARBOX_LEN + M.MOTOR_LEN / 2;
+  const endZ = M.MOTOR_PLATE_T + M.MOTOR_GEARBOX_LEN + M.MOTOR_LEN + SURFACE_GAP;
   return (
-    <group position={[x, ROLLER_Y, 0]}>
-      <mesh position={[-BELT_DETAIL.MOTOR_LEN / 2, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.endCap}>
-        <cylinderGeometry args={[BELT_DETAIL.MOTOR_FLANGE_R, BELT_DETAIL.MOTOR_FLANGE_R, 0.014, 16]} />
+    <group position={[driveX, ROLLER_Y, sideZ]}>
+      {/* 方形安装法兰板贴在侧梁外侧：明确电机是装上去的、不是悬空的 */}
+      <mesh position={[0, 0, plateZ]} material={materials.endCap}>
+        <boxGeometry args={[M.MOTOR_PLATE_W, M.MOTOR_PLATE_H, M.MOTOR_PLATE_T]} />
       </mesh>
-      <mesh rotation={[0, 0, Math.PI / 2]} material={materials.darkMetal}>
-        <cylinderGeometry args={[BELT_DETAIL.MOTOR_R, BELT_DETAIL.MOTOR_R, BELT_DETAIL.MOTOR_LEN, 16]} />
+      <mesh position={[0, 0, M.MOTOR_PLATE_T + SURFACE_GAP]} rotation={[Math.PI / 2, 0, 0]} material={materials.decal}>
+        <cylinderGeometry args={[M.MOTOR_FLANGE_R, M.MOTOR_FLANGE_R, SURFACE_GAP, 16]} />
       </mesh>
-      {[-0.035, 0, 0.035].map((dx) => (
-        <mesh key={dx} position={[dx, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={materials.decal}>
-          <cylinderGeometry args={[BELT_DETAIL.MOTOR_R * 1.04, BELT_DETAIL.MOTOR_R * 1.04, 0.005, 16]} />
+      {/* 减速箱：输出轴穿过侧梁与主动滚筒同轴 */}
+      <mesh position={[0, 0, gearZ]} rotation={[Math.PI / 2, 0, 0]} material={materials.endCap}>
+        <cylinderGeometry args={[M.MOTOR_GEARBOX_R, M.MOTOR_GEARBOX_R, M.MOTOR_GEARBOX_LEN, 16]} />
+      </mesh>
+      {/* 电机筒体沿 Z 外伸，与主动滚筒同轴 */}
+      <mesh position={[0, 0, motorZ]} rotation={[Math.PI / 2, 0, 0]} material={materials.darkMetal}>
+        <cylinderGeometry args={[M.MOTOR_R, M.MOTOR_R, M.MOTOR_LEN, 16]} />
+      </mesh>
+      {[-0.045, 0, 0.045].map((dz) => (
+        <mesh key={dz} position={[0, 0, motorZ + dz]} rotation={[Math.PI / 2, 0, 0]} material={materials.decal}>
+          <cylinderGeometry args={[M.MOTOR_R * 1.04, M.MOTOR_R * 1.04, M.MOTOR_FIN_T, 16]} />
         </mesh>
       ))}
+      {/* 尾端盖中心亮银盘：避免纯黑端面被读成手轮 */}
+      <mesh position={[0, 0, endZ]} rotation={[Math.PI / 2, 0, 0]} material={materials.decal}>
+        <cylinderGeometry args={[M.MOTOR_ENDCAP_R, M.MOTOR_ENDCAP_R, SURFACE_GAP, 16]} />
+      </mesh>
+      {/* 顶部接线盒 */}
+      <mesh position={[0, M.MOTOR_R + M.MOTOR_BOX_H / 2, motorZ]} material={materials.darkMetal}>
+        <boxGeometry args={[M.MOTOR_BOX_W, M.MOTOR_BOX_H, M.MOTOR_BOX_D]} />
+      </mesh>
     </group>
   );
 }

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   CYLINDER_DETAIL, SENSOR_DETAIL, SENSOR_VARIANTS, PART_STAGES,
-  SENSOR_POSITIONS, isSensorVariant, COMPONENT,
+  SENSOR_POSITIONS, isSensorVariant, COMPONENT, BELT_DETAIL,
   CYLINDER_EXTEND_POS_FEED, CYLINDER_RETRACT_POS,
 } from './scenes/conveyor-sorting/constants';
 
@@ -188,5 +188,38 @@ describe('杆系连续性：任意行程下推杆都不与缸体断开', () => {
 
   it('完全缩回时杆根不穿出后端盖', () => {
     expect(rodRootAt(CYLINDER_RETRACT_POS)).toBeGreaterThanOrEqual(-CAP_Y);
+  });
+});
+
+describe('输送线驱动电机：侧装同轴，不再悬在端头', () => {
+  const belt = src('scenes/conveyor-sorting/components/PhysicsConveyorBelt.tsx');
+  // 只看 DriveMotor 函数体：EndPlate / RollerEnds 里也有 position={[x, ROLLER_Y, 0]}
+  const motorBody = bodyOf(belt, 'function DriveMotor()', 'export function PhysicsConveyorBelt');
+
+  it('轴线沿 Z、与主动滚筒同轴，安装基准是侧梁外表面', () => {
+    expect(motorBody).toContain('const driveX = L / 2 - 0.1');
+    expect(motorBody).toContain('RAIL_Z + M.RAIL_T / 2 + SURFACE_GAP');
+    expect(motorBody).toContain('rotation={[Math.PI / 2, 0, 0]}');
+    expect(motorBody).not.toContain('L / 2 + BELT_DETAIL.END_PLATE_T + BELT_DETAIL.MOTOR_LEN / 2');
+    expect(motorBody).not.toContain('position={[x, ROLLER_Y, 0]}');
+    expect(motorBody).not.toContain('rotation={[0, 0, Math.PI / 2]}');
+  });
+
+  it('减速箱 / 安装法兰板 / 尾端盖 / 接线盒尺寸都来自 BELT_DETAIL', () => {
+    expect(BELT_DETAIL.MOTOR_GEARBOX_LEN).toBeGreaterThan(0);
+    expect(BELT_DETAIL.MOTOR_FLANGE_R).toBeGreaterThan(BELT_DETAIL.MOTOR_GEARBOX_R);
+    expect(BELT_DETAIL.MOTOR_R).toBeLessThan(BELT_DETAIL.MOTOR_GEARBOX_R);
+    // 长径比足够大，斜视也能读出筒体而不是一个圆盘
+    expect(BELT_DETAIL.MOTOR_LEN / (BELT_DETAIL.MOTOR_R * 2)).toBeGreaterThan(1.5);
+    ['MOTOR_GEARBOX_R', 'MOTOR_GEARBOX_LEN', 'MOTOR_FIN_T', 'MOTOR_BOX_W',
+      'MOTOR_PLATE_W', 'MOTOR_ENDCAP_R', 'M.MOTOR_R']
+      .forEach((k) => expect(motorBody, `缺 ${k}`).toContain(k));
+  });
+
+  it('端部支腿内缩，电机与支腿不再是同一 X', () => {
+    expect(belt).toContain('BELT_DETAIL.LEG_INSET');
+    const motorX = COMPONENT.CONVEYOR_LENGTH / 2 - 0.1;
+    const legX = COMPONENT.CONVEYOR_LENGTH / 2 - BELT_DETAIL.LEG_INSET;
+    expect(motorX - legX).toBeGreaterThan(BELT_DETAIL.MOTOR_R);
   });
 });

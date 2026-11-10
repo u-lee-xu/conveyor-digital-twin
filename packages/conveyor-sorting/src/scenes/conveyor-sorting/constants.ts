@@ -183,14 +183,26 @@ export const BELT_DETAIL = {
   ROLLER_CAP_R: 0.018,   // 滚筒端盖
   ROLLER_CAP_T: 0.008,
   LEG_T: 0.055,          // 支腿方型材
+  LEG_INSET: 0.28,       // 端部支腿内缩量：给主动滚筒与侧装电机让出端部空间
   FOOT_R: 0.048,         // 可调地脚
   FOOT_H: 0.018,
   CROSS_H: 0.035,        // 支腿间横撑
   GUIDE_H: 0.038,        // 侧挡边
   GUIDE_T: 0.008,
-  MOTOR_R: 0.055,        // 驱动端减速电机
-  MOTOR_LEN: 0.13,
+  // 驱动端减速电机：侧装在主动滚筒外侧，轴线沿 Z 与滚筒同轴
+  MOTOR_R: 0.055,
+  MOTOR_LEN: 0.18,          // 长径比约 2.2，斜视也能看出是电机筒体而非手轮
   MOTOR_FLANGE_R: 0.065,
+  MOTOR_PLATE_W: 0.120,     // 方形安装法兰板：贴在侧梁外侧，明确安装面
+  MOTOR_PLATE_H: 0.120,
+  MOTOR_PLATE_T: 0.008,
+  MOTOR_GEARBOX_R: 0.060,   // 减速箱，比法兰略小
+  MOTOR_GEARBOX_LEN: 0.060,
+  MOTOR_FIN_T: 0.005,       // 筒体散热环
+  MOTOR_ENDCAP_R: 0.032,    // 尾端盖中心亮银盘
+  MOTOR_BOX_W: 0.060,       // 顶部接线盒
+  MOTOR_BOX_H: 0.034,
+  MOTOR_BOX_D: 0.055,
   LAMP_STEP: 0.13,       // 三色灯塔分层灯罩间距
 } as const;
 
