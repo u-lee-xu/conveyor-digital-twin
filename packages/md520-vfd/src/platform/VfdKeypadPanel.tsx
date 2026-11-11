@@ -12,7 +12,7 @@
  * DI / AI / 485 / DO 是教学扩展，收在外壳下方的紧凑信号区；真机没有这些控件。
  * 面板不写任何原理说明，可见文案不带中文括号。
  */
-import { Fragment, useCallback, useMemo, useRef, type CSSProperties } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { isViewerRuntime } from '@digital-twin/shared';
 import { useVfdStore } from '../stores/useVfdStore';
 import { keypadDisplay, type KeypadKey } from '../vfd/md520Keypad';
@@ -50,6 +50,8 @@ const C = {
   ledOff: 'rgba(70,84,96,.20)',
   key: 'linear-gradient(180deg,#f5f7f9 0%,#cbd4dc 100%)',
   keyFill: '#e8edf1',
+  /** 按下态：键帽压深一档，配合下沉与高光减弱形成实体触感 */
+  keyFillPressed: '#c2cdd9',
   keyEdge: '#8995a1',
   keyInk: '#35424e',
   signal: 'rgba(112,128,142,.16)',
@@ -119,16 +121,23 @@ const PATHS: Record<KeyShape, (w: number, h: number) => string> = {
   mfk: (w, h) => `M ${w * 0.13} 3 L ${w * 0.87} 3 Q ${w * 0.94} 3 ${w * 0.95} 10 L ${w - 3} ${h - 10} Q ${w} ${h - 3} ${w * 0.92} ${h - 3} L ${w * 0.08} ${h - 3} Q 0 ${h - 3} 3 ${h - 10} L ${w * 0.05} 10 Q ${w * 0.06} 3 ${w * 0.13} 3 Z`,
 };
 
-function KeyOutline({ shape, w, h }: { shape: KeyShape; w: number; h: number }) {
+function KeyOutline({ shape, w, h, pressed }: {
+  shape: KeyShape; w: number; h: number; pressed?: boolean;
+}) {
   const d = PATHS[shape](w, h);
   const inner = `translate(${w / 2} ${h / 2}) scale(0.88) translate(${-w / 2} ${-h / 2})`;
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
-        filter: 'drop-shadow(0 2px 2px rgba(38,50,62,.30))' }}>
-      <path d={d} fill={C.keyFill} stroke={C.keyEdge} strokeWidth="1.5" strokeLinejoin="round" />
-      <path d={d} fill="none" stroke="rgba(255,255,255,.88)" strokeWidth="1"
-        strokeLinejoin="round" transform={inner} />
+        filter: pressed
+          ? 'drop-shadow(0 0 1px rgba(38,50,62,.16))'
+          : 'drop-shadow(0 2px 2px rgba(38,50,62,.30))',
+        transition: 'filter 130ms ease' }}>
+      <path d={d} fill={pressed ? C.keyFillPressed : C.keyFill}
+        stroke={C.keyEdge} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d={d} fill="none"
+        stroke={pressed ? 'rgba(255,255,255,.48)' : 'rgba(255,255,255,.88)'}
+        strokeWidth="1" strokeLinejoin="round" transform={inner} />
     </svg>
   );
 }
@@ -141,17 +150,36 @@ const KEY_BASE: CSSProperties = {
   fontSize: 15, fontWeight: 700, lineHeight: 1, userSelect: 'none',
 };
 
+/**
+ * 按键触感：pointer 按下时键帽下沉 2px、缩到 0.96、整体压暗一档，SVG 双层凸缘
+ * 的高光与投影同步变弱；松开用带轻微过冲的曲线回弹，模拟实体按键的回位。
+ * 静止态 transform 必须与传入 style 完全一致（斜键 30° / 四瓣居中等 CDP 断言依赖），
+ * 所以按下变换只做「追加」，绝不改写基础变换。观众只读时不触发。
+ */
+const KEY_TRANSITION = 'transform 170ms cubic-bezier(.2,.9,.3,1.35), filter 130ms ease';
+const KEY_PRESS_TRANSFORM = ' translateY(2px) scale(0.96)';
+
 function PanelKey({ label, name, onPress, disabled, shape, w, h, style, children }: {
   label: KeypadKey; name: string; onPress: (k: KeypadKey) => void;
   disabled: boolean; shape: KeyShape; w: number; h: number;
   style: CSSProperties; children: React.ReactNode;
 }) {
+  const [pressed, setPressed] = useState(false);
+  const down = pressed && !disabled;
+  const baseTransform = typeof style.transform === 'string' ? style.transform : '';
+  const release = () => setPressed(false);
   return (
     <button type="button" aria-label={name} title={name} disabled={disabled}
+      data-dt-vfd-key-pressed={down ? 1 : 0}
+      onPointerDown={() => { if (!disabled) setPressed(true); }}
+      onPointerUp={release} onPointerLeave={release} onPointerCancel={release} onBlur={release}
       style={{ ...KEY_BASE, width: w, height: h, ...style,
+        transform: down ? baseTransform + KEY_PRESS_TRANSFORM : baseTransform,
+        filter: down ? 'brightness(0.93)' : 'none',
+        transition: KEY_TRANSITION, touchAction: 'none',
         opacity: disabled ? 0.55 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
       onClick={() => onPress(label)}>
-      <KeyOutline shape={shape} w={w} h={h} />
+      <KeyOutline shape={shape} w={w} h={h} pressed={down} />
       <span style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{children}</span>
     </button>
@@ -203,8 +231,10 @@ export function VfdKeypadPanel() {
 
   /** 菜单键短按切菜单，按住 600ms 切主/辅显示区，与真机长按语义一致 */
   const longPress = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false });
+  const [menuPressed, setMenuPressed] = useState(false);
   const menuDown = () => {
     if (readOnly) return;
+    setMenuPressed(true);
     longPress.current.fired = false;
     longPress.current.timer = window.setTimeout(() => {
       longPress.current.fired = true;
@@ -212,6 +242,7 @@ export function VfdKeypadPanel() {
     }, 600);
   };
   const menuUp = () => {
+    setMenuPressed(false);
     if (longPress.current.timer !== null) {
       window.clearTimeout(longPress.current.timer);
       longPress.current.timer = null;
@@ -252,6 +283,11 @@ export function VfdKeypadPanel() {
       style={{ borderRadius: 24, padding: 7, background: C.shell,
         border: `2px solid ${C.shellEdge}`,
         boxShadow: '0 3px 10px rgba(15,23,42,.22), inset 0 1px 0 rgba(255,255,255,.75)' }}>
+      {/* 教学信号区按钮的轻触感：与真机按键同一条回弹曲线，只作用于本面板 */}
+      <style>{`
+        [data-dt-vfd-signal] button { transition: transform 150ms cubic-bezier(.2,.9,.3,1.35), filter 120ms ease; }
+        [data-dt-vfd-signal] button:active:not(:disabled) { transform: translateY(1px) scale(0.97); filter: brightness(0.92); }
+      `}</style>
       <div style={{ border: `1px solid ${C.shellLine}`, borderRadius: 18, padding: '6px 9px 9px',
         background: 'rgba(255,255,255,.10)' }}>
 
@@ -375,10 +411,15 @@ export function VfdKeypadPanel() {
             shape="tall" w={36} h={80}
             style={{ left: 14, top: 4, fontSize: 18 }}>↩</PanelKey>
           <button type="button" aria-label="菜单键" title="菜单键" disabled={readOnly}
-            onPointerDown={menuDown} onPointerUp={menuUp} onPointerLeave={menuUp} onClick={menuClick}
+            data-dt-vfd-key-pressed={menuPressed && !readOnly ? 1 : 0}
+            onPointerDown={menuDown} onPointerUp={menuUp} onPointerLeave={menuUp}
+            onPointerCancel={menuUp} onBlur={menuUp} onClick={menuClick}
             style={{ ...KEY_BASE, right: 14, top: 4, width: 36, height: 80, fontSize: 18,
+              transform: menuPressed && !readOnly ? KEY_PRESS_TRANSFORM.trim() : '',
+              filter: menuPressed && !readOnly ? 'brightness(0.93)' : 'none',
+              transition: KEY_TRANSITION, touchAction: 'none',
               opacity: readOnly ? 0.55 : 1, cursor: readOnly ? 'not-allowed' : 'pointer' }}>
-            <KeyOutline shape="tall" w={36} h={80} />
+            <KeyOutline shape="tall" w={36} h={80} pressed={menuPressed && !readOnly} />
             <span style={{ position: 'relative', zIndex: 1 }}>⌂</span>
           </button>
 
