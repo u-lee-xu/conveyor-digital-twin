@@ -541,6 +541,64 @@ function checkVfd485Slave() {
   return true;
 }
 
+/**
+ * 汇川龙门 XY 象棋分拣场景隔离：新设备包独立注册、五处接线齐全、
+ * 变量表单一来源、ETHERCAT 只是映射声明，已定稿场景零龙门残留。
+ */
+function checkGantryIsolation() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  let registry, vars, sceneIdx;
+  try {
+    registry = readFile('../packages/platform/src/registry.ts');
+    vars = readFile('../packages/inovance-gantry/src/constants/gantryVariables.ts');
+    sceneIdx = readFile('../packages/inovance-gantry/src/index.ts');
+  } catch (e) {
+    console.error(`[check][gantry-isolation] ❌ 龙门场景文件缺失: ${e.message}`);
+    return false;
+  }
+  if (!registry.includes('inovanceGantryDevice')) {
+    console.error('[check][gantry-isolation] ❌ 平台壳未注册汇川龙门设备');
+    return false;
+  }
+  const wiring = [
+    ['../packages/platform/package.json', '@digital-twin/inovance-gantry'],
+    ['../packages/platform/vite.config.ts', "'@digital-twin/inovance-gantry'"],
+    ['../packages/platform/tsconfig.app.json', '"@digital-twin/inovance-gantry"'],
+    ['../packages/platform/src/index.css', '../../inovance-gantry/src'],
+  ];
+  for (const [file, token] of wiring) {
+    if (!readFile(file).includes(token)) {
+      console.error(`[check][gantry-isolation] ❌ ${file} 缺 ${token}`);
+      return false;
+    }
+  }
+  for (const token of ['GANTRY_X_POS_L', 'GANTRY_Y_POS_L', 'ETHERCAT_PDO_MAP', '仅声明，不实现链路']) {
+    if (!vars.includes(token)) {
+      console.error(`[check][gantry-isolation] ❌ 变量表缺 ${token}`);
+      return false;
+    }
+  }
+  if (/net\.Socket|createConnection|EtherCATMaster|writePdo/.test(vars)) {
+    console.error('[check][gantry-isolation] ❌ ETHERCAT 映射表里出现底层链路实现');
+    return false;
+  }
+  if (!sceneIdx.includes('exportSnapshot') || !sceneIdx.includes('applyBroadcast')) {
+    console.error('[check][gantry-isolation] ❌ 龙门场景缺观众只读镜像');
+    return false;
+  }
+  for (const scene of ['mock-dispensing-server.js', 'mock-conveyor-server.js', 'mock-vfd-server.js', 'mock-vfd-slave.js']) {
+    const src = readFile(`./${scene}`);
+    if (src.includes('GANTRY_') || src.includes('inovance-gantry')) {
+      console.error(`[check][gantry-isolation] ❌ ${scene} 残留龙门变量`);
+      return false;
+    }
+  }
+  console.log('[check][gantry-isolation] ✅ 龙门场景独立注册、五处接线齐全、ETHERCAT 仅映射、其它场景零残留');
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -557,6 +615,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkVfdIsolation() && ok;
   ok = checkWordProtocolChain() && ok;
   ok = checkVfd485Slave() && ok;
+  ok = checkGantryIsolation() && ok;
   process.exit(ok ? 0 : 1);
 }
 

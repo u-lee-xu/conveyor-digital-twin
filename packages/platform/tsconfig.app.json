@@ -33,8 +33,10 @@
       "@digital-twin/auto-dispensing": ["../auto-dispensing/src"],
       "@digital-twin/auto-dispensing/*": ["../auto-dispensing/src/*"],
       "@digital-twin/md520-vfd": ["../md520-vfd/src"],
-      "@digital-twin/md520-vfd/*": ["../md520-vfd/src/*"]
+      "@digital-twin/md520-vfd/*": ["../md520-vfd/src/*"],
+      "@digital-twin/inovance-gantry": ["../inovance-gantry/src"],
+      "@digital-twin/inovance-gantry/*": ["../inovance-gantry/src/*"]
     }
   },
-  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src", "../auto-dispensing/src", "../md520-vfd/src"]
+  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src", "../auto-dispensing/src", "../md520-vfd/src", "../inovance-gantry/src"]
 }

@@ -276,6 +276,7 @@ describe('P1-4 平台入口：有评分模式的设备必须挂载评分状态�
     trafficLightDevice: 'traffic-light',
     dispensingDevice: 'auto-dispensing',
     md520VfdDevice: 'md520-vfd',
+    inovanceGantryDevice: 'inovance-gantry',
   };
   const deviceIndex = (v: string) => read(`../../${pkgOf[v]}/src/index.ts`);
 
