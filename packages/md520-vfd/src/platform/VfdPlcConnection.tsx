@@ -13,6 +13,7 @@ import { md520BoolVarsFor } from '../constants/md520-io-vars';
 
 const PRESETS: { label: string; config: PlcConnConfig }[] = [
   { label: 'MD520 虚拟 PLC (Modbus)', config: { host: '127.0.0.1', port: 1507, protocol: 'modbus' } },
+  { label: 'MD520 485 从站 B档 (Modbus)', config: { host: '127.0.0.1', port: 1508, protocol: 'modbus' } },
   { label: '汇川H5U (Modbus)', config: { host: '127.0.0.1', port: 502, protocol: 'modbus' } },
   { label: 'S7-1200/1500 仿真', config: { host: '127.0.0.1', port: 102, protocol: 's7', rack: 0, slot: 1 } },
   { label: '三菱 GX Simulator2 仿真', config: { host: '127.0.0.1', port: 0, protocol: 'mitsubishi' } },

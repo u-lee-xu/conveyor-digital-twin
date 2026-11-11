@@ -156,7 +156,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p>独立设备场景 <code>packages/md520-vfd</code> 的参数、功能、接线与现场接入说明。生成自源码单一来源，参数变动后重新运行 <code>generate-handbook.cjs</code> 即可同步。</p>
 <p><strong>范围声明</strong>：本手册是<strong>教学子集</strong>，不是功能码全量表。08 用户手册明确「功能码、故障码的完整信息请参见 09 参数手册」，而 09 参数手册在本机多次抽取失败，因此未收录的码不猜默认值。所有物理算法（矢量控制、直流制动电流闭环、电机辨识）均为教学近似或不做。</p>
 </header>
-<nav><a href="#s1">1 快速上手</a><a href="#s2">2 面板与按键</a><a href="#s3">3 参数速查</a><a href="#s4">4 参数效果</a><a href="#s5">5 四种给定</a><a href="#s6">6 端子接线</a><a href="#s7">7 PLC 点位</a><a href="#s8">8 通信地址</a><a href="#s9">9 故障码</a><a href="#s10">10 现场接入</a><a href="#s11">11 排查</a></nav>
+<nav><a href="#s1">1 快速上手</a><a href="#s2">2 面板与按键</a><a href="#s3">3 参数速查</a><a href="#s4">4 参数效果</a><a href="#s5">5 四种给定</a><a href="#s6">6 端子接线</a><a href="#s7">7 PLC 点位</a><a href="#s8">8 通信地址</a><a href="#s9">9 故障码</a><a href="#s10">10 现场接入</a><a href="#s11">11 排查</a><a href="#s12">12 B 档 485 主从</a></nav>
 
 <section id="s1"><h2>1 快速上手</h2>
 <div class="grid">
@@ -283,6 +283,30 @@ ${terminalSvg}
 <tr><td>改参数没效果</td><td>核对第 4 章「生效 / 仅显示」列；部分参数只记录数值，属教学子集边界。</td></tr>
 <tr><td>观众端数值不跟随</td><td>中继只允许一个主控上报；第二个主控会被拒绝，关闭多余主控页面即可。</td></tr>
 </table>
+</section>
+
+<section id="s12"><h2>12 B 档真实 485 主从</h2>
+<p>默认教学链路里，虚拟 PLC <code>:1507</code> 把「PLC 参考程序」和「变频器从站寄存器区」放在同一个进程，参考程序直接改内存。B 档把两者拆开：<strong>变频器是独立的纯从站</strong>，PLC 主站必须通过网络发真实 Modbus 帧才能改变它。这就是现场「PLC 主站轮询变频器」的形态。</p>
+<table><tr><th>项目</th><th>默认教学档（A 档）</th><th>B 档真实主从</th></tr>
+<tr><td>变频器从站</td><td>寄生在 <code>:1507</code> 虚拟 PLC 进程内</td><td>独立进程 <code>:1508</code>，独立寄存器区与线圈表</td></tr>
+<tr><td>PLC 主站</td><td>同进程内 <code>vfdPlcScan()</code> 直接改内存</td><td><code>vfd-485-master.cjs</code> 或外部 PLC，经 TCP 发 FC03/06/16/01/05/15 帧</td></tr>
+<tr><td>状态口</td><td><code>:5087/status</code></td><td><code>:5088/status</code>（含 <code>masterFrames</code> 主站帧计数）</td></tr>
+<tr><td>寄存器区</td><td>与参考程序共享一份</td><td>完全独立，与 :1507 互不影响</td></tr></table>
+<h3>端口与进程</h3>
+<ul>
+<li><code>mock-vfd-slave.js :1508</code>：纯从站，绑 <code>127.0.0.1</code>，不含任何 PLC 参考程序；<code>/status</code> 与 <code>/reset</code> 在 <code>:5088</code>。</li>
+<li><code>vfd-485-master.cjs</code>：每 200ms 一轮真实轮询 —— 写 2000H/7310H/1000H 与 coils 130~134，读 3000H/1001H/1009H 与 coils 140~142；演示节拍为 4s 运行 / 2s 停机，频率 30/50Hz 交替。</li>
+<li><code>start-lab.cjs</code> 共起 8 个进程 / 10 个内部口；<code>assertInternalPorts()</code> 保证 :1508 不与 :1505 / :1503 / :1507 / :8081 / :8082 冲突。</li>
+<li>默认停机：<code>2000H=6</code>（按 F6-10）、<code>3000H=3</code>；<strong>不写 0</strong>，因为 2000H 没有 0 档。</li>
+</ul>
+<h3>如何使用</h3>
+<ol>
+<li>在仿真模式的 PLC 连接面板选预设「MD520 485 从站 B档 (Modbus)」<code>127.0.0.1:1508</code>，面板与 3D 就直接跟随这份独立从站区。</li>
+<li>看 <code>:5088/status</code> 的 <code>masterFrames</code> 增长，即证明主站确实在发帧；也可观察 2000H 随演示节拍在 1 / 6 之间变化。</li>
+<li>接外部 PLC（AutoShop / 博途 / GX Works2 / 实物）当主站时，启动实验室前设 <code>DT_VFD_485_MASTER=0</code> 关闭内置主站，避免两个主站抢写同一从站。</li>
+<li>外部主站按第 8 章地址表发 FC06 / FC16 / FC03 即可；从站只响应帧，不会自己改寄存器。</li>
+</ol>
+<p class="notice">B 档从站与已定稿的配药 :1505、分拣 :1503 以及默认教学 :1507 全部隔离；改动 B 档不会影响那三条既有链路。</p>
 </section>
 
 <footer>MD520 虚拟变频器教学手册 · 由 generate-handbook.cjs 从源码生成 · 教学子集，非全量表</footer>

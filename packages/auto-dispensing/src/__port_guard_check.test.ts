@@ -115,6 +115,19 @@ describe('启动脚本：端口漂移 fail-fast，占用不再静默复用', () 
     expect(startLab).toContain('两个场景必须独立');
   });
 
+  it('B 档独立 485 从站 :1508 与三个场景 PLC 端口隔离、只绑回环', () => {
+    expect(startLab).toContain('VFD_SLAVE_PORT = 1508');
+    expect(startLab).toContain('portBusy(VFD_SLAVE_PORT)');
+    expect(startLab).toContain("path.join(WSS, 'mock-vfd-slave.js')");
+    expect(startLab).toContain("path.join(WSS, 'vfd-485-master.cjs')");
+    expect(startLab).toContain('DT_VFD_485_MASTER');
+    const slave = read('../../../websocket-server/mock-vfd-slave.js');
+    expect(slave).toContain("host: '127.0.0.1'");
+    expect(slave).toContain("httpServer.listen(HTTP_PORT, '127.0.0.1'");
+    expect(slave).toContain('pure-slave');
+    expect(slave).not.toContain('vfdPlcScan');
+  });
+
   it('端口被占用改为明确告警，不再写成静默沿用', () => {
     expect(startLab).toContain('[lab] 警告：');
     expect(startLab).toContain('该实例可能不是当前版本');
