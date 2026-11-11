@@ -34,6 +34,8 @@ const DEBUG_ENABLED = typeof window !== 'undefined'
 interface DriveDebug {
   hz: number;
   factor: number;
+  /** 1 正转 / -1 反转：285 页 F7-01=2 的正反转切换必须让 3D 转向跟着变 */
+  direction: 1 | -1;
   fanAngle: number;
   beltPhase: number;
   leds: boolean[];
@@ -91,17 +93,19 @@ export function PhysicsVfdDrive() {
     const factor = s.outputFactor();
     const dt = Math.min(delta, 0.05);
 
-    // 电机风扇 / 轴 / 双滚筒：同一个角速度，50Hz 对应 MAX_RPS 转/秒
-    const angle = factor * V.MAX_RPS * Math.PI * 2 * dt;
+    // 电机风扇 / 轴 / 双滚筒：同一个角速度，50Hz 对应 MAX_RPS 转/秒。
+    // direction 来自 F7-01=2 的正反转切换，反转时角速度取负，电机与滚筒真的反着转。
+    const direction = s.direction;
+    const angle = factor * V.MAX_RPS * Math.PI * 2 * dt * direction;
     if (fanRef.current) fanRef.current.rotation.z -= angle;
     rollerRefs.current.forEach((r) => { if (r) r.rotation.z -= angle; });
 
-    // 皮带条纹沿 +X 循环平移，速度与输出频率成正比
-    beltPhase.current += factor * V.BELT_SPEED * dt;
+    // 皮带条纹沿 +X 循环平移；反转时相位反向，用双取模把负相位归一化到 [0, span)
+    beltPhase.current += factor * V.BELT_SPEED * dt * direction;
     stripeRefs.current.forEach((m, i) => {
       if (!m) return;
       const span = V.BELT_LEN;
-      const t = ((i / V.STRIPE_COUNT) * span + beltPhase.current) % span;
+      const t = (((i / V.STRIPE_COUNT) * span + beltPhase.current) % span + span) % span;
       m.position.x = V.BELT_CENTER_X - span / 2 + t;
     });
 
@@ -121,7 +125,7 @@ export function PhysicsVfdDrive() {
 
     if (DEBUG_ENABLED) {
       (window as unknown as { __dtVfdDrive?: DriveDebug }).__dtVfdDrive = {
-        hz, factor,
+        hz, factor, direction: s.direction,
         fanAngle: fanRef.current?.rotation.z ?? 0,
         beltPhase: beltPhase.current,
         leds: states,
