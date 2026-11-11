@@ -2,6 +2,8 @@
 import { create } from 'zustand';
 
 export type VfdAppMode = 'manual' | 'sim';
+/** 三菱连接目标：仿真器可用 X/Y，实物 PLC 无实际接线统一用 M 区 */
+export type VfdMitsubishiTarget = 'simulator' | 'real';
 
 export interface VfdPlcConfig {
   host: string;
@@ -26,16 +28,21 @@ interface VfdAppStore {
   mode: VfdAppMode;
   plcConfig: VfdPlcConfig;
   connected: boolean;
+  /** 不持久化：刷新回默认仿真档，避免上次实验的实体档污染新会话 */
+  mitsubishiProfile: VfdMitsubishiTarget;
   setMode: (mode: VfdAppMode) => void;
   setPlcConfig: (config: Partial<VfdPlcConfig>) => void;
   setConnected: (connected: boolean) => void;
+  setMitsubishiProfile: (target: VfdMitsubishiTarget) => void;
 }
 
 export const useVfdAppStore = create<VfdAppStore>((set) => ({
   mode: 'manual',
   plcConfig: DEFAULT_CONFIG,
   connected: false,
+  mitsubishiProfile: 'simulator',
   setMode: (mode) => set({ mode }),
   setPlcConfig: (config) => set((s) => ({ plcConfig: { ...s.plcConfig, ...config } })),
   setConnected: (connected) => set({ connected }),
+  setMitsubishiProfile: (target) => set({ mitsubishiProfile: target }),
 }));

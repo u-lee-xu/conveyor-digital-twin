@@ -11,6 +11,9 @@
  * 3. 写回 3000H 状态 / 1001H 运行频率 / 1009H DO 标志，供 PLC 程序做输入联锁。
  * 4. 只在 F0-02=1（端子）或 =2（通信）时让 PLC 抢运行权；面板档不覆盖本地给定。
  *    PLC 尚未下达给定且变频器未接管时跳过零帧，保住手动 / 演示 / 评分的原有额定带速。
+ * 5. 外部 PLC 的开关量链路：Modbus TCP 用 readCoils/writeCoils，S7 / 三菱用
+ *    readVars/writeVars，把 PLC 输出点接到 DI1~DI5、把 DO1/FM/RELAY 写回 PLC 输入点。
+ *    与数值字链路并存，让 AutoShop / 博途 / GX Works2 / 实物 PLC 程序都能控制变频器。
  *
  * 观众端不挂载 effects，参数与状态走 exportSnapshot / applyBroadcast 数值镜像。
  */
@@ -18,6 +21,11 @@ import { useEffect } from 'react';
 import { modbusService, isViewerRuntime } from '@digital-twin/shared';
 import { useVfdStore } from '../stores/useVfdStore';
 import { MD520_SOURCE, MD520_COMMAND } from '../vfd/md520Spec';
+import {
+  MD520_DI_VAR_KEYS, MD520_DO_VAR_KEYS,
+  MD520_MODBUS_DI_BASE, MD520_MODBUS_DO_BASE,
+  packDiFlags, unpackDoFlags,
+} from '../constants/md520-io-vars';
 
 /** PLC 侧写入的给定 / 监视字，由 conveyor 虚拟 PLC 的参考程序生成 */
 const READ_NAMES: string[] = [
@@ -104,6 +112,31 @@ export function VfdLink() {
           store.setCommOnline(true);
         } else {
           store.setCommOnline(false);
+        }
+
+        // ---- 外部 PLC 的 DI / DO 开关量链路（三协议并存）----
+        // 变频器 DO 状态写回 PLC 输入点，PLC 程序可据此做联锁；
+        // PLC 输出点读回来作为 DI1~DI5，是端子给定的真值来源。
+        const doBits = unpackDoFlags(useVfdStore.getState().snapshot().doFlags);
+        let diFlags: number | null = null;
+        const protocol = modbusService.getProtocol();
+        if (protocol === 'modbus') {
+          const rd = await modbusService.readCoils(MD520_MODBUS_DI_BASE, MD520_DI_VAR_KEYS.length);
+          if (rd.success && Array.isArray(rd.values)) {
+            diFlags = packDiFlags(rd.values.slice(0, MD520_DI_VAR_KEYS.length).map(Boolean));
+          }
+          await modbusService.writeCoils(MD520_MODBUS_DO_BASE, doBits);
+        } else {
+          const rd = await modbusService.readVars([...MD520_DI_VAR_KEYS]);
+          if (rd.success && rd.values) {
+            diFlags = packDiFlags(MD520_DI_VAR_KEYS.map((k) => !!rd.values?.[k]));
+          }
+          await modbusService.writeVars([...MD520_DO_VAR_KEYS], doBits);
+        }
+        // 零帧跳过：外部 PLC 未下达任何 DI、变频器也未被接管时不冲刷面板本地 DI 控件
+        if (diFlags !== null) {
+          const s2 = useVfdStore.getState();
+          if (s2.engaged || diFlags !== 0) s2.setPlcFrame({ diFlags });
         }
 
         const snap = useVfdStore.getState().snapshot();
