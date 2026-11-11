@@ -261,5 +261,39 @@ ${sections}
 `;
 
 fs.writeFileSync(OUT, html, 'utf8');
+
+/**
+ * 同一份实验数据再输出两份，保证「手册 / 场景内抽屉 / 打印版」三处同源：
+ *  1) src/constants/labGuide.generated.ts —— 供场景内 React 抽屉直接 import；
+ *  2) packages/platform/public/docs/*.html —— Vite preview 同源可访问，供打印 / 新标签查阅。
+ */
+const tsPath = path.join(PKG, 'src/constants/labGuide.generated.ts');
+const generatedTs = `/* 由 docs/generate-lab-guide.cjs 自动生成，请勿手改；重跑脚本即同步 */
+export interface LabEntry {
+  g: string;
+  n: number;
+  name: string;
+  mode: string;
+  goal: string;
+  steps: string[];
+  expect: string;
+  watch: string;
+  trap: string;
+}
+export const LAB_GROUP_ORDER: string[] = ${JSON.stringify(Object.keys(GROUPS))};
+export const LAB_GROUPS: Record<string, string> = ${JSON.stringify(GROUPS, null, 2)};
+export const LAB_GROUP_COLOR: Record<string, string> = ${JSON.stringify(GROUP_COLOR, null, 2)};
+export const LAB_DEFAULTS: Record<string, number> = ${JSON.stringify(D, null, 2)};
+export const LABS: LabEntry[] = ${JSON.stringify(LABS, null, 2)};
+`;
+fs.writeFileSync(tsPath, generatedTs, 'utf8');
+
+const webDir = path.resolve(__dirname, '../../platform/public/docs');
+fs.mkdirSync(webDir, { recursive: true });
+const webPath = path.join(webDir, 'MD520实验指导书.html');
+fs.writeFileSync(webPath, html, 'utf8');
+
 console.log(`OK ${OUT}`);
+console.log(`OK ${tsPath}`);
+console.log(`OK ${webPath}`);
 console.log(`labs=${LABS.length} groups=${Object.keys(GROUPS).length} defaults F0-08=${D['F0-08']} F0-17=${D['F0-17']} F1-05=${D['F1-05']}`);
