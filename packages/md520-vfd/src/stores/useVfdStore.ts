@@ -174,9 +174,27 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       if (p) {
         params = { ...params, [ev.commit.code]: ev.commit.value };
         patch.params = params;
-        if (ev.commit.code === 'FP-01' && ev.commit.value === 1) {
-          patch.params = { ...DEFAULT_PARAMS };
-          params = { ...DEFAULT_PARAMS };
+        /**
+         * 302 页 17.2.3 参数初始化：
+         *  1   = 恢复出厂参数，不包括电机参数（F1 组铭牌值保留）
+         *  503 = 恢复出厂参数，包括电机参数
+         *  2   = 清除记录信息
+         *  4 / 501（备份 / 恢复备份）教学未实现，仅作参数镜像，不产生副作用。
+         */
+        if (ev.commit.code === 'FP-01') {
+          const mode = Math.trunc(ev.commit.value);
+          if (mode === 1 || mode === 503) {
+            const restored: Record<string, number> = { ...DEFAULT_PARAMS };
+            if (mode === 1) {
+              for (const [code, value] of Object.entries(params)) {
+                if (code.startsWith('F1-')) restored[code] = value;
+              }
+            }
+            patch.params = restored;
+            params = restored;
+          } else if (mode === 2) {
+            patch.faultHistory = [];
+          }
         }
       }
     }

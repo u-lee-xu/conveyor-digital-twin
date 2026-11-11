@@ -8,7 +8,12 @@
  *  - 11 快速入门 CN-B03：表 4-2 按键、表 4-3 指示灯
  *  - 图 3-9 控制回路端子分布图 / 标准接线图 / 图 4-3 面板部件图
  *
- * 教学子集：只收录有手册默认值依据的功能码，不假装是全量表。
+ * 教学子集：按手册功能码顺序收录有默认值依据的功能码，不假装是全量表。
+ * F0-01 依据 08 用户手册 17.2.9「设置控制模式」；17.1.1 调试流程第 7 步即 F0-01、
+ * 第 9 步才是 F0-02，故 F0 组必须从 F0-01 起翻。
+ * FP-01 依据 302 页 17.2.3「参数初始化」：默认 0，六档 0/1/2/4/501/503，停机更改。
+ * F1-00~F1-05 依据 303 页 17.2.5「电机参数设置」与表 16-8，均为停机更改。
+ * 09 参数手册（全量表）多次抽取返回 127，尚未收录；未收录的码不得凭猜测补默认值。
  * 数值一律十进制书写，便于 websocket-server/mock-addresses.js --check 对照。
  */
 
@@ -30,6 +35,10 @@ export interface Md520Param {
 }
 
 export const MD520_PARAMS: Md520Param[] = [
+  /** 08 用户手册 17.2.9：默认 2（V/f）；0=SVC 无速度传感器矢量、1=FVC 带 PG 闭环、2=V/f 开环。
+   *  本虚拟面板只做参数镜像，不实现矢量控制算法，运行中不可改。 */
+  { code: 'F0-01', group: 'F0', index: 1, name: '第1电机控制方式', defaultValue: 2, min: 0, max: 2, decimals: 0, unit: '',
+    options: { 0: 'SVC', 1: 'FVC', 2: 'V/f' }, runLocked: true },
   { code: 'F0-02', group: 'F0', index: 2, name: '运行指令选择', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '操作面板', 1: '端子', 2: '通信', 3: '自定义' } },
   /** 默认值 0 按通用变频器惯例；MD520 手册抽取片段未给出 F0-03 出厂值，待参数手册核对 */
@@ -39,6 +48,16 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F0-10', group: 'F0', index: 10, name: '最大频率', defaultValue: 50, min: 50, max: 599, decimals: 2, unit: 'Hz', runLocked: true },
   { code: 'F0-17', group: 'F0', index: 17, name: '加速时间1', defaultValue: 20, min: 0, max: 6500, decimals: 1, unit: 's' },
   { code: 'F0-18', group: 'F0', index: 18, name: '减速时间1', defaultValue: 20, min: 0, max: 6500, decimals: 1, unit: 's' },
+  /** F1-00~F1-05 电机铭牌参数：08 用户手册 30 章参数表，调试流程 17.1.1 第 5 步整组设定。
+   *  均为「停机更改」，虚拟面板只作参数镜像，不参与矢量辨识与输出计算。 */
+  { code: 'F1-00', group: 'F1', index: 0, name: '电机类型选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
+    options: { 0: '普通异步电机', 1: '变频异步电机', 2: '永磁同步电机',
+      3: '无助磁磁阻电机', 4: '电磁线圈' }, runLocked: true },
+  { code: 'F1-01', group: 'F1', index: 1, name: '电机额定功率', defaultValue: 3.7, min: 0.1, max: 1000, decimals: 1, unit: 'kW', runLocked: true },
+  { code: 'F1-02', group: 'F1', index: 2, name: '电机额定电压', defaultValue: 380, min: 1, max: 2000, decimals: 0, unit: 'V', runLocked: true },
+  { code: 'F1-03', group: 'F1', index: 3, name: '电机额定电流', defaultValue: 9, min: 0.01, max: 655.35, decimals: 2, unit: 'A', runLocked: true },
+  { code: 'F1-04', group: 'F1', index: 4, name: '电机额定频率', defaultValue: 50, min: 0.01, max: 599, decimals: 2, unit: 'Hz', runLocked: true },
+  { code: 'F1-05', group: 'F1', index: 5, name: '电机额定转速', defaultValue: 1460, min: 1, max: 65535, decimals: 0, unit: 'rpm', runLocked: true },
   { code: 'F4-00', group: 'F4', index: 0, name: 'DI1端子功能选择', defaultValue: 1, min: 0, max: 86, decimals: 0, unit: '' },
   { code: 'F4-11', group: 'F4', index: 11, name: '端子命令方式', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '两线式1', 1: '两线式2', 2: '三线式1', 3: '三线式2' } },
@@ -50,7 +69,10 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'FD-00', group: 'FD', index: 0, name: '波特率', defaultValue: 5005, min: 0, max: 6999, decimals: 0, unit: '' },
   { code: 'FD-01', group: 'FD', index: 1, name: 'Modbus数据格式', defaultValue: 0, min: 0, max: 7, decimals: 0, unit: '' },
   { code: 'FD-02', group: 'FD', index: 2, name: '本机地址', defaultValue: 1, min: 1, max: 247, decimals: 0, unit: '' },
-  { code: 'FP-01', group: 'FP', index: 1, name: '参数初始化', defaultValue: 1, min: 0, max: 503, decimals: 0, unit: '' },
+  /** 302 页 17.2.3：默认 0（无操作）；501/503 是手册的特殊档位，不是 0~503 连续量程。 */
+  { code: 'FP-01', group: 'FP', index: 1, name: '参数初始化', defaultValue: 0, min: 0, max: 503, decimals: 0, unit: '',
+    options: { 0: '无操作', 1: '恢复出厂不含电机参数', 2: '清除记录信息',
+      4: '备份用户当前参数', 501: '恢复用户备份参数', 503: '恢复出厂含电机参数' }, runLocked: true },
   { code: 'FP-02', group: 'FP', index: 2, name: '功能参数组显示选择', defaultValue: 63, min: 0, max: 65535, decimals: 0, unit: '' },
   { code: 'U0-00', group: 'U0', index: 0, name: '运行频率', defaultValue: 0, min: 0, max: 655.35, decimals: 2, unit: 'Hz', readOnly: true },
 ];
@@ -63,6 +85,8 @@ export const MD520_GROUPS = Array.from(new Set(MD520_PARAMS.map((p) => p.group))
 
 /** 参数通信地址：高 8 位 = 功能组编号，低 8 位 = 组内序号（通信手册 2.2） */
 export function groupHex(group: string): number {
+  /** FP 组参数通信地址高 8 位是 0x1F（手册 30 章 FP-01 = 0x1F01），第二位不是十六进制数字 */
+  if (group === 'FP') return 0x1f;
   const n = Number.parseInt(group.replace(/^[A-Z]/, ''), 16);
   const prefix = group.charCodeAt(0) - 'A'.charCodeAt(0) + 10; // A=10 ... F=15
   return (prefix << 4) | n;
@@ -78,9 +102,12 @@ export function paramCommAddress(code: string): number {
 export function paramRamAddress(code: string): number {
   const p = MD520_PARAM_MAP[code];
   if (!p) return 0;
-  const high = groupHex(p.group) >> 4;
+  const g = groupHex(p.group);
+  const high = g >> 4;
+  /** 只有 F/A/B/C 组适用高位换算；FP(0x1F)、U(0x1E) 等组直接用参数通信地址 */
+  if (high < 0xa) return (g << 8) | p.index;
   const ramHigh = high === 0xf ? 0 : high - 6;
-  return ((ramHigh << 12) | ((groupHex(p.group) & 0x0f) << 8) | p.index);
+  return ((ramHigh << 12) | ((g & 0x0f) << 8) | p.index);
 }
 
 /**
