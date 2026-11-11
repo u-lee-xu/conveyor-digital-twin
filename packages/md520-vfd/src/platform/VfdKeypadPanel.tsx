@@ -191,6 +191,8 @@ export function VfdKeypadPanel() {
   const params = useVfdStore((s) => s.params);
   const running = useVfdStore((s) => s.running);
   const outputHz = useVfdStore((s) => s.outputHz);
+  const outputCurrent = useVfdStore((s) => s.outputCurrent);
+  const outputPower = useVfdStore((s) => s.outputPower);
   const direction = useVfdStore((s) => s.direction);
   const di = useVfdStore((s) => s.di);
   const doFlags = useVfdStore((s) => s.doFlags);
@@ -510,6 +512,8 @@ export function VfdKeypadPanel() {
             <span>3000H 状态 {status}</span>
             <span>1000H {((externalSetpointHz / (params['F0-10'] || 50)) * 10000).toFixed(0)}</span>
             <span>{MD520_COMM.FREQ2.toString(16).toUpperCase()}H {externalSetpointHz.toFixed(2)}Hz</span>
+            {/* F1-03 额定电流 / F1-01 额定功率驱动的只读监视量 */}
+            <span data-dt-vfd-monitor>{outputCurrent.toFixed(2)}A {outputPower.toFixed(2)}kW</span>
             <span style={{ color: C.ink }}>
               {message || (display.blinkDigit !== null ? `位 ${display.blinkDigit + 1}` : `L${keypad.level}`)}
             </span>

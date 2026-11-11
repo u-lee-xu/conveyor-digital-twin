@@ -46,6 +46,9 @@ export interface VfdSnapshot {
   doFlags: number;
   /** AI1 模拟量数值镜像（V），由 PLC AO 经 100AH 下发 */
   ai1: number;
+  /** 教学近似的输出电流 / 功率，由 F1-03 额定电流、F1-01 额定功率与负载率算出 */
+  outputCurrent: number;
+  outputPower: number;
   faultCode: string;
   engaged: boolean;
 }
@@ -58,6 +61,9 @@ interface VfdStore {
   /** 485 通信给定频率（Hz），来自 1000H 百分比或 7310H 直接频率 */
   externalSetpointHz: number;
   outputHz: number;
+  /** 只读监视量：输出电流(A) / 输出功率(kW)，随 F1 铭牌参数与负载率变化 */
+  outputCurrent: number;
+  outputPower: number;
   di: Record<string, boolean>;
   doFlags: Record<string, boolean>;
   ai1: number;
@@ -129,6 +135,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
   direction: 1,
   externalSetpointHz: NOMINAL_HZ,
   outputHz: 0,
+  outputCurrent: 0,
+  outputPower: 0,
   di: Object.fromEntries(MD520_DI.map((d) => [d.key, false])),
   doFlags: Object.fromEntries(MD520_DO.map((d) => [d.key, false])),
   ai1: 0,
@@ -161,6 +169,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     engaged: false,
     running: false,
     outputHz: 0,
+    outputCurrent: 0,
+    outputPower: 0,
   }),
 
   dispatchKey: (key) => {
@@ -334,10 +344,44 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     const acc = Math.max(0.1, s.params['F0-17']);
     const dec = Math.max(0.1, s.params['F0-18']);
     const goal = running ? Math.min(maxHz, targetHz) : 0;
-    const rate = (goal > s.outputHz ? maxHz / acc : maxHz / dec) * Math.min(delta, 0.05);
-    const outputHz = goal > s.outputHz
-      ? Math.min(goal, s.outputHz + rate)
-      : Math.max(goal, s.outputHz - rate);
+    const dt = Math.min(delta, 0.05);
+
+    // F0-25 加减速基准频率（311 页 17.2.13）：斜坡速率的标尺，
+    // 0 最大频率(F0-10) / 1 设定频率 / 2 固定 100Hz / 3 额定频率(F1-04)。
+    // 默认 0 时与原来的 maxHz/acc 完全一致，不影响既有演示与 CDP 断言。
+    const baseMode = Math.trunc(s.params['F0-25'] ?? 0);
+    const baseHz = baseMode === 1 ? Math.max(0.01, goal)
+      : baseMode === 2 ? 100
+        : baseMode === 3 ? (s.params['F1-04'] || NOMINAL_HZ)
+          : maxHz;
+
+    // F6-10 停机方式（313 页 17.2.17）：0 按 F0-18 减速 / 1 自由停机 / 2 最大能力停机。
+    // F6-14 直流制动时间给自由停机一个短的制动减速段（教学近似，不实现电流闭环）。
+    const stopMode = Math.trunc(s.params['F6-10'] ?? 0);
+    const stopping = !running && goal < s.outputHz;
+    let outputHz: number;
+    if (stopping && stopMode === 1) {
+      const brakeTime = Math.max(0, Number(s.params['F6-14']) || 0);
+      outputHz = brakeTime > 0
+        ? Math.max(goal, s.outputHz - maxHz / Math.max(0.1, brakeTime) * dt)
+        : goal;
+    } else {
+      const seconds = stopping && stopMode === 2 ? Math.max(0.1, dec / 5)
+        : goal > s.outputHz ? acc : dec;
+      const rate = baseHz / seconds * dt;
+      outputHz = goal > s.outputHz
+        ? Math.min(goal, s.outputHz + rate)
+        : Math.max(goal, s.outputHz - rate);
+    }
+
+    // F1-03 额定电流 / F1-01 额定功率参与只读监视量计算：
+    // 空载按 15% 额定电流，负载率随输出频率线性上升（教学近似，非矢量模型）。
+    const load = Math.min(1, outputHz / maxHz);
+    const ratedCurrent = Math.max(0.01, Number(s.params['F1-03']) || 9);
+    const ratedPower = Math.max(0, Number(s.params['F1-01']) || 3.7);
+    const motoring = running || outputHz > 0.01;
+    const outputCurrent = motoring ? ratedCurrent * (0.15 + 0.85 * load) : 0;
+    const outputPower = motoring ? ratedPower * load : 0;
 
     const doFlags = {
       DO1: running,
@@ -350,6 +394,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
 
     set({
       outputHz,
+      outputCurrent,
+      outputPower,
       running,
       command,
       status,
@@ -382,6 +428,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       diFlags: bitFlags(s.di),
       doFlags: doBitFlags(s.doFlags),
       ai1: Math.round(s.ai1 * 100) / 100,
+      outputCurrent: Math.round(s.outputCurrent * 100) / 100,
+      outputPower: Math.round(s.outputPower * 100) / 100,
       faultCode: s.faultCode ?? '',
       engaged: s.engaged,
     };
@@ -402,6 +450,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     };
     const setpointHz = num('VFD_SETPOINT_HZ');
     const outputHz = num('VFD_OUTPUT_HZ');
+    const outputCurrent = num('VFD_CURRENT');
+    const outputPower = num('VFD_POWER');
     const command = num('VFD_COMMAND');
     const status = num('VFD_STATUS');
     const diFlags = num('VFD_DI_FLAGS');
@@ -409,6 +459,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     const ai1 = num('VFD_AI1');
     const ai2 = num('VFD_AI2');
     if (setpointHz !== undefined) patch.externalSetpointHz = setpointHz;
+    if (outputCurrent !== undefined) patch.outputCurrent = outputCurrent;
+    if (outputPower !== undefined) patch.outputPower = outputPower;
     if (outputHz !== undefined) {
       patch.outputHz = outputHz;
       mirrorParam('U0-00', Math.round(outputHz * 100) / 100);
