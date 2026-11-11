@@ -38,3 +38,27 @@ export const MD520_PARAM_BASE = {
 } as const;
 
 export type Md520WordName = keyof typeof MD520_HOLDING_REGISTERS;
+
+/**
+ * 实体 PLC 镜像字地址：MD520 从站寄存器在 S7 / 三菱程序里的落点。
+ * 与 packages/shared/src/services/modbus-websocket.ts > CONNECT_WORDS 的
+ * s7 / mitsubishi 字段逐键同源，由 mock-addresses.js --check > checkWordProtocolChain 锁死。
+ * S7 用 M 区字 MW1000~MW1014，三菱用 D1000~D1014，均避开配药 D120·D121 与布尔点区。
+ */
+export const MD520_PROTOCOL_ADDRESSES = {
+  VFD_SETPOINT: { s7: 'MW1000', mitsubishi: 'D1000' },
+  VFD_RUN_FREQ: { s7: 'MW1001', mitsubishi: 'D1001' },
+  VFD_DI_FLAGS: { s7: 'MW1002', mitsubishi: 'D1002' },
+  VFD_DO_FLAGS: { s7: 'MW1003', mitsubishi: 'D1003' },
+  VFD_AI1: { s7: 'MW1004', mitsubishi: 'D1004' },
+  VFD_COMMAND2: { s7: 'MW1005', mitsubishi: 'D1005' },
+  VFD_DO_CONTROL: { s7: 'MW1006', mitsubishi: 'D1006' },
+  VFD_AO1: { s7: 'MW1007', mitsubishi: 'D1007' },
+  VFD_STATUS1: { s7: 'MW1008', mitsubishi: 'D1008' },
+  VFD_FREQ2: { s7: 'MW1009', mitsubishi: 'D1009' },
+  VFD_COMMAND1: { s7: 'MW1010', mitsubishi: 'D1010' },
+  VFD_STATUS2: { s7: 'MW1011', mitsubishi: 'D1011' },
+  VFD_PARAM_F0_02: { s7: 'MW1012', mitsubishi: 'D1012' },
+  VFD_PARAM_F0_03: { s7: 'MW1013', mitsubishi: 'D1013' },
+  VFD_PARAM_F0_10: { s7: 'MW1014', mitsubishi: 'D1014' },
+} as const;

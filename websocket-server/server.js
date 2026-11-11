@@ -936,14 +936,21 @@ class SimpleS7Client {
     });
   }
 
-  /** 读 32 位 DINT：MDI120 是 nodes7 原生 32 位整数，无需拆字 */
+  /**
+   * 读数值：MDI120 是 nodes7 原生 32 位整数；uint16 单字（MWxxxx）同样由
+   * setTranslationCB 注册后 readAllItems 直接返回 16 位原值，raw=true 不布尔化。
+   */
   async readWords(varNames) {
     return this.readVars(varNames, true);
   }
 
-  /** 写 32 位 DINT：writeVars 原样把数值交给 nodes7.writeItems */
+  /** 写数值：uint16 单字钳到 0~65535，32 位 DINT 仍走 clampDint32 */
   async writeWords(varNames, values) {
-    return this.writeVars(varNames, values.map((v) => clampDint32(v)));
+    const scaled = values.map((v, i) => {
+      const spec = (this.wordVariables || {})[varNames[i]];
+      return spec && spec.type === 'uint16' ? toUnsigned16(v) : clampDint32(v);
+    });
+    return this.writeVars(varNames, scaled);
   }
 
   async writeVar(varName, value) {
@@ -1527,14 +1534,14 @@ class MitsubishiMX {
     } finally { this._unlock(); }
   }
 
-  /** 数值变量 → 两个连续 D 寄存器（D120 低字 / D121 高字） */
+  /** 数值变量 → D 寄存器：uint16 单字 1 个，32 位 DINT 两个连续（低字在前） */
   _wordDevices(name) {
     const spec = (this.wordVariables || {})[name];
     const m = spec && spec.mitsubishi;
     if (!m) return null;
     const base = parseInt(String(m.address).replace(/^D/i, ''), 10);
     if (!Number.isFinite(base)) return null;
-    return [`D${base}`, `D${base + 1}`];
+    return spec.type === 'uint16' ? [`D${base}`] : [`D${base}`, `D${base + 1}`];
   }
 
   /**
@@ -1560,7 +1567,8 @@ class MitsubishiMX {
       for (const name of varNames) {
         const pair = this._wordDevices(name);
         if (!pair) return { success: false, error: `未知数值变量: ${name}` };
-        specs.push({ name, offset: devices.length });
+        const spec = (this.wordVariables || {})[name];
+        specs.push({ name, offset: devices.length, single: spec?.type === 'uint16' });
         devices.push(...pair);
       }
       const raw = await this._sendCommand({ type: 'read-words', devices });
@@ -1571,11 +1579,18 @@ class MitsubishiMX {
       const values = {};
       for (const s of specs) {
         const lo = items[s.offset];
-        const hi = items[s.offset + 1];
-        if (!lo || !hi || !lo.ok || !hi.ok) {
+        if (!lo || !lo.ok) {
           return { success: false, error: `读 D 寄存器失败 (offset=${s.offset})` };
         }
-        values[s.name] = joinDint32(toUnsigned16(lo.value), toUnsigned16(hi.value));
+        if (s.single) {
+          values[s.name] = toUnsigned16(lo.value);
+        } else {
+          const hi = items[s.offset + 1];
+          if (!hi || !hi.ok) {
+            return { success: false, error: `读 D 寄存器高字失败 (offset=${s.offset})` };
+          }
+          values[s.name] = joinDint32(toUnsigned16(lo.value), toUnsigned16(hi.value));
+        }
       }
       return { success: true, values };
     } catch (e) {
@@ -1596,9 +1611,14 @@ class MitsubishiMX {
       for (let i = 0; i < varNames.length; i++) {
         const pair = this._wordDevices(varNames[i]);
         if (!pair) return { success: false, error: `未知数值变量: ${varNames[i]}` };
-        const [low, high] = splitDint32(clampDint32(values[i]));
+        const spec = (this.wordVariables || {})[varNames[i]];
         devices.push(...pair);
-        words.push(toSigned16(low), toSigned16(high));
+        if (spec?.type === 'uint16') {
+          words.push(toSigned16(toUnsigned16(values[i])));
+        } else {
+          const [low, high] = splitDint32(clampDint32(values[i]));
+          words.push(toSigned16(low), toSigned16(high));
+        }
       }
       const result = await this._sendCommand({ type: 'write-batch', devices, values: words });
       if (result.ok) return { success: true };
