@@ -6,6 +6,7 @@
 @source "../../pneumatic-robot/src";
 @source "../../traffic-light/src";
 @source "../../auto-dispensing/src";
+@source "../../md520-vfd/src";
 
 /* 全局样式 */
 * {

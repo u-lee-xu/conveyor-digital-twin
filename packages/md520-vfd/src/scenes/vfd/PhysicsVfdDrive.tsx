@@ -1,25 +1,25 @@
 /**
- * 变频器驱动台：第 7 个部件展台的裸视图组件。
+ * MD520 独立场景主装置：变频器柜 + 三相电机 + 短皮带。
  *
- * 教学演示装置，不参与分拣业务：柜体（LED 频率牌 + 运行/故障/通讯三灯）、
- * 三相电机（散热环、外露风扇、联轴器）、短皮带与双滚筒。
+ * 从传送带分拣的第 7 个部件展台整体迁入独立设备包，几何/尺寸/材质口径不变：
+ * 柜体（LED 频率牌 + 运行/故障/通讯三灯）、三相电机（散热环、外露风扇、联轴器）、
+ * 短皮带与双滚筒。
  *
  * 驱动口径（用户 2026-11-11 定稿）：动画只认
- * `useVfdStore.getState().outputFactor()` = 输出频率 / 50Hz，**不受
- * conveyorRunning 门控**；整机启停真值仍归 useDeviceStore / CONVEYOR 线圈，
- * 整机带速仍走带 engaged 保底的 speedFactor()。观众端不挂 VfdLink，
- * outputHz 由 exportSnapshot/applyBroadcast 每 100ms 镜像，本组件同样跟随。
+ * `useVfdStore.getState().outputFactor()` = 输出频率 / 50Hz，不受任何其它场景的
+ * 启停线圈门控。观众端不挂 VfdLink，outputHz 由 exportSnapshot/applyBroadcast
+ * 每 100ms 镜像，本组件同样跟随。
  *
- * 纯视觉装置，不挂 RigidBody / Collider：展台关闭地面，也不参与物理分拣闭环。
- * 可见尺寸全部派生自 VFD_DRIVE_DETAIL，几何走共享单例，颜色走 VISUAL。
+ * 纯视觉装置，不挂 RigidBody / Collider。可见尺寸全部派生自 VFD_DRIVE_DETAIL，
+ * 几何走本包共享单例，颜色走本包工业视觉令牌。
  */
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isViewerRuntime } from '@digital-twin/shared';
-import { geometries, materials } from '../../../components/scene/shared';
+import { geometries, materials } from '../../components/scene/shared';
 import { SURFACE_GAP, VFD_DRIVE_DETAIL as V } from '../constants';
-import { useVfdStore } from '../../../stores/useVfdStore';
+import { useVfdStore } from '../../stores/useVfdStore';
 
 /** 柜门三只状态灯的亮态材质：运行绿 / 故障红 / 通讯蓝 */
 const LED_ON = [materials.vfdLedRun, materials.vfdLedFault, materials.vfdLedComm] as const;

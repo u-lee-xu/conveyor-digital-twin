@@ -3,7 +3,6 @@ import { PlcConnectionPanel, modbusService, type PlcConnConfig } from '@digital-
 import { useDeviceStore } from '../stores';
 
 const PRESETS: { label: string; config: PlcConnConfig }[] = [
-  { label: '传送带虚拟 PLC (Modbus)', config: { host: '127.0.0.1', port: 1503, protocol: 'modbus' } },
   { label: '汇川H5U (Modbus)', config: { host: '127.0.0.1', port: 502, protocol: 'modbus' } },
   { label: '汇川EASY (Modbus)', config: { host: '127.0.0.1', port: 502, protocol: 'modbus' } },
   { label: 'S7-1200/1500 仿真', config: { host: '127.0.0.1', port: 102, protocol: 's7', rack: 0, slot: 1 } },

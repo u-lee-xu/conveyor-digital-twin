@@ -23,6 +23,7 @@ const server = read('../../../websocket-server/server.js');
 const relay = read('../../../websocket-server/broadcast.js');
 const mockPlc = read('../../../websocket-server/mock-dispensing-server.js');
 const conveyorPlc = read('../../../websocket-server/mock-conveyor-server.js');
+const vfdPlc = read('../../../websocket-server/mock-vfd-server.js');
 const edge = read('../../../websocket-server/edge-broadcast.json');
 const shellHtml = read('../../platform/index.html');
 const platformVite = read('../../platform/vite.config.ts');
@@ -56,11 +57,14 @@ describe('内部服务绑定：只监听 127.0.0.1', () => {
     expect(mockPlc).toContain("httpServer.listen(HTTP_PORT, '127.0.0.1'");
   });
 
-  it('传送带场景独立虚拟 PLC 也只绑回环，且两个场景不共用寄存器区', () => {
+  it('三个场景虚拟 PLC 各绑回环，变频器从站只在独立 PLC', () => {
     expect(conveyorPlc).toContain("host: '127.0.0.1'");
     expect(conveyorPlc).toContain("httpServer.listen(HTTP_PORT, '127.0.0.1'");
-    expect(conveyorPlc).toContain('vfdPlcScan');
-    expect(conveyorPlc).not.toContain('DISPENSING_ADDRESSES');
+    expect(conveyorPlc).not.toContain('vfdPlcScan');
+    expect(conveyorPlc).not.toContain('isVfdAddress');
+    expect(vfdPlc).toContain('vfdPlcScan');
+    expect(vfdPlc).toContain("host: '127.0.0.1'");
+    expect(vfdPlc).toContain("httpServer.listen(HTTP_PORT, '127.0.0.1'");
     expect(mockPlc).not.toContain('isVfdAddress');
     expect(mockPlc).not.toContain('vfdWords');
   });

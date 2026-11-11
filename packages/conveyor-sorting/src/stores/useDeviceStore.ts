@@ -161,8 +161,7 @@ const initialState = {
 function getInitialPlcConfig() {
   const fallback = {
     host: '127.0.0.1',
-    // 传送带场景独立虚拟 PLC（含 MD520 变频器从站）；接实体 PLC 时从连接预设切换
-    port: 1503,
+    port: 502,
     unitId: 1,
     protocol: 'modbus' as const,
     rack: 0,

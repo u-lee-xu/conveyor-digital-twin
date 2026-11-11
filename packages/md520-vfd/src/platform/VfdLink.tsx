@@ -1,9 +1,9 @@
 /**
  * MD520 虚拟变频器常驻链路（平台壳 effects，主控专用）。
  *
- * 场景独立：变频器 485 从站寄存器区在 mock-conveyor-server.js（传送带场景专属 PLC :1503），
- * 与自动配药虚拟 PLC :1505 完全分离。PLC 参考程序以 100ms 主动写命令 / 给定、读状态联锁；
- * 本链路每 300ms 读写同一份寄存器，形成「PLC → 变频器 → 3D」与「变频器 → PLC」双向闭环。
+ * 场景独立：变频器是自己的设备包，485 从站寄存器区在专属 mock-vfd-server.js :1507，
+ * 与自动配药 PLC :1505、传送带 PLC :1503 完全分离。PLC 参考程序以 100ms 主动写命令 /
+ * 给定、读状态联锁；本链路每 300ms 读写同一份寄存器，形成双向闭环。
  *
  * 1. 每帧推进 F0-17/F0-18 加减速斜坡，产出频率倍率给 3D 带速消费。
  * 2. 每 300ms 读 2000H / 1000H / 7310H / 1008H / 100AH / 2001H / 7044H，
@@ -15,7 +15,7 @@
  * 观众端不挂载 effects，参数与状态走 exportSnapshot / applyBroadcast 数值镜像。
  */
 import { useEffect } from 'react';
-import { modbusService } from '@digital-twin/shared';
+import { modbusService, isViewerRuntime } from '@digital-twin/shared';
 import { useVfdStore } from '../stores/useVfdStore';
 import { MD520_SOURCE } from '../vfd/md520Spec';
 
@@ -35,6 +35,8 @@ const signed16 = (v: number) => (v > 0x7fff ? v - 0x10000 : v);
 
 export function VfdLink() {
   useEffect(() => {
+    /** 观众只读：不建 PLC 通道、不推进本地斜坡，输出频率全靠快照镜像 */
+    if (isViewerRuntime()) return;
     let raf = 0;
     let last = performance.now();
     const loop = (t: number) => {
@@ -48,6 +50,7 @@ export function VfdLink() {
   }, []);
 
   useEffect(() => {
+    if (isViewerRuntime()) return;
     let busy = false;
     let lastParams = '';
     const poll = async () => {
