@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useConveyorScoring } from '../hooks/useConveyorScoring';
+import { VfdLink } from './VfdLink';
 import { useDeviceStore } from '../stores';
 import { readMaterialSlideDebug } from '../scenes/conveyor-sorting/materialSlideDebug';
 
@@ -20,5 +21,5 @@ export function ConveyorDeviceEffects() {
     return () => { delete (window as unknown as { __DEBUG__?: unknown }).__DEBUG__; };
   }, []);
 
-  return null;
+  return <VfdLink />;
 }

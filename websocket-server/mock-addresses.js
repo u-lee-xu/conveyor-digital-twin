@@ -70,6 +70,28 @@ const DISPENSING_WORDS = {
 };
 
 /**
+ * MD520 变频器 485 专用参数通信地址（16 位单字，与配药 DINT 完全分离）。
+ * 依据《MD520系列通用变频器通信手册-CN-B03》2.3 表 2-1/2-2。
+ * 十进制书写，与前端 constants/md520-addresses.ts 及 shared CONNECT_WORDS 三处同源。
+ */
+const VFD_REGISTERS = {
+  VFD_SETPOINT: 4096,     // 1000H
+  VFD_RUN_FREQ: 4097,     // 1001H
+  VFD_DI_FLAGS: 4104,     // 1008H
+  VFD_DO_FLAGS: 4105,     // 1009H
+  VFD_COMMAND2: 8192,     // 2000H
+  VFD_DO_CONTROL: 8193,   // 2001H
+  VFD_STATUS1: 12288,     // 3000H
+  VFD_FREQ2: 29456,       // 7310H
+};
+
+const VFD_WORDS = Object.fromEntries(
+  Object.entries(VFD_REGISTERS).map(([name, address]) => [
+    name, { type: 'uint16', modbus: { address, words: 1 } },
+  ]),
+);
+
+/**
  * 编码器 / 丝杆 / 速度换算尺度（网关侧单一来源）。
  *
  * 增量式编码器 1024 脉冲/转（A/B 相 → PLC 高速计数器 C0），丝杆导程 20mm/转：
@@ -297,6 +319,50 @@ function checkViewerIsolation() {
   return true;
 }
 
+/** MD520 485 单字链路：前端地址表 / shared 数值通道 / 网关单字分支 / 虚拟 PLC / 观众快照 */
+function checkVfdChain() {
+  const fs = require('fs');
+  const path = require('path');
+  const targets = {
+    spec: '../packages/conveyor-sorting/src/constants/md520-addresses.ts',
+    shared: '../packages/shared/src/services/modbus-websocket.ts',
+    server: './server.js',
+    mockPlc: './mock-dispensing-server.js',
+    index: '../packages/conveyor-sorting/src/index.ts',
+  };
+  const required = [
+    [targets.spec, 'VFD_SETPOINT: 4096'],
+    [targets.spec, 'VFD_COMMAND2: 8192'],
+    [targets.spec, 'VFD_STATUS1: 12288'],
+    [targets.spec, 'VFD_FREQ2: 29456'],
+    [targets.shared, 'CONNECT_WORDS'],
+    [targets.shared, 'readWords'],
+    [targets.shared, 'writeWord'],
+    [targets.server, "'uint16'"],
+    [targets.server, 'spec.type ==='],
+    [targets.mockPlc, 'isVfdAddress'],
+    [targets.index, 'VFD_OUTPUT_HZ'],
+  ];
+  for (const [file, token] of required) {
+    const abs = path.resolve(__dirname, file);
+    if (!fs.existsSync(abs)) {
+      console.error(`[check][md520] ❌ 缺文件 ${file}`);
+      return false;
+    }
+    if (!fs.readFileSync(abs, 'utf8').includes(token)) {
+      console.error(`[check][md520] ❌ ${file} 缺 ${token}`);
+      return false;
+    }
+  }
+  const words = Object.values(VFD_WORDS);
+  if (words.some((w) => w.type !== 'uint16' || w.modbus.words !== 1)) {
+    console.error('[check][md520] ❌ VFD_WORDS 必须全部是单字 uint16');
+    return false;
+  }
+  console.log(`[check][md520] ✅ 485 单字链路 ${required.length} 处接线齐全，${words.length} 个专用寄存器`);
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -309,9 +375,11 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkDintGateway() && ok;
   ok = checkEncoderScale() && ok;
   ok = checkViewerIsolation() && ok;
+  ok = checkVfdChain() && ok;
   process.exit(ok ? 0 : 1);
 }
 
 module.exports = {
   COAL_ADDRESSES, DISPENSING_ADDRESSES, DISPENSING_REGISTERS, DISPENSING_WORDS, ENCODER_SCALE,
+  VFD_REGISTERS, VFD_WORDS,
 };

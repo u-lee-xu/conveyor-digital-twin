@@ -285,14 +285,26 @@ function scan() {
 
 setInterval(scan, 100);
 
+/**
+ * MD520 变频器 485 专用参数：通用 16 位保持寄存器。
+ * 地址段 0x1000~0xF0FF（1000H 设定值 / 2000H 控制命令 / 3000H 状态 / 7310H 频率2 / F0xx 功能码），
+ * 与配药 HR120·HR121 的 32 位 DINT 完全分离；越界写入静默忽略，不污染线圈或其它段。
+ */
+const vfdWords = new Map();
+const VFD_ADDR_MIN = 0x1000;
+const VFD_ADDR_MAX = 0xf0ff;
+const isVfdAddress = (addr) => Number.isInteger(addr) && addr >= VFD_ADDR_MIN && addr <= VFD_ADDR_MAX;
+
 const vector = {
   getCoil: (addr) => !!coils[addr],
   setCoil: (addr, value) => { coils[addr] = !!value; },
   getDiscreteInput: () => false,
-  /** FC03 读 HR120/HR121：逐字返回 32 位 DINT 的低/高 16 位 */
+  /** FC03 读 HR120/HR121（DINT）或 MD520 单字寄存器 */
   getHoldingRegister: (addr) => {
     const i = addr - R.ENCODER_PULSES;
-    return (i === 0 || i === 1) ? encoderWords[i] : 0;
+    if (i === 0 || i === 1) return encoderWords[i];
+    if (isVfdAddress(addr)) return vfdWords.get(addr) ?? 0;
+    return 0;
   },
   /** FC06 写单个字（兼容外部单点写入） */
   setRegister: (addr, value) => {
@@ -300,12 +312,21 @@ const vector = {
     if (i === 0 || i === 1) {
       encoderWords[i] = toUnsigned16(value);
       markEncoderFeedback();
+      return;
     }
+    if (isVfdAddress(addr)) vfdWords.set(addr, toUnsigned16(value));
   },
-  /** FC16 网关批量写：两个字一次原子提交，避免逐字写入产生撕裂值 */
+  /** FC16 网关批量写：DINT 两个字原子提交；MD520 单字逐址写入 */
   setRegisterArray: (addr, words) => {
     if (addr === R.ENCODER_PULSES && Array.isArray(words) && words.length >= 2) {
       writeEncoderWords(words);
+      return;
+    }
+    if (isVfdAddress(addr) && Array.isArray(words)) {
+      words.forEach((w, i) => {
+        const a = addr + i;
+        if (isVfdAddress(a)) vfdWords.set(a, toUnsigned16(w));
+      });
     }
   },
 };
@@ -346,6 +367,7 @@ const httpServer = http.createServer((req, res) => {
         feedbackAgeMs: lastEncoderWriteAt ? Date.now() - lastEncoderWriteAt : null,
       },
       coils: status,
+      vfd: Object.fromEntries([...vfdWords.entries()].map(([addr, value]) => [addr, value])),
     }));
   } else if (url.pathname === '/preset') {
     const a = parseInt(url.searchParams.get('A') || '', 10);

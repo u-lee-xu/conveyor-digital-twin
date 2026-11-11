@@ -3,6 +3,7 @@ import { modbusService } from '@digital-twin/shared';
 import { ConveyorSortingSceneContent } from './scenes/conveyor-sorting/SceneContent';
 import { ConveyorSceneWrapper } from './platform/ConveyorSceneWrapper';
 import { useDeviceStore } from './stores';
+import { useVfdStore } from './stores/useVfdStore';
 import { buildHelpContent } from './constants/plc-addresses';
 import { SCENE_CAMERA } from './scenes/conveyor-sorting/constants';
 import { ManualModePanel } from './platform/ManualModePanel';
@@ -48,9 +49,14 @@ export const conveyorDevice: DeviceDefinition = {
   useModeState: useConveyorModeState,
   onModeChange: () => {
     useDeviceStore.getState().setScoringRunning(false);
+    // 离开仿真模式即解除变频器对带速的接管，其它模式保持原有额定带速
+    useVfdStore.getState().setEngaged(false);
     disconnectIfNeeded();
   },
-  onCleanup: disconnectIfNeeded,
+  onCleanup: () => {
+    useVfdStore.getState().setEngaged(false);
+    disconnectIfNeeded();
+  },
   /** 观众只读镜像：广播快照（PLC 变量名→布尔）→ useDeviceStore */
   applyBroadcast: (v: Record<string, boolean | number>) => {
     const s = useDeviceStore.getState();
@@ -75,12 +81,31 @@ export const conveyorDevice: DeviceDefinition = {
       green: !!v['SIGNAL_TOWER_GREEN'],
       yellow: !!v['SIGNAL_TOWER_YELLOW'],
     });
+    // MD520 数值快照：观众端只读跟随，绝不自建 PLC 通道
+    useVfdStore.getState().applyBroadcast(v);
   },
   /** 主控上报：与 applyBroadcast 键名一一对应，演示模式同样可同步 */
   exportSnapshot: () => {
     const s = useDeviceStore.getState();
+    const vfdState = useVfdStore.getState();
+    const vfd = vfdState.snapshot();
+    const p = vfdState.params;
     return {
       CONVEYOR: s.conveyorRunning,
+      VFD_SETPOINT_HZ: vfd.setpointHz,
+      VFD_OUTPUT_HZ: vfd.outputHz,
+      VFD_COMMAND: vfd.command,
+      VFD_STATUS: vfd.status,
+      VFD_DI_FLAGS: vfd.diFlags,
+      VFD_DO_FLAGS: vfd.doFlags,
+      VFD_FAULT: vfd.faultCode ? 1 : 0,
+      VFD_ENGAGED: vfd.engaged ? 1 : 0,
+      VFD_AI1: vfdState.ai1,
+      VFD_AI2: vfdState.ai2,
+      VFD_SOURCE: p['F0-02'],
+      VFD_FREQ_SOURCE: p['F0-03'],
+      VFD_PRESET_HZ: p['F0-08'],
+      VFD_MAX_HZ: p['F0-10'],
       FEED_CYLINDER_VALVE: s.cylinders.feed.extended,
       SORTING1_CYLINDER_VALVE: s.cylinders.sorting1.extended,
       SORTING2_CYLINDER_VALVE: s.cylinders.sorting2.extended,
