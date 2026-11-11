@@ -106,7 +106,7 @@ describe('三处地址表同源：前端 spec / shared 数值通道 / 网关白�
       expect(gw[name]).toBe(address);
       expect(spec).toContain(`${name}: ${address}`);
       expect(shared).toContain(
-        `${name}: { type: 'uint16', modbus: { address: ${address}, words: 1 } }`,
+        `${name}: { type: 'uint16', modbus: { address: ${address}, words: 1 }`,
       );
     }
   });

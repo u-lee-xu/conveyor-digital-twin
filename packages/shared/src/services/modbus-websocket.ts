@@ -52,22 +52,27 @@ export const MODBUS_ADDRESSES = {
  * 三处逐键同源，由 mock-addresses.js --check > checkVfdChain() 锁死。
  * 读写分离：PLC 参考程序只写命令 / 给定，虚拟变频器只写状态 / 运行频率 / DO 标志。
  */
+/**
+ * 三协议地址：modbus 是 MD520 从站真实寄存器；s7 / mitsubishi 是「实体 PLC 里
+ * 用来镜像这些寄存器的字地址」教学映射（现场 PLC 程序需按此表把值搬到对应 M/D 区）。
+ * S7 用 M 区字 MW1000~MW1014，三菱用 D1000~D1014，都避开配药 D120·D121 与布尔点区。
+ */
 export const CONNECT_WORDS = {
-  VFD_SETPOINT: { type: 'uint16', modbus: { address: 4096, words: 1 } },     // 1000H
-  VFD_RUN_FREQ: { type: 'uint16', modbus: { address: 4097, words: 1 } },     // 1001H
-  VFD_DI_FLAGS: { type: 'uint16', modbus: { address: 4104, words: 1 } },     // 1008H
-  VFD_DO_FLAGS: { type: 'uint16', modbus: { address: 4105, words: 1 } },     // 1009H
-  VFD_AI1: { type: 'uint16', modbus: { address: 4106, words: 1 } },          // 100AH
-  VFD_COMMAND2: { type: 'uint16', modbus: { address: 8192, words: 1 } },     // 2000H
-  VFD_DO_CONTROL: { type: 'uint16', modbus: { address: 8193, words: 1 } },   // 2001H
-  VFD_AO1: { type: 'uint16', modbus: { address: 8194, words: 1 } },          // 2002H
-  VFD_STATUS1: { type: 'uint16', modbus: { address: 12288, words: 1 } },     // 3000H
-  VFD_FREQ2: { type: 'uint16', modbus: { address: 29456, words: 1 } },       // 7310H
-  VFD_COMMAND1: { type: 'uint16', modbus: { address: 29457, words: 1 } },    // 7311H
-  VFD_STATUS2: { type: 'uint16', modbus: { address: 28740, words: 1 } },     // 7044H
-  VFD_PARAM_F0_02: { type: 'uint16', modbus: { address: 61442, words: 1 } }, // F002H
-  VFD_PARAM_F0_03: { type: 'uint16', modbus: { address: 61443, words: 1 } }, // F003H
-  VFD_PARAM_F0_10: { type: 'uint16', modbus: { address: 61450, words: 1 } }, // F00AH
+  VFD_SETPOINT: { type: 'uint16', modbus: { address: 4096, words: 1 }, s7: { address: 'MW1000', words: 1 }, mitsubishi: { address: 'D1000', words: 1 } },     // 1000H
+  VFD_RUN_FREQ: { type: 'uint16', modbus: { address: 4097, words: 1 }, s7: { address: 'MW1001', words: 1 }, mitsubishi: { address: 'D1001', words: 1 } },     // 1001H
+  VFD_DI_FLAGS: { type: 'uint16', modbus: { address: 4104, words: 1 }, s7: { address: 'MW1002', words: 1 }, mitsubishi: { address: 'D1002', words: 1 } },     // 1008H
+  VFD_DO_FLAGS: { type: 'uint16', modbus: { address: 4105, words: 1 }, s7: { address: 'MW1003', words: 1 }, mitsubishi: { address: 'D1003', words: 1 } },     // 1009H
+  VFD_AI1: { type: 'uint16', modbus: { address: 4106, words: 1 }, s7: { address: 'MW1004', words: 1 }, mitsubishi: { address: 'D1004', words: 1 } },          // 100AH
+  VFD_COMMAND2: { type: 'uint16', modbus: { address: 8192, words: 1 }, s7: { address: 'MW1005', words: 1 }, mitsubishi: { address: 'D1005', words: 1 } },     // 2000H
+  VFD_DO_CONTROL: { type: 'uint16', modbus: { address: 8193, words: 1 }, s7: { address: 'MW1006', words: 1 }, mitsubishi: { address: 'D1006', words: 1 } },   // 2001H
+  VFD_AO1: { type: 'uint16', modbus: { address: 8194, words: 1 }, s7: { address: 'MW1007', words: 1 }, mitsubishi: { address: 'D1007', words: 1 } },          // 2002H
+  VFD_STATUS1: { type: 'uint16', modbus: { address: 12288, words: 1 }, s7: { address: 'MW1008', words: 1 }, mitsubishi: { address: 'D1008', words: 1 } },     // 3000H
+  VFD_FREQ2: { type: 'uint16', modbus: { address: 29456, words: 1 }, s7: { address: 'MW1009', words: 1 }, mitsubishi: { address: 'D1009', words: 1 } },       // 7310H
+  VFD_COMMAND1: { type: 'uint16', modbus: { address: 29457, words: 1 }, s7: { address: 'MW1010', words: 1 }, mitsubishi: { address: 'D1010', words: 1 } },    // 7311H
+  VFD_STATUS2: { type: 'uint16', modbus: { address: 28740, words: 1 }, s7: { address: 'MW1011', words: 1 }, mitsubishi: { address: 'D1011', words: 1 } },     // 7044H
+  VFD_PARAM_F0_02: { type: 'uint16', modbus: { address: 61442, words: 1 }, s7: { address: 'MW1012', words: 1 }, mitsubishi: { address: 'D1012', words: 1 } }, // F002H
+  VFD_PARAM_F0_03: { type: 'uint16', modbus: { address: 61443, words: 1 }, s7: { address: 'MW1013', words: 1 }, mitsubishi: { address: 'D1013', words: 1 } }, // F003H
+  VFD_PARAM_F0_10: { type: 'uint16', modbus: { address: 61450, words: 1 }, s7: { address: 'MW1014', words: 1 }, mitsubishi: { address: 'D1014', words: 1 } }, // F00AH
 } as const;
 
 export const S7_VARIABLES = {
@@ -395,6 +400,7 @@ export class ModbusService {
           rack: config.rack || 0,
           slot: config.slot || 1,
           variables: S7_VARIABLES,
+          wordVariables: CONNECT_WORDS,
         });
         if (result.success) {
           this.consecutiveErrors = 0;
@@ -407,6 +413,7 @@ export class ModbusService {
           protocol: 'mitsubishi',
           host: config.host,
           port: config.port || 0,
+          wordVariables: CONNECT_WORDS,
         });
         if (result.success) {
           this.consecutiveErrors = 0;

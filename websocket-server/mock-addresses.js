@@ -382,7 +382,7 @@ function checkVfdChain() {
   for (const [name, address] of Object.entries(VFD_REGISTERS)) {
     const pairs = [
       [targets.spec, `${name}: ${address}`],
-      [targets.shared, `${name}: { type: 'uint16', modbus: { address: ${address}, words: 1 } }`],
+      [targets.shared, `${name}: { type: 'uint16', modbus: { address: ${address}, words: 1 }`],
     ];
     for (const [file, token] of pairs) {
       if (!textOf(file).includes(token)) {
@@ -442,6 +442,50 @@ function checkVfdIsolation() {
   return true;
 }
 
+/**
+ * 三协议 uint16 单字通道：CONNECT_WORDS 的 modbus / s7 / mitsubishi 三处同源，
+ * connect 三个协议分支都下发 wordVariables，网关 S7 与三菱按 spec.type 分流读写。
+ */
+function checkWordProtocolChain() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  const shared = readFile('../packages/shared/src/services/modbus-websocket.ts');
+  const spec = readFile('../packages/md520-vfd/src/constants/md520-addresses.ts');
+  const server = readFile('./server.js');
+  const frames = (shared.match(/wordVariables: CONNECT_WORDS/g) || []).length;
+  if (frames !== 3) {
+    console.error(`[check][word-protocol] ❌ connect 三个协议分支都须下发 wordVariables，实际 ${frames}`);
+    return false;
+  }
+  for (const [name, address] of Object.entries(VFD_REGISTERS)) {
+    const m = spec.match(new RegExp(`${name}: \\{ s7: '(\\w+)', mitsubishi: '(D\\d+)' \\}`));
+    if (!m) {
+      console.error(`[check][word-protocol] ❌ 前端协议地址表缺 ${name}`);
+      return false;
+    }
+    const token = `${name}: { type: 'uint16', modbus: { address: ${address}, words: 1 }, s7: { address: '${m[1]}', words: 1 }, mitsubishi: { address: '${m[2]}', words: 1 } }`;
+    if (!shared.includes(token)) {
+      console.error(`[check][word-protocol] ❌ shared 缺 ${token}`);
+      return false;
+    }
+  }
+  const need = [
+    "spec && spec.type === 'uint16' ? toUnsigned16(v) : clampDint32(v)",
+    "return spec.type === 'uint16' ? [`D${base}`] :",
+    "spec?.type === 'uint16'",
+    "word && word.s7 && word.s7.address",
+  ];
+  for (const token of need) {
+    if (!server.includes(token)) {
+      console.error(`[check][word-protocol] ❌ 网关缺 ${token}`);
+      return false;
+    }
+  }
+  console.log(`[check][word-protocol] ✅ 三协议 uint16 单字链路 ${Object.keys(VFD_REGISTERS).length} 个寄存器同源`);
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -456,6 +500,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkViewerIsolation() && ok;
   ok = checkVfdChain() && ok;
   ok = checkVfdIsolation() && ok;
+  ok = checkWordProtocolChain() && ok;
   process.exit(ok ? 0 : 1);
 }
 
