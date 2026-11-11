@@ -314,17 +314,27 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(panel).toContain('MENU_ICONS');
   });
 
-  it('按键区：圆形导航环 + 左右竖长键 + 斜置 RUN/STOP + MF.K', () => {
+  it('按键区：SVG 凹弧四瓣 + 双层轮廓 + 30° 斜键 + 倒梯形 MF.K', () => {
     expect(panel).toContain('data-dt-vfd-nav');
     expect(panel).toContain("width: 132, height: 132, borderRadius: '50%'");
-    expect(panel).toContain("borderRadius: '60px 60px 8px 8px'");   // 上扇形
-    expect(panel).toContain("borderRadius: '8px 8px 60px 60px'");   // 下扇形
-    expect(panel).toContain("borderRadius: '60px 8px 8px 60px'");   // 左扇形
-    expect(panel).toContain("borderRadius: '8px 60px 60px 8px'");   // 右扇形
+    // 真机按键区没有外圈轮廓，四瓣自己围成圆环
+    expect(panel).not.toContain('boxShadow: \'inset 0 2px 5px rgba(50,64,78,.16)\'');
+    expect(panel).toContain('function KeyOutline');
+    expect(panel).toContain('const PATHS: Record<KeyShape');
+    // 四瓣内侧是凹弧 Q 曲线，双层描边
+    expect(panel).toContain('up: (w, h) =>');
+    expect(panel).toContain('down: (w, h) =>');
+    expect(panel).toContain('left: (w, h) =>');
+    expect(panel).toContain('right: (w, h) =>');
+    expect(panel).toContain('stroke="rgba(255,255,255,.88)"');
+    ['up', 'down', 'left', 'right', 'ok', 'tall', 'tilt', 'mfk'].forEach((s) => {
+      expect(panel).toContain(`'${s}'`);
+    });
     expect(panel).toContain("borderRadius: '50%', fontSize: 12, zIndex: 2"); // 中央 OK
-    expect(panel).toContain("width: 40, height: 72, borderRadius: 12");     // PRG / MENU 竖长键
-    expect(panel).toContain("transform: 'rotate(-22deg)'");
-    expect(panel).toContain("transform: 'rotate(22deg)'");
+    expect(panel).toContain('shape="tall" w={36} h={80}');                   // 竖长键
+    expect(panel).toContain("transform: 'rotate(-30deg)'");
+    expect(panel).toContain("transform: 'rotate(30deg)'");
+    expect(panel).toContain('shape="mfk" w={62} h={26}');                    // 倒梯形 MF.K
     expect(panel).toContain('MF. K');
   });
 
