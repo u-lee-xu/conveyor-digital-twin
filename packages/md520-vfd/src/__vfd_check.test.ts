@@ -327,7 +327,8 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(panel).toContain('down: (w, h) =>');
     expect(panel).toContain('left: (w, h) =>');
     expect(panel).toContain('right: (w, h) =>');
-    expect(panel).toContain('stroke="rgba(255,255,255,.88)"');
+    // 双层凸缘的静止态白色内描边仍在（按下态才切换更暗的高光）
+    expect(panel).toContain("'rgba(255,255,255,.88)'");
     ['up', 'down', 'left', 'right', 'ok', 'tall', 'tilt', 'mfk'].forEach((s) => {
       expect(panel).toContain(`'${s}'`);
     });
@@ -432,5 +433,49 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(s.params['U0-00']).toBe(12);
     expect(s.engaged).toBe(true);
     expect(s.speedFactor()).toBeCloseTo(12 / 50, 4);
+  });
+});
+
+describe('按键触感（按压动画）防回退', () => {
+  const panel = src('platform/VfdKeypadPanel.tsx');
+  const visible = panel.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  it('真机 10 键与菜单键都走 pointer 按压状态', () => {
+    expect(visible).toContain('const [pressed, setPressed] = useState(false)');
+    expect(visible).toContain('const [menuPressed, setMenuPressed] = useState(false)');
+    for (const handler of ['onPointerDown', 'onPointerUp', 'onPointerLeave', 'onPointerCancel', 'onBlur']) {
+      expect(visible).toContain(handler);
+    }
+    expect(panel).toContain('data-dt-vfd-key-pressed');
+  });
+
+  it('按下态下沉缩放压暗，松开带过冲回弹', () => {
+    expect(panel).toContain("const KEY_PRESS_TRANSFORM = ' translateY(2px) scale(0.96)'");
+    expect(panel).toContain('cubic-bezier(.2,.9,.3,1.35)');
+    expect(panel).toContain("filter: down ? 'brightness(0.93)' : 'none'");
+    expect(panel).toContain('transform: down ? baseTransform + KEY_PRESS_TRANSFORM : baseTransform');
+  });
+
+  it('静止态 transform 不被改写：斜键 30° / 四瓣居中的 CDP 断言不受影响', () => {
+    expect(panel).toContain("const baseTransform = typeof style.transform === 'string' ? style.transform : ''");
+    expect(panel).toContain("transform: menuPressed && !readOnly ? KEY_PRESS_TRANSFORM.trim() : ''");
+  });
+
+  it('SVG 双层凸缘按下同步变深，投影与高光减弱', () => {
+    expect(panel).toContain("keyFillPressed: '#c2cdd9'");
+    expect(panel).toContain('fill={pressed ? C.keyFillPressed : C.keyFill}');
+    expect(panel).toContain("drop-shadow(0 0 1px rgba(38,50,62,.16))");
+    expect(panel).toContain("stroke={pressed ? 'rgba(255,255,255,.48)'");
+  });
+
+  it('教学信号区按钮也有轻触感，且只读时不触发', () => {
+    expect(panel).toContain('[data-dt-vfd-signal] button:active:not(:disabled)');
+    expect(panel).toContain('const down = pressed && !disabled');
+    expect(panel).toContain('if (readOnly) return;');
+  });
+
+  it('未新增按键 svg：轮廓仍只有两处调用点（PanelKey 与菜单键）', () => {
+    expect((visible.match(/<KeyOutline/g) || []).length).toBe(2);
+    expect((visible.match(/function KeyOutline/g) || []).length).toBe(1);
   });
 });
