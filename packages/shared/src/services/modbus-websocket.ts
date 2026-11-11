@@ -128,6 +128,13 @@ export interface ModbusConfig {
   protocol?: ProtocolType;
   rack?: number;
   slot?: number;
+  /**
+   * 设备自带的布尔变量名 → 软元件名映射，随 connect 帧下发给网关。
+   * 只有显式传入才生效；不传时 S7 仍用 S7_VARIABLES、三菱仍不下发表，
+   * 因此配药 / 分拣 / 气动 / 交通灯的既有连接行为逐字不变。
+   * Modbus TCP 按 coils 数字地址读写，不使用这张表。
+   */
+  boolVariables?: Record<string, string>;
 }
 
 export interface ModbusStatus {
@@ -399,7 +406,7 @@ export class ModbusService {
           port: config.port || 102,
           rack: config.rack || 0,
           slot: config.slot || 1,
-          variables: S7_VARIABLES,
+          variables: config.boolVariables ?? S7_VARIABLES,
           wordVariables: CONNECT_WORDS,
         });
         if (result.success) {
@@ -413,6 +420,7 @@ export class ModbusService {
           protocol: 'mitsubishi',
           host: config.host,
           port: config.port || 0,
+          variables: config.boolVariables,
           wordVariables: CONNECT_WORDS,
         });
         if (result.success) {

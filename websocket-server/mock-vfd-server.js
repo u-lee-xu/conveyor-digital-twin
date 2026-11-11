@@ -53,6 +53,8 @@ let plcFreqHz = 30;
 let plcPrevStart = false;
 let plcPrevStop = false;
 let plcDemoAt = 0;
+/** 外部 PLC 程序直接写 130~134 后的让位窗口：内置参考程序暂不覆盖这些 DI 点 */
+let externalDiUntil = 0;
 
 /**
  * PLC 参考程序：以 100ms 扫描周期主动读写 MD520 从站固定地址。
@@ -90,12 +92,17 @@ function vfdPlcScan() {
   const targetHz = aiActive ? aiHz : plcFreqHz;
 
   // ---- DIDO：PLC DO → 变频器 DI 1008H ----
+  // 外部 PLC 程序（AutoShop / 博途 / GX Works2 / 实物）直接写 130~134 时，
+  // 内置教学参考程序让位 2s，避免把外部给定覆盖掉。
+  const diExternal = Date.now() < externalDiUntil;
   const terminal = plcRunning && source === 1;
-  coils[VFD_IO.DO_DI1] = terminal && !!(seg & 1);
-  coils[VFD_IO.DO_DI2] = terminal && !!(seg & 2);
-  coils[VFD_IO.DO_DI3] = terminal && !!(seg & 4);
-  coils[VFD_IO.DO_DI4] = terminal;
-  coils[VFD_IO.DO_DI5] = terminal && aiActive;
+  if (!diExternal) {
+    coils[VFD_IO.DO_DI1] = terminal && !!(seg & 1);
+    coils[VFD_IO.DO_DI2] = terminal && !!(seg & 2);
+    coils[VFD_IO.DO_DI3] = terminal && !!(seg & 4);
+    coils[VFD_IO.DO_DI4] = terminal;
+    coils[VFD_IO.DO_DI5] = terminal && aiActive;
+  }
   const diFlags = [1, 2, 3, 4, 5].reduce((acc, n, i) =>
     acc | (coils[VFD_IO[`DO_DI${n}`]] ? 1 << i : 0), 0);
   vfdWords.set(VR.VFD_DI_FLAGS, u16(diFlags));
@@ -129,7 +136,12 @@ function writeReg(addr, value) {
 
 const vector = {
   getCoil: (addr) => !!coils[addr],
-  setCoil: (addr, value) => { coils[addr] = !!value; },
+  setCoil: (addr, value) => {
+    coils[addr] = !!value;
+    if (addr >= VFD_IO.DO_DI1 && addr <= VFD_IO.DO_DI5) {
+      externalDiUntil = Date.now() + 2000;
+    }
+  },
   getDiscreteInput: () => false,
   getHoldingRegister: (addr) => {
     if (addr === PLC_AO1) return u16(plcAo1);
@@ -176,6 +188,7 @@ const httpServer = http.createServer((req, res) => {
         },
         io,
         plcAo1,
+        externalDi: Date.now() < externalDiUntil,
         words: Object.fromEntries(vfdWords),
       },
     }));
@@ -186,6 +199,7 @@ const httpServer = http.createServer((req, res) => {
     plcRunning = false;
     plcFreqHz = 30;
     plcDemoAt = 0;
+    externalDiUntil = 0;
     plcPrevStart = plcPrevStop = false;
     res.end(JSON.stringify({ success: true }));
   } else {
