@@ -23,6 +23,7 @@
     "@digital-twin/traffic-light": "*",
     "@digital-twin/auto-dispensing": "*",
     "@digital-twin/md520-vfd": "*",
+    "@digital-twin/inovance-gantry": "*",
     "@digital-twin/shared": "*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

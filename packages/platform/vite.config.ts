@@ -90,6 +90,7 @@ export default defineConfig({
       '@digital-twin/traffic-light': path.resolve(__dirname, '../traffic-light/src'),
       '@digital-twin/auto-dispensing': path.resolve(__dirname, '../auto-dispensing/src'),
       '@digital-twin/md520-vfd': path.resolve(__dirname, '../md520-vfd/src'),
+      '@digital-twin/inovance-gantry': path.resolve(__dirname, '../inovance-gantry/src'),
     },
   },
   server: {

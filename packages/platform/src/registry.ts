@@ -4,6 +4,7 @@ import { pneumaticDevice } from '@digital-twin/pneumatic-robot';
 import { trafficLightDevice } from '@digital-twin/traffic-light';
 import { dispensingDevice } from '@digital-twin/auto-dispensing';
 import { md520VfdDevice } from '@digital-twin/md520-vfd';
+import { inovanceGantryDevice } from '@digital-twin/inovance-gantry';
 
 /**
  * 设备注册表：平台统一外壳 + 设备插件列表。
@@ -15,6 +16,7 @@ export const devices: DeviceDefinition[] = [
   trafficLightDevice,
   dispensingDevice,
   md520VfdDevice,
+  inovanceGantryDevice,
 ];
 
 export function getDevice(id: string): DeviceDefinition | undefined {

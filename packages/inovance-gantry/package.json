@@ -1,0 +1,38 @@
+{
+  "name": "@digital-twin/inovance-gantry",
+  "productName": "汇川龙门 XY 象棋分拣",
+  "description": "汇川龙门设备实验：XY 直角坐标双伺服、Z 气缸吸盘、棋盘格象棋棋子，position 坐标变量驱动，EtherCAT 仅保留变量/信号映射",
+  "version": "1.0.0",
+  "author": "老徐",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b",
+    "lint": "eslint .",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@digital-twin/platform": "*",
+    "@digital-twin/shared": "*",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.183.1",
+    "@vitejs/plugin-react": "^4.3.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.183.1",
+    "typescript": "~5.9.3",
+    "vite": "^5.4.0",
+    "vitest": "^3.2.4",
+    "zustand": "^5.0.11"
+  }
+}
