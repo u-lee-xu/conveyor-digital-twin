@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  MD520_PARAMS, MD520_PARAM_MAP, MD520_COMM, MD520_MULTI_SPEED,
+  MD520_PARAMS, MD520_PARAM_MAP, MD520_GROUPS, MD520_COMM, MD520_MULTI_SPEED,
   paramCommAddress, paramRamAddress, groupHex,
 } from './vfd/md520Spec';
 import {
@@ -62,6 +62,63 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     expect(MD520_PARAM_MAP['FD-02'].defaultValue).toBe(1);
   });
 
+  it('F0-01 第1电机控制方式按用户手册 17.2.9 收录，且是 F0 组首项', () => {
+    const p01 = MD520_PARAM_MAP['F0-01'];
+    expect(p01).toBeDefined();
+    expect(MD520_PARAMS[0].code).toBe('F0-01');
+    expect(p01.name).toBe('第1电机控制方式');
+    expect(p01.defaultValue).toBe(2);
+    expect(p01.min).toBe(0);
+    expect(p01.max).toBe(2);
+    expect(p01.options).toEqual({ 0: 'SVC', 1: 'FVC', 2: 'V/f' });
+    expect(p01.runLocked).toBe(true);
+    expect(paramCommAddress('F0-01')).toBe(0xf001);
+  });
+
+  it('F0 组翻页顺序按手册功能码递增：F0-01 → F0-02 → F0-03', () => {
+    const f0 = MD520_PARAMS.filter((p) => p.group === 'F0').map((p) => p.code);
+    expect(f0.slice(0, 3)).toEqual(['F0-01', 'F0-02', 'F0-03']);
+  });
+
+  it('教学必备清单齐全：控制模式 / 命令源 / 频率源 / 加减速 / 参数初始化 / 电机铭牌', () => {
+    for (const code of ['F0-01', 'F0-02', 'F0-03', 'F0-17', 'F0-18', 'FP-01',
+      'F1-00', 'F1-01', 'F1-02', 'F1-03', 'F1-04', 'F1-05']) {
+      expect(MD520_PARAM_MAP[code]).toBeDefined();
+    }
+  });
+
+  it('F1-00~F1-05 按用户手册 30 章参数表整组收录，均为停机更改', () => {
+    const f1 = MD520_PARAMS.filter((p) => p.group === 'F1');
+    expect(f1.map((p) => p.code)).toEqual(['F1-00', 'F1-01', 'F1-02', 'F1-03', 'F1-04', 'F1-05']);
+    expect(f1.every((p) => p.runLocked)).toBe(true);
+    const value = (code: string) => MD520_PARAM_MAP[code].defaultValue;
+    expect([value('F1-01'), value('F1-02'), value('F1-03'), value('F1-04'), value('F1-05')])
+      .toEqual([3.7, 380, 9, 50, 1460]);
+    expect(MD520_PARAM_MAP['F1-00'].options?.[0]).toBe('普通异步电机');
+    expect(paramCommAddress('F1-00')).toBe(0xf100);
+    expect(paramCommAddress('F1-05')).toBe(0xf105);
+  });
+
+  it('FP-01 按 302 页 17.2.3：默认 0、六档、停机更改、通信地址 0x1F01', () => {
+    const fp01 = MD520_PARAM_MAP['FP-01'];
+    expect(fp01.defaultValue).toBe(0);
+    expect(fp01.runLocked).toBe(true);
+    expect(fp01.options).toEqual({
+      0: '无操作', 1: '恢复出厂不含电机参数', 2: '清除记录信息',
+      4: '备份用户当前参数', 501: '恢复用户备份参数', 503: '恢复出厂含电机参数',
+    });
+    expect(paramCommAddress('FP-01')).toBe(0x1f01);
+    expect(paramRamAddress('FP-01')).toBe(0x1f01);
+  });
+
+  it('F1-00 按 303 页 17.2.5 收录五档电机类型', () => {
+    expect(MD520_PARAM_MAP['F1-00'].max).toBe(4);
+    expect(MD520_PARAM_MAP['F1-00'].options).toEqual({
+      0: '普通异步电机', 1: '变频异步电机', 2: '永磁同步电机',
+      3: '无助磁磁阻电机', 4: '电磁线圈',
+    });
+  });
+
   it('功能码通信地址 = 组号高 8 位 + 组内序号（通信手册 2.2）', () => {
     expect(groupHex('F0')).toBe(0xf0);
     expect(paramCommAddress('F0-16' in MD520_PARAM_MAP ? 'F0-16' : 'F0-02')).toBe(0xf002);
@@ -111,10 +168,12 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
   });
 
   it('只读参数不进三级菜单，运行中锁定参数拒绝编辑', () => {
-    const readonlyState = { ...INITIAL_KEYPAD, level: 1 as const, groupIndex: 6 };
+    // 组顺序 F0/F1/F4/F5/F7/FD/FP/U0，U0 只读组位于索引 7
+    const readonlyState = { ...INITIAL_KEYPAD, level: 1 as const, groupIndex: 7 };
     const r = reduceKeypad({ ...readonlyState, level: 2 }, 'OK', defaults, false);
     expect(r.state.level).toBeLessThanOrEqual(3);
-    const locked = { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 2 };
+    // F0 组顺序 F0-01/02/03/08/10/17/18，F0-08（runLocked）位于索引 3
+    const locked = { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 3 };
     const running = reduceKeypad(locked, 'OK', defaults, true);
     expect(running.state.level).toBe(2);
     expect(running.event?.message).toBeTruthy();
@@ -142,8 +201,9 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
     expect(blinkPosition(p02, 0)).toBe(4);
     const p08 = MD520_PARAM_MAP['F0-08'];
     expect(digitPlaces(p08)).toEqual([100, 10, 1, 0.1, 0.01]);
+    // F0 组首项已是 F0-01，F0-02 位于索引 1
     const entered = reduceKeypad(
-      { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 0 }, 'OK', defaults, false,
+      { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 1 }, 'OK', defaults, false,
     ).state;
     expect(entered.level).toBe(3);
     expect(entered.digit).toBe(0);
@@ -151,7 +211,7 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
     expect(up.editValue).toBe(1);
     expect(reduceKeypad(up, 'OK', defaults, false).event?.commit)
       .toEqual({ code: 'F0-02', value: 1 });
-    expect(groupParams({ ...INITIAL_KEYPAD, level: 2 }, defaults)[0].code).toBe('F0-02');
+    expect(groupParams({ ...INITIAL_KEYPAD, level: 2 }, defaults)[0].code).toBe('F0-01');
   });
 });
 
@@ -477,5 +537,42 @@ describe('按键触感（按压动画）防回退', () => {
   it('未新增按键 svg：轮廓仍只有两处调用点（PanelKey 与菜单键）', () => {
     expect((visible.match(/<KeyOutline/g) || []).length).toBe(2);
     expect((visible.match(/function KeyOutline/g) || []).length).toBe(1);
+  });
+});
+
+describe('参数初始化 FP-01 语义（用户手册 302 页 17.2.3）', () => {
+  const commitFp01 = (mode: number) => {
+    useVfdStore.setState({
+      keypad: {
+        ...INITIAL_KEYPAD,
+        level: 3, groupIndex: MD520_GROUPS.indexOf('FP'), paramIndex: 0, editValue: mode,
+      },
+    });
+    useVfdStore.getState().dispatchKey('OK');
+  };
+
+  it('FP-01=1 恢复出厂参数，但保留 F1 组电机铭牌值', () => {
+    useVfdStore.getState().setParam('F0-08', 33);
+    useVfdStore.getState().setParam('F1-05', 2900);
+    commitFp01(1);
+    const s = useVfdStore.getState();
+    expect(s.params['F0-08']).toBe(50);
+    expect(s.params['F1-05']).toBe(2900);
+    expect(s.params['FP-01']).toBe(0);
+  });
+
+  it('FP-01=503 连电机参数一起恢复出厂', () => {
+    useVfdStore.getState().setParam('F1-05', 2900);
+    commitFp01(503);
+    expect(useVfdStore.getState().params['F1-05']).toBe(1460);
+  });
+
+  it('FP-01=2 清除故障记录，不复位参数', () => {
+    useVfdStore.setState({ faultHistory: ['E002.1'] });
+    useVfdStore.getState().setParam('F0-08', 33);
+    commitFp01(2);
+    const s = useVfdStore.getState();
+    expect(s.faultHistory).toEqual([]);
+    expect(s.params['F0-08']).toBe(33);
   });
 });
