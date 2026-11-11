@@ -95,7 +95,9 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F6-14', group: 'F6', index: 14, name: '停机直流制动时间', defaultValue: 0, min: 0, max: 100, decimals: 1, unit: 's' },
   { code: 'F7-01', group: 'F7', index: 1, name: 'MF.K键功能选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
     options: { 0: '无效', 1: '强制面板控制', 2: '正反转切换', 3: '正转点动', 4: '反转点动' } },
-  { code: 'F7-02', group: 'F7', index: 2, name: 'STOP/RESET键功能', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '' },
+  /** 285 页表 16-6：STOP/RESET 键功能四档 */
+  { code: 'F7-02', group: 'F7', index: 2, name: 'STOP/RESET键功能', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
+    options: { 0: '键盘方式S/R有效', 1: 'OFF1命令S/R有效', 2: 'OFF2命令S/R有效', 3: 'OFF3命令S/R有效' } },
   /** 331 页 17.2.22：FC-00~FC-15 共 16 段，教学子集取 DI1~DI3 三位选段对应的前 8 段。
    *  单位 %（相对 F0-10），100% = F0-10；段速真值由这 8 个码计算，不再用硬编码 Hz 表。 */
   { code: 'FC-00', group: 'FC', index: 0, name: '多段指令1', defaultValue: MD520_FC_DEFAULT_PERCENT[0], min: -100, max: 100, decimals: 1, unit: '%' },

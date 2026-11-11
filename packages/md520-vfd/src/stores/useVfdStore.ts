@@ -198,6 +198,12 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
         }
       }
     }
+    // MF.K：F7-01=1 强制本地面板控制，把命令源切回操作面板
+    if (ev?.forcePanel) {
+      const nextParams = { ...params, 'F0-02': MD520_SOURCE.PANEL };
+      patch.params = nextParams;
+      params = nextParams;
+    }
     // 通信命令源下，面板 RUN/STOP 不抢运行权，由 485 控制字唯一决定
     const panelControlsRun = Math.trunc(params['F0-02']) !== MD520_SOURCE.COMM;
     if (ev?.run || ev?.stop) patch.engaged = true;
@@ -210,7 +216,22 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       patch.command = MD520_COMMAND.STOP;
     }
     if (ev?.resetFault && s.faultCode) patch.faultCode = null;
-    if (ev?.toggleDirection) patch.direction = s.direction === 1 ? -1 : 1;
+    if (ev?.toggleDirection) {
+      const next = s.direction === 1 ? -1 : 1;
+      patch.direction = next;
+      // 285 页：切换的是「频率指令方向」，运行中必须立刻反映到控制字、状态字与 3D 转向，
+      // 否则只剩面板 FWD/REV 丝印变化，电机仍朝原方向转。
+      if (s.running) {
+        patch.command = next === -1 ? MD520_COMMAND.REV : MD520_COMMAND.FWD;
+        patch.status = next === -1 ? MD520_STATUS.REV : MD520_STATUS.FWD;
+      }
+    }
+    if (typeof ev?.jog === 'number') {
+      patch.engaged = true;
+      patch.running = true;
+      patch.command = ev.jog;
+      patch.direction = ev.jog === MD520_COMMAND.RJOG ? -1 : 1;
+    }
     if (ev?.potentiometer) {
       const p = MD520_PARAM_MAP['F0-08'];
       patch.params = {

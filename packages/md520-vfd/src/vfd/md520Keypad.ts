@@ -11,7 +11,7 @@
  *  - 故障列表：左右键循环切换故障历史记录
  */
 import {
-  MD520_GROUPS, MD520_MENUS, MD520_PARAMS, MD520_PARAM_MAP,
+  MD520_GROUPS, MD520_MENUS, MD520_PARAMS, MD520_PARAM_MAP, MD520_COMMAND,
   type Md520Menu, type Md520Param,
 } from './md520Spec';
 
@@ -39,6 +39,9 @@ export interface KeypadEvent {
   stop?: boolean;
   resetFault?: boolean;
   toggleDirection?: boolean;
+  /** MF.K：F7-01=1 强制面板控制 / 3~4 点动（值为控制命令） */
+  forcePanel?: boolean;
+  jog?: number;
   potentiometer?: number;
   message?: string;
 }
@@ -153,7 +156,21 @@ export function reduceKeypad(
   }
   if (key === 'RUN') { event = { run: true }; return { state: s, event }; }
   if (key === 'STOP') { event = { stop: true, resetFault: true }; return { state: s, event }; }
-  if (key === 'MFK') { event = { toggleDirection: true }; return { state: s, event }; }
+  /**
+   * 285 页表 16-6 / 16.7：MF.K 的功能由 F7-01 决定，不能无条件翻转方向。
+   *  0 无效 / 1 强制面板控制 / 2 正反转切换 / 3 正转点动 / 4 反转点动；
+   *  其中 2/3/4 只在「命令源运行指令 = 操作面板（F0-02=0）」时有效。
+   */
+  if (key === 'MFK') {
+    const fn = Math.trunc(values['F7-01'] ?? 0);
+    const panelSource = Math.trunc(values['F0-02'] ?? 0) === 0;
+    if (fn === 1) event = { forcePanel: true };
+    else if (fn === 2 && panelSource) event = { toggleDirection: true };
+    else if (fn === 3 && panelSource) event = { jog: MD520_COMMAND.FJOG };
+    else if (fn === 4 && panelSource) event = { jog: MD520_COMMAND.RJOG };
+    // F7-01=0（此键无功能）或命令源非面板：按手册不产生任何效果
+    return { state: s, event };
+  }
 
   if (s.level === 0) {
     switch (key) {

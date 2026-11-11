@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   MD520_PARAMS, MD520_PARAM_MAP, MD520_GROUPS, MD520_COMM, MD520_MULTI_SPEED,
-  MD520_FC_DEFAULT_PERCENT,
+  MD520_FC_DEFAULT_PERCENT, MD520_COMMAND, MD520_STATUS,
   paramCommAddress, paramRamAddress, groupHex,
 } from './vfd/md520Spec';
 import {
@@ -651,5 +651,54 @@ describe('参数初始化 FP-01 语义（用户手册 302 页 17.2.3）', () => 
     const s = useVfdStore.getState();
     expect(s.faultHistory).toEqual([]);
     expect(s.params['F0-08']).toBe(33);
+  });
+});
+
+describe('285 页面板参数与 MF.K 正反转切换', () => {
+  const keypad = src('vfd/md520Keypad.ts');
+  const rig = src('scenes/vfd/PhysicsVfdDrive.tsx');
+
+  it('表 16-6：F7-01 五档 / F7-02 四档', () => {
+    expect(MD520_PARAM_MAP['F7-01'].options).toEqual({
+      0: '无效', 1: '强制面板控制', 2: '正反转切换', 3: '正转点动', 4: '反转点动',
+    });
+    expect(MD520_PARAM_MAP['F7-02'].options?.[0]).toBe('键盘方式S/R有效');
+  });
+
+  it('MF.K 按 F7-01 分派，2/3/4 仅在操作面板命令源有效', () => {
+    const base = { ...defaults, 'F7-01': 2, 'F0-02': 0 };
+    const dispatch = (values: Record<string, number>) =>
+      reduceKeypad({ ...INITIAL_KEYPAD }, 'MFK', values, false).event;
+    expect(dispatch({ ...defaults, 'F7-01': 0 })).toBeUndefined();
+    expect(dispatch(base)?.toggleDirection).toBe(true);
+    expect(dispatch({ ...base, 'F0-02': 2 })).toBeUndefined();
+    expect(dispatch({ ...base, 'F7-01': 3 })?.jog).toBe(MD520_COMMAND.FJOG);
+    expect(dispatch({ ...base, 'F7-01': 4 })?.jog).toBe(MD520_COMMAND.RJOG);
+    expect(dispatch({ ...base, 'F7-01': 1 })?.forcePanel).toBe(true);
+    expect(keypad).toContain("values['F7-01']");
+    expect(keypad).toContain('panelSource');
+  });
+
+  it('方向切换立刻反映到控制字 / 状态字，3D 动画乘 direction', () => {
+    useVfdStore.getState().setParam('F7-01', 2);
+    useVfdStore.getState().setParam('F0-02', 0);
+    useVfdStore.getState().dispatchKey('RUN');
+    expect(useVfdStore.getState().direction).toBe(1);
+    useVfdStore.getState().dispatchKey('MFK');
+    const s = useVfdStore.getState();
+    expect(s.direction).toBe(-1);
+    expect(s.command).toBe(MD520_COMMAND.REV);
+    expect(s.status).toBe(MD520_STATUS.REV);
+    expect(rig).toContain('const direction = s.direction');
+    expect(rig).toContain('* dt * direction');
+    expect(rig).toContain('beltPhase.current += factor * V.BELT_SPEED * dt * direction');
+    expect(rig).toContain('direction: s.direction');
+  });
+
+  it('F7-01=0 时按 MF.K 不改变方向', () => {
+    useVfdStore.getState().setParam('F7-01', 0);
+    useVfdStore.getState().dispatchKey('RUN');
+    useVfdStore.getState().dispatchKey('MFK');
+    expect(useVfdStore.getState().direction).toBe(1);
   });
 });
