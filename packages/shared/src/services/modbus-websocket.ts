@@ -45,6 +45,22 @@ export const MODBUS_ADDRESSES = {
   MAGNETIC_SORTING2_EXTEND: 7,
 } as const;
 
+/**
+ * MD520 变频器 485 数值变量表（通信手册 2.3 专用参数地址）。
+ * 与布尔 IO 表完全分离，随 connect 一并下发网关；type=uint16 走单字 FC06/FC10。
+ * 地址采用十进制，便于 websocket-server/mock-addresses.js --check 对照。
+ */
+export const CONNECT_WORDS = {
+  VFD_SETPOINT: { type: 'uint16', modbus: { address: 4096, words: 1 } },   // 1000H
+  VFD_RUN_FREQ: { type: 'uint16', modbus: { address: 4097, words: 1 } },   // 1001H
+  VFD_DI_FLAGS: { type: 'uint16', modbus: { address: 4104, words: 1 } },   // 1008H
+  VFD_DO_FLAGS: { type: 'uint16', modbus: { address: 4105, words: 1 } },   // 1009H
+  VFD_COMMAND2: { type: 'uint16', modbus: { address: 8192, words: 1 } },   // 2000H
+  VFD_DO_CONTROL: { type: 'uint16', modbus: { address: 8193, words: 1 } }, // 2001H
+  VFD_STATUS1: { type: 'uint16', modbus: { address: 12288, words: 1 } },   // 3000H
+  VFD_FREQ2: { type: 'uint16', modbus: { address: 29456, words: 1 } },     // 7310H
+} as const;
+
 export const S7_VARIABLES = {
   START: 'M10.0',
   RESET: 'M10.1',
@@ -115,6 +131,12 @@ export interface ModbusResult {
 export interface ModbusReadResult {
   success: boolean;
   values?: boolean[];
+  error?: string;
+}
+
+export interface ModbusWordsResult {
+  success: boolean;
+  values?: Record<string, number>;
   error?: string;
 }
 
@@ -387,6 +409,7 @@ export class ModbusService {
           type: 'connect',
           host: config.host,
           port: config.port || 502,
+          wordVariables: CONNECT_WORDS,
         });
         if (result.success) {
           this.consecutiveErrors = 0;
@@ -513,6 +536,22 @@ export class ModbusService {
       this.recordError();
       return { success: false, error: (error as Error).message };
     }
+  }
+
+  /** 读 16 位数值变量（MD520 485 专用参数地址，FC03） */
+  async readWords(varNames: string[]): Promise<ModbusWordsResult> {
+    const result = await this.sendMessage({ type: 'read-words', names: varNames }) as ModbusWordsResult;
+    return { success: !!result.success, values: result.values, error: result.error };
+  }
+
+  /** 写 16 位数值变量：单字 FC06/FC10，不触碰相邻寄存器 */
+  async writeWords(names: string[], values: number[]): Promise<ModbusResult> {
+    const result = await this.sendMessage({ type: 'write-words', names, values });
+    return { success: result.success, error: result.error };
+  }
+
+  async writeWord(name: string, value: number): Promise<ModbusResult> {
+    return this.writeWords([name], [value]);
   }
 
   async writeVar(name: string, value: boolean): Promise<ModbusResult> {

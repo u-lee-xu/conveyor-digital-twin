@@ -496,7 +496,7 @@ class SimpleModbusTCP {
         if (!result.success) return result;
         const low = result.registers[0] || 0;
         const high = result.registers[1] || 0;
-        values[name] = joinDint32(low, high);
+        values[name] = spec.type === 'uint16' ? (low & 0xffff) : joinDint32(low, high);
       }
       return { success: true, values };
     } catch (e) {
@@ -513,7 +513,9 @@ class SimpleModbusTCP {
         const spec = (this.wordVariables || {})[name];
         const m = spec && spec.modbus;
         if (!m) return { success: false, error: `未知数值变量: ${name}` };
-        const words = splitDint32(clampDint32(values[i]));
+        const words = spec.type === 'uint16'
+          ? [Math.max(0, Math.min(0xffff, Math.trunc(Number(values[i]) || 0)))]
+          : splitDint32(clampDint32(values[i]));
         const result = await this.writeRegisters(m.address, words);
         if (!result.success) return result;
       }
@@ -1677,14 +1679,20 @@ function copyWordTable(raw, label) {
     if (!NAME_RE.test(key) || UNSAFE_KEYS.has(key)) throw new Error(`${label} 变量名非法: ${key}`);
     const spec = raw[key];
     if (!isRecord(spec)) throw new Error(`${label}.${key} 必须是对象`);
-    if (spec.type !== undefined && spec.type !== 'dint32') throw new Error(`${label}.${key}.type 非法`);
+    // MD520 485 专用参数是 16 位单字；配药编码器 DINT 仍是 32 位双字
+    if (spec.type !== undefined && spec.type !== 'dint32' && spec.type !== 'uint16') {
+      throw new Error(`${label}.${key}.type 非法`);
+    }
     if (spec.wordOrder !== undefined && spec.wordOrder !== 'low-first') throw new Error(`${label}.${key}.wordOrder 非法`);
-    const copy = { type: 'dint32', wordOrder: 'low-first' };
+    const copy = { type: spec.type || 'dint32', wordOrder: 'low-first' };
     for (const proto of PROTOCOLS) {
       const p = spec[proto];
       if (p === undefined) continue;
       if (!isRecord(p)) throw new Error(`${label}.${key}.${proto} 必须是对象`);
       const words = intBetween(p.words, 1, 64, `${label}.${key}.${proto}.words`);
+      if (copy.type === 'uint16' && words !== 1) {
+        throw new Error(`${label}.${key}.${proto}.words 单字变量必须为 1`);
+      }
       if (proto === 'modbus') {
         copy[proto] = { address: intBetween(p.address, 0, 0xffff, `${label}.${key}.${proto}.address`), words };
       } else {
