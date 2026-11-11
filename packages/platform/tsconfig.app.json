@@ -31,8 +31,10 @@
       "@digital-twin/traffic-light": ["../traffic-light/src"],
       "@digital-twin/traffic-light/*": ["../traffic-light/src/*"],
       "@digital-twin/auto-dispensing": ["../auto-dispensing/src"],
-      "@digital-twin/auto-dispensing/*": ["../auto-dispensing/src/*"]
+      "@digital-twin/auto-dispensing/*": ["../auto-dispensing/src/*"],
+      "@digital-twin/md520-vfd": ["../md520-vfd/src"],
+      "@digital-twin/md520-vfd/*": ["../md520-vfd/src/*"]
     }
   },
-  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src", "../auto-dispensing/src"]
+  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src", "../auto-dispensing/src", "../md520-vfd/src"]
 }

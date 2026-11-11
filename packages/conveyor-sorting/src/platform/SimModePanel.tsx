@@ -1,7 +1,6 @@
 import { ConveyorPlcConnection } from './ConveyorPlcConnection';
 import { SimPanel } from '../components/panels';
 import { useSimMode } from '../hooks/useSimMode';
-import { VfdKeypadPanel } from './VfdKeypadPanel';
 
 export function SimModePanel({ isMobile }: { isMobile?: boolean }) {
   const {
@@ -25,7 +24,6 @@ export function SimModePanel({ isMobile }: { isMobile?: boolean }) {
   return (
     <div className="space-y-2">
       <ConveyorPlcConnection modeLabel="仿真模式" />
-      <VfdKeypadPanel />
       <SimPanel
         step={simStep}
         isSimulationRunning={simRunning}

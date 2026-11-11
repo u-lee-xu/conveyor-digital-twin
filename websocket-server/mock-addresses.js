@@ -331,12 +331,12 @@ function checkVfdChain() {
   const fs = require('fs');
   const path = require('path');
   const targets = {
-    spec: '../packages/conveyor-sorting/src/constants/md520-addresses.ts',
+    spec: '../packages/md520-vfd/src/constants/md520-addresses.ts',
     shared: '../packages/shared/src/services/modbus-websocket.ts',
     server: './server.js',
-    mockPlc: './mock-conveyor-server.js',
-    index: '../packages/conveyor-sorting/src/index.ts',
-    link: '../packages/conveyor-sorting/src/platform/VfdLink.tsx',
+    mockPlc: './mock-vfd-server.js',
+    index: '../packages/md520-vfd/src/index.ts',
+    link: '../packages/md520-vfd/src/platform/VfdLink.tsx',
   };
   const required = [
     [targets.spec, 'VFD_SETPOINT: 4096'],
@@ -396,9 +396,9 @@ function checkVfdChain() {
 }
 
 /**
- * 场景独立：MD520 变频器只属于传送带分拣场景。
- * 自动配药虚拟 PLC 不得残留任何变频器寄存器 / 从站逻辑；conveyor 虚拟 PLC 不得
- * 混入配方、编码器、DINT 位置闭环；两个 PLC 各绑回环、各由 start:lab 独立启动。
+ * 场景独立：MD520 变频器是独立设备场景，拥有自己的虚拟 PLC :1507。
+ * 已定稿的自动配药 PLC 与传送带分拣 PLC 都不得残留任何变频器寄存器 / 从站逻辑；
+ * 三个 PLC 各绑回环、各由 start:lab 独立启动，端口互不相同。
  */
 function checkVfdIsolation() {
   const fs = require('fs');
@@ -406,31 +406,39 @@ function checkVfdIsolation() {
   const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
   const dispensing = readFile('./mock-dispensing-server.js');
   const conveyor = readFile('./mock-conveyor-server.js');
+  const vfd = readFile('./mock-vfd-server.js');
   const startLab = readFile('../scripts/start-lab.cjs');
-  const forbidden = ['isVfdAddress', 'vfdWords', 'VFD_ADDR_MIN', 'MD520', 'VFD_REGISTERS'];
-  const leaked = forbidden.filter((t) => dispensing.includes(t));
-  if (leaked.length) {
-    console.error(`[check][vfd-isolation] ❌ 自动配药 PLC 残留变频器逻辑: ${leaked.join(', ')}`);
-    return false;
-  }
-  const conveyorNeed = ['vfdPlcScan', 'isVfdAddress', 'VFD_REGISTERS', "host: '127.0.0.1'", 'setRegisterArray'];
-  for (const token of conveyorNeed) {
-    if (!conveyor.includes(token)) {
-      console.error(`[check][vfd-isolation] ❌ conveyor 虚拟 PLC 缺 ${token}`);
+  const registry = readFile('../packages/platform/src/registry.ts');
+  const forbidden = ['isVfdAddress', 'vfdWords', 'VFD_ADDR_MIN', 'MD520', 'VFD_REGISTERS', 'vfdPlcScan'];
+  for (const [name, source] of [['自动配药 PLC', dispensing], ['传送带分拣 PLC', conveyor]]) {
+    const leaked = forbidden.filter((t) => source.includes(t));
+    if (leaked.length) {
+      console.error(`[check][vfd-isolation] ❌ ${name} 残留变频器逻辑: ${leaked.join(', ')}`);
       return false;
     }
   }
-  const conveyorForbidden = ['ENCODER_PULSES', 'recipe', 'MAGA_PULSE', 'DISPENSING_ADDRESSES'];
-  const mixed = conveyorForbidden.filter((t) => conveyor.includes(t));
+  const vfdNeed = ['vfdPlcScan', 'isVfdAddress', 'VFD_REGISTERS', "host: '127.0.0.1'", 'setRegisterArray'];
+  for (const token of vfdNeed) {
+    if (!vfd.includes(token)) {
+      console.error(`[check][vfd-isolation] ❌ MD520 虚拟 PLC 缺 ${token}`);
+      return false;
+    }
+  }
+  const vfdForbidden = ['ENCODER_PULSES', 'recipe', 'MAGA_PULSE', 'DISPENSING_ADDRESSES', 'SORT1_CTRL'];
+  const mixed = vfdForbidden.filter((t) => vfd.includes(t));
   if (mixed.length) {
-    console.error(`[check][vfd-isolation] ❌ conveyor 虚拟 PLC 混入自动配药逻辑: ${mixed.join(', ')}`);
+    console.error(`[check][vfd-isolation] ❌ MD520 虚拟 PLC 混入其它场景逻辑: ${mixed.join(', ')}`);
     return false;
   }
-  if (!startLab.includes('mock-conveyor-server.js') || !startLab.includes('1503')) {
-    console.error('[check][vfd-isolation] ❌ start-lab.cjs 未启动 conveyor 场景独立虚拟 PLC :1503');
+  if (!startLab.includes('mock-vfd-server.js') || !startLab.includes('VFD_PLC_PORT = 1507')) {
+    console.error('[check][vfd-isolation] ❌ start-lab.cjs 未启动 MD520 独立虚拟 PLC :1507');
     return false;
   }
-  console.log('[check][vfd-isolation] ✅ 变频器从站只在 conveyor 虚拟 PLC，自动配药 PLC 零耦合');
+  if (!registry.includes('md520VfdDevice')) {
+    console.error('[check][vfd-isolation] ❌ 平台壳未注册 MD520 独立设备');
+    return false;
+  }
+  console.log('[check][vfd-isolation] ✅ 变频器只在独立设备场景 :1507，配药 / 分拣 PLC 零耦合');
   return true;
 }
 

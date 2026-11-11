@@ -3,7 +3,6 @@ import { useFrame } from '@react-three/fiber';
 import { RigidBody, CuboidCollider, type RapierRigidBody } from '@react-three/rapier';
 import { DoubleSide, Quaternion } from 'three';
 import { useDeviceStore } from '../../../stores';
-import { useVfdStore } from '../../../stores/useVfdStore';
 import { geometries, materials } from '../../../components/scene/shared';
 import { type CylinderName } from '../../../types/device';
 import {
@@ -293,8 +292,7 @@ export function PhysicsMaterial() {
           && pos.x >= -COMPONENT.CONVEYOR_LENGTH / 2 && pos.x <= COMPONENT.CONVEYOR_LENGTH / 2;
 
         if (isOnConveyor && state.conveyorRunning) {
-          // 变频器输出频率只作为带速倍率，启停仍由 conveyorRunning / PLC 线圈唯一决定
-          next = { x: pos.x + CONVEYOR_SPEED * useVfdStore.getState().speedFactor() * 60 * delta, y: pos.y, z: pos.z };
+          next = { x: pos.x + CONVEYOR_SPEED * 60 * delta, y: pos.y, z: pos.z };
           nextRot = IDENTITY;
           drive = 'kinematic';
           reported = next;

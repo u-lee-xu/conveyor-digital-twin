@@ -3,7 +3,6 @@ import { useFrame } from '@react-three/fiber';
 import { RigidBody, CuboidCollider } from '@react-three/rapier';
 import { DoubleSide, type Mesh } from 'three';
 import { useDeviceStore } from '../../../stores';
-import { useVfdStore } from '../../../stores/useVfdStore';
 import { geometries, materials } from '../../../components/scene/shared';
 import { COMPONENT, PHYSICS, BELT_DETAIL, SURFACE_GAP } from '../constants';
 
@@ -184,7 +183,7 @@ export function PhysicsConveyorBelt() {
   useFrame(() => {
     if (!conveyorRunning) return;
     rollersRef.current.forEach((roller) => {
-      if (roller) roller.rotation.y -= COMPONENT.ROLLER_SPEED * useVfdStore.getState().speedFactor();
+      if (roller) roller.rotation.y -= COMPONENT.ROLLER_SPEED;
     });
   });
 

@@ -21,7 +21,7 @@ const rootSrc = (p: string) => readFileSync(join(root, p), 'utf8');
 
 const defaults = Object.fromEntries(MD520_PARAMS.map((p) => [p.code, p.defaultValue]));
 
-const conveyorPlc = rootSrc('websocket-server/mock-conveyor-server.js');
+const conveyorPlc = rootSrc('websocket-server/mock-vfd-server.js');
 const dispensingPlc = rootSrc('websocket-server/mock-dispensing-server.js');
 const addressTable = rootSrc('websocket-server/mock-addresses.js');
 const shared = rootSrc('packages/shared/src/services/modbus-websocket.ts');
@@ -61,8 +61,8 @@ beforeEach(() => {
   });
 });
 
-describe('场景独立：两个虚拟 PLC 各管各的', () => {
-  it('变频器从站与 PLC 参考程序都在 conveyor 虚拟 PLC', () => {
+describe('场景独立：变频器自己的虚拟 PLC 与已定稿场景互不共用', () => {
+  it('变频器从站与 PLC 参考程序都在独立的 mock-vfd-server.js', () => {
     expect(conveyorPlc).toContain('vfdPlcScan');
     expect(conveyorPlc).toContain('setInterval(vfdPlcScan, 100)');
     expect(conveyorPlc).toContain('isVfdAddress');
@@ -77,17 +77,17 @@ describe('场景独立：两个虚拟 PLC 各管各的', () => {
     expect(dispensingPlc).toContain('ENCODER_PULSES');
   });
 
-  it('conveyor 虚拟 PLC 不混入配药配方 / 编码器 / DINT 位置闭环', () => {
+  it('独立虚拟 PLC 不混入配药配方 / 编码器 / 分拣流程', () => {
     for (const token of ['DISPENSING_ADDRESSES', 'ENCODER_PULSES', 'recipe', 'MAGA_PULSE']) {
       expect(conveyorPlc).not.toContain(token);
     }
   });
 
-  it('start:lab 独立启动两个 PLC，端口不混用', () => {
-    expect(startLab).toContain('CONVEYOR_PLC_PORT = 1503');
-    expect(startLab).toContain("path.join(WSS, 'mock-conveyor-server.js')");
+  it('start:lab 独立启动变频器 PLC，端口与其它场景不混用', () => {
+    expect(startLab).toContain('VFD_PLC_PORT = 1507');
+    expect(startLab).toContain("path.join(WSS, 'mock-vfd-server.js')");
     expect(startLab).toContain("path.join(WSS, 'mock-dispensing-server.js')");
-    expect(startLab).toContain('两个场景必须独立');
+    expect(startLab).toContain("path.join(WSS, 'mock-conveyor-server.js')");
   });
 
   it('两个 PLC 都只绑回环', () => {

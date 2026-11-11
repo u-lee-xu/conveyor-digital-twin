@@ -253,13 +253,13 @@ describe('观众端数值快照：禁止 !! 布尔化', () => {
 
 describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
   const panel = src('platform/VfdKeypadPanel.tsx');
-  const sim = src('platform/SimModePanel.tsx');
-  const effects = src('platform/ConveyorDeviceEffects.tsx');
+  const sim = src('platform/VfdModePanel.tsx');
+  const effects = src('platform/VfdDeviceEffects.tsx');
   const link = src('platform/VfdLink.tsx');
   const index = src('index.ts');
   const shared = rootSrc('packages/shared/src/services/modbus-websocket.ts');
   const server = rootSrc('websocket-server/server.js');
-  const mockPlc = rootSrc('websocket-server/mock-conveyor-server.js');
+  const mockPlc = rootSrc('websocket-server/mock-vfd-server.js');
   const dispensingPlc = rootSrc('websocket-server/mock-dispensing-server.js');
   const addresses = src('constants/md520-addresses.ts');
 
@@ -389,7 +389,7 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(mockPlc).toContain('isVfdAddress');
   });
 
-  it('场景独立：变频器从站只在 conveyor 虚拟 PLC，配药 PLC 零残留', () => {
+  it('场景独立：变频器从站只在自己的虚拟 PLC，配药 PLC 零残留', () => {
     expect(mockPlc).toContain('vfdPlcScan');
     expect(mockPlc).toContain('VFD_REGISTERS');
     expect(mockPlc).not.toContain('DISPENSING_ADDRESSES');
