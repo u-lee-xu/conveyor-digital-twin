@@ -75,14 +75,21 @@ const DISPENSING_WORDS = {
  * 十进制书写，与前端 constants/md520-addresses.ts 及 shared CONNECT_WORDS 三处同源。
  */
 const VFD_REGISTERS = {
-  VFD_SETPOINT: 4096,     // 1000H
-  VFD_RUN_FREQ: 4097,     // 1001H
-  VFD_DI_FLAGS: 4104,     // 1008H
-  VFD_DO_FLAGS: 4105,     // 1009H
-  VFD_COMMAND2: 8192,     // 2000H
-  VFD_DO_CONTROL: 8193,   // 2001H
-  VFD_STATUS1: 12288,     // 3000H
-  VFD_FREQ2: 29456,       // 7310H
+  VFD_SETPOINT: 4096,     // 1000H 通信设定值（±100.00%，相对最大频率）
+  VFD_RUN_FREQ: 4097,     // 1001H 运行频率（0.01Hz）
+  VFD_DI_FLAGS: 4104,     // 1008H DI 端子标志（PLC DO → 变频器 DI）
+  VFD_DO_FLAGS: 4105,     // 1009H DO 输出标志（变频器 DO → PLC DI）
+  VFD_AI1: 4106,          // 100AH AI1 数值镜像（0.01V/字，PLC AO 输出）
+  VFD_COMMAND2: 8192,     // 2000H 控制命令2
+  VFD_DO_CONTROL: 8193,   // 2001H DO 端子控制
+  VFD_AO1: 8194,          // 2002H AO1
+  VFD_STATUS1: 12288,     // 3000H 状态1
+  VFD_FREQ2: 29456,       // 7310H 通信设定频率2（0.01Hz）
+  VFD_COMMAND1: 29457,    // 7311H 控制命令1
+  VFD_STATUS2: 28740,     // 7044H 状态2
+  VFD_PARAM_F0_02: 61442, // F002H 运行指令选择（面板写 → PLC 读）
+  VFD_PARAM_F0_03: 61443, // F003H 主频率源（面板写 → PLC 读）
+  VFD_PARAM_F0_10: 61450, // F00AH 最大频率（面板写 → PLC 读）
 };
 
 const VFD_WORDS = Object.fromEntries(
@@ -319,7 +326,7 @@ function checkViewerIsolation() {
   return true;
 }
 
-/** MD520 485 单字链路：前端地址表 / shared 数值通道 / 网关单字分支 / 虚拟 PLC / 观众快照 */
+/** MD520 485 单字链路：前端地址表 / shared 数值通道 / 网关单字分支 / conveyor 虚拟 PLC / 观众快照 */
 function checkVfdChain() {
   const fs = require('fs');
   const path = require('path');
@@ -327,29 +334,41 @@ function checkVfdChain() {
     spec: '../packages/conveyor-sorting/src/constants/md520-addresses.ts',
     shared: '../packages/shared/src/services/modbus-websocket.ts',
     server: './server.js',
-    mockPlc: './mock-dispensing-server.js',
+    mockPlc: './mock-conveyor-server.js',
     index: '../packages/conveyor-sorting/src/index.ts',
+    link: '../packages/conveyor-sorting/src/platform/VfdLink.tsx',
   };
   const required = [
     [targets.spec, 'VFD_SETPOINT: 4096'],
     [targets.spec, 'VFD_COMMAND2: 8192'],
     [targets.spec, 'VFD_STATUS1: 12288'],
     [targets.spec, 'VFD_FREQ2: 29456'],
+    [targets.spec, 'VFD_AI1: 4106'],
+    [targets.spec, 'VFD_PARAM_F0_02: 61442'],
     [targets.shared, 'CONNECT_WORDS'],
     [targets.shared, 'readWords'],
     [targets.shared, 'writeWord'],
     [targets.server, "'uint16'"],
     [targets.server, 'spec.type ==='],
     [targets.mockPlc, 'isVfdAddress'],
+    [targets.mockPlc, 'vfdPlcScan'],
+    [targets.link, 'VFD_DI_FLAGS'],
+    [targets.link, 'VFD_AI1'],
+    [targets.link, 'VFD_PARAM_F0_02'],
     [targets.index, 'VFD_OUTPUT_HZ'],
   ];
+  const cache = new Map();
+  const textOf = (file) => {
+    if (!cache.has(file)) cache.set(file, fs.readFileSync(path.resolve(__dirname, file), 'utf8'));
+    return cache.get(file);
+  };
   for (const [file, token] of required) {
     const abs = path.resolve(__dirname, file);
     if (!fs.existsSync(abs)) {
       console.error(`[check][md520] ❌ 缺文件 ${file}`);
       return false;
     }
-    if (!fs.readFileSync(abs, 'utf8').includes(token)) {
+    if (!textOf(file).includes(token)) {
       console.error(`[check][md520] ❌ ${file} 缺 ${token}`);
       return false;
     }
@@ -359,7 +378,59 @@ function checkVfdChain() {
     console.error('[check][md520] ❌ VFD_WORDS 必须全部是单字 uint16');
     return false;
   }
-  console.log(`[check][md520] ✅ 485 单字链路 ${required.length} 处接线齐全，${words.length} 个专用寄存器`);
+  // 三处地址表必须逐键等值，避免新增寄存器只改了一处造成静默读写越界
+  for (const [name, address] of Object.entries(VFD_REGISTERS)) {
+    const pairs = [
+      [targets.spec, `${name}: ${address}`],
+      [targets.shared, `${name}: { type: 'uint16', modbus: { address: ${address}, words: 1 } }`],
+    ];
+    for (const [file, token] of pairs) {
+      if (!textOf(file).includes(token)) {
+        console.error(`[check][md520] ❌ ${file} 缺 ${token}`);
+        return false;
+      }
+    }
+  }
+  console.log(`[check][md520] ✅ 485 单字链路 ${required.length} 处接线齐全，${words.length} 个专用寄存器三处同源`);
+  return true;
+}
+
+/**
+ * 场景独立：MD520 变频器只属于传送带分拣场景。
+ * 自动配药虚拟 PLC 不得残留任何变频器寄存器 / 从站逻辑；conveyor 虚拟 PLC 不得
+ * 混入配方、编码器、DINT 位置闭环；两个 PLC 各绑回环、各由 start:lab 独立启动。
+ */
+function checkVfdIsolation() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  const dispensing = readFile('./mock-dispensing-server.js');
+  const conveyor = readFile('./mock-conveyor-server.js');
+  const startLab = readFile('../scripts/start-lab.cjs');
+  const forbidden = ['isVfdAddress', 'vfdWords', 'VFD_ADDR_MIN', 'MD520', 'VFD_REGISTERS'];
+  const leaked = forbidden.filter((t) => dispensing.includes(t));
+  if (leaked.length) {
+    console.error(`[check][vfd-isolation] ❌ 自动配药 PLC 残留变频器逻辑: ${leaked.join(', ')}`);
+    return false;
+  }
+  const conveyorNeed = ['vfdPlcScan', 'isVfdAddress', 'VFD_REGISTERS', "host: '127.0.0.1'", 'setRegisterArray'];
+  for (const token of conveyorNeed) {
+    if (!conveyor.includes(token)) {
+      console.error(`[check][vfd-isolation] ❌ conveyor 虚拟 PLC 缺 ${token}`);
+      return false;
+    }
+  }
+  const conveyorForbidden = ['ENCODER_PULSES', 'recipe', 'MAGA_PULSE', 'DISPENSING_ADDRESSES'];
+  const mixed = conveyorForbidden.filter((t) => conveyor.includes(t));
+  if (mixed.length) {
+    console.error(`[check][vfd-isolation] ❌ conveyor 虚拟 PLC 混入自动配药逻辑: ${mixed.join(', ')}`);
+    return false;
+  }
+  if (!startLab.includes('mock-conveyor-server.js') || !startLab.includes('1503')) {
+    console.error('[check][vfd-isolation] ❌ start-lab.cjs 未启动 conveyor 场景独立虚拟 PLC :1503');
+    return false;
+  }
+  console.log('[check][vfd-isolation] ✅ 变频器从站只在 conveyor 虚拟 PLC，自动配药 PLC 零耦合');
   return true;
 }
 
@@ -376,6 +447,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkEncoderScale() && ok;
   ok = checkViewerIsolation() && ok;
   ok = checkVfdChain() && ok;
+  ok = checkVfdIsolation() && ok;
   process.exit(ok ? 0 : 1);
 }
 

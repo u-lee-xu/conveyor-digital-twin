@@ -4,10 +4,12 @@
  *
  *   npm run start:lab
  *
- * 起 4 个进程，但浏览器（含智能电视）只需要访问一个地址：
+ * 起 5 个进程，但浏览器（含智能电视）只需要访问一个地址：
  *   http://<教师机当前任一可达 IP>:5201/
- * 内部链路 8081 / 8082 / 1505 / 5085 已显式绑定 127.0.0.1，只有 Vite preview
+ * 内部链路 8081 / 8082 / 1505 / 5085 / 1503 / 5083 已显式绑定 127.0.0.1，只有 Vite preview
  * 的 /ws/plc 与 /ws/relay 同源代理能触达，CSP 的 'self' 直接放行。
+ * 1505 是自动配药虚拟 PLC，1503 是传送带分拣虚拟 PLC（含 MD520 变频器从站），
+ * 两个场景各自独立，不共用线圈表 / 数值段 / 参考程序。
  *
  * 【不固化 IP】教室/实验室网络会变：DHCP 续租、换 WiFi、有线无线并存、虚拟网卡。因此：
  *  - 实际通信一律同源相对路径（wsEndpoints.ts 用 location.host），与 IP 无关；
@@ -45,6 +47,8 @@ process.env.DT_INTERNAL_TOKEN = crypto.randomBytes(24).toString('hex');
 const PLATFORM = path.join(ROOT, 'packages/platform');
 const DIST = path.join(PLATFORM, 'dist');
 const PORT = Number(process.env.DT_PORT || 5201);
+/** 传送带场景独立虚拟 PLC 端口；与 vite.config.ts 的网关代理无关，改动需同步端口自检 */
+const CONVEYOR_PLC_PORT = 1503;
 
 /**
  * 取默认路由所在网卡的 IPv4，即「本机 IP」：不发包，只让内核按路由表选源地址。
@@ -186,6 +190,10 @@ function assertInternalPorts() {
   if (broadcastPort !== 8082) {
     throw new Error(`edge-broadcast.json 的 broadcastPort=${broadcastPort} 与同源代理目标 127.0.0.1:8082 不一致`);
   }
+  // 场景独立：传送带虚拟 PLC 不能与自动配药虚拟 PLC 共用一个端口 / 一份线圈表
+  if (CONVEYOR_PLC_PORT === 1505) {
+    throw new Error('传送带虚拟 PLC 端口不能与自动配药虚拟 PLC :1505 相同，两个场景必须独立');
+  }
 }
 
 const children = [];
@@ -239,14 +247,16 @@ async function main() {
   console.log(`[lab] 平台壳 Web 服务已监听 :${PORT}`);
   previewServer.printUrls();
 
-  const [busy8081, busy8082, busy1505] = await Promise.all([
-    portBusy(8081), portBusy(8082), portBusy(1505),
+  const [busy8081, busy8082, busy1505, busy1503] = await Promise.all([
+    portBusy(8081), portBusy(8082), portBusy(1505), portBusy(CONVEYOR_PLC_PORT),
   ]);
 
   launch('PLC 网关 :8081', process.execPath, [path.join(WSS, 'server.js')], WSS, !busy8081);
   launch('状态中继 :8082', process.execPath, [path.join(WSS, 'broadcast.js')], WSS, !busy8082);
   if (process.env.DT_SKIP_MOCK !== '1') {
-    launch('虚拟 PLC :1505', process.execPath, [path.join(WSS, 'mock-dispensing-server.js'), '1505'], WSS, !busy1505);
+    launch('自动配药虚拟 PLC :1505', process.execPath, [path.join(WSS, 'mock-dispensing-server.js'), '1505'], WSS, !busy1505);
+    launch('传送带虚拟 PLC :1503', process.execPath,
+      [path.join(WSS, 'mock-conveyor-server.js'), String(CONVEYOR_PLC_PORT)], WSS, !busy1503);
   }
 
   console.log('');
@@ -264,7 +274,7 @@ async function main() {
   lines.forEach((l) => console.log(l));
   console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
   console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可');
-  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505 虚拟 PLC / 5085 状态口，均绑定 127.0.0.1，外部访问不到');
+  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505 配药虚拟 PLC / 5085 配药状态口 / 1503 传送带虚拟 PLC / 5083 传送带状态口，均绑定 127.0.0.1，外部访问不到');
   console.log('  WS 升级鉴权：LAN 只能订阅中继，PLC 写入通道只对主控回环开放；内部链路 token 每次启动重新签发');
   console.log(`  PLC 主机白名单：${process.env.DT_PLC_HOSTS ? process.env.DT_PLC_HOSTS : '默认仅回环；接实体 PLC 请设 DT_PLC_HOSTS'}`);
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');

@@ -226,6 +226,7 @@ export function VfdKeypadPanel() {
   const source = Math.trunc(params['F0-02']);
   const freqSource = Math.trunc(params['F0-03']);
   const multiIndex = (di.DI1 ? 1 : 0) | (di.DI2 ? 2 : 0) | (di.DI3 ? 4 : 0);
+  const plcDiFlags = MD520_DI.reduce((acc, d, i) => acc | (di[d.key] ? 1 << i : 0), 0);
   const ai2Max = ai2Mode === 'current' ? MD520_AI.AI2.currentMax : MD520_AI.AI2.max;
   const ai2Unit = ai2Mode === 'current' ? MD520_AI.AI2.currentUnit : MD520_AI.AI2.unit;
   const silk = (on: boolean): CSSProperties => ({ fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
@@ -454,13 +455,16 @@ export function VfdKeypadPanel() {
           </div>
 
           {/* 跨列第 3 行：485 只读状态 + 闪烁位丝印 */}
-          <div data-dt-vfd-rs485 style={{ gridColumn: 'span 2', display: 'flex', gap: 5,
+          <div data-dt-vfd-rs485 data-dt-vfd-plc={plcDiFlags} style={{ gridColumn: 'span 2', display: 'flex', gap: 5,
             flexWrap: 'wrap', fontSize: 9, fontFamily: 'monospace', color: C.inkSoft,
             borderTop: `1px solid ${C.signalEdge}`, paddingTop: 3 }}>
             <span>485</span>
             <span>站{params['FD-02']}</span>
             <span>FD-00 {params['FD-00']}</span>
             <span>2000H 命令 {command}</span>
+            <span>1008H DI {plcDiFlags}</span>
+            <span>100AH {ai1.toFixed(2)}V</span>
+            <span>PLC {commOnline ? '在线' : '离线'}</span>
             <span>3000H 状态 {status}</span>
             <span>1000H {((externalSetpointHz / (params['F0-10'] || 50)) * 10000).toFixed(0)}</span>
             <span>{MD520_COMM.FREQ2.toString(16).toUpperCase()}H {externalSetpointHz.toFixed(2)}Hz</span>
