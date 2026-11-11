@@ -105,7 +105,8 @@ function vfdPlcScan() {
 
   // ---- 485：PLC 主站写控制命令与频率给定 ----
   const comm = plcRunning && source === 2;
-  vfdWords.set(VR.VFD_COMMAND2, comm ? 1 : 0);
+  // 18.3 表 18-2：2000H 无 0 档；停机用 6（按 F6-10 设定的停机方式停机）
+  vfdWords.set(VR.VFD_COMMAND2, comm ? 1 : 6);
   vfdWords.set(VR.VFD_FREQ2, comm ? u16(Math.round(targetHz * 100)) : 0);
   vfdWords.set(VR.VFD_SETPOINT, comm
     ? u16(Math.round(Math.min(10000, targetHz / maxHz * 10000))) : 0);

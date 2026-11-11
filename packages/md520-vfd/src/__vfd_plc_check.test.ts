@@ -145,6 +145,11 @@ describe('PLC 参考程序：三条接口 + 读写分离 + 默认停机', () => 
     expect(conveyorPlc).not.toContain('vfdWords.set(VR.VFD_STATUS1');
   });
 
+  it('18.3 表 18-2：2000H 无 0 档，PLC 停机写 6（按 F6-10）', () => {
+    expect(conveyorPlc).toContain('comm ? 1 : 6');
+    expect(conveyorPlc).not.toContain('comm ? 1 : 0');
+  });
+
   it('默认停机，不写运行命令也不置位 DI', () => {
     expect(conveyorPlc).toContain('let plcRunning = false');
     expect(conveyorPlc).toContain('const terminal = plcRunning && source === 1');
@@ -171,6 +176,10 @@ describe('前端链路：参数源下发、给定消费、状态回写、零帧�
   it('PLC 默认停机的零帧跳过，保住手动 / 演示 / 评分额定带速', () => {
     expect(link).toContain('store.engaged');
     expect(link).toContain('零帧跳过');
+    // 停机命令改成 6 后，不能再靠 command !== 0 判断 PLC 是否下达给定
+    expect(link).toContain('runCommand');
+    expect(link).toContain('MD520_COMMAND.FWD');
+    expect(link).not.toContain('command !== 0');
   });
 
   it('观众端只读，UI 只加只读状态不写说明', () => {
