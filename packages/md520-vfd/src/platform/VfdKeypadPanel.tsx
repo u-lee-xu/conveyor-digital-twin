@@ -18,7 +18,7 @@ import { useVfdStore } from '../stores/useVfdStore';
 import { keypadDisplay, type KeypadKey } from '../vfd/md520Keypad';
 import {
   MD520_DI, MD520_DO, MD520_FAULTS, MD520_MENUS, MD520_MENU_LABELS,
-  MD520_PARAM_MAP, MD520_UNITS, MD520_MULTI_SPEED, MD520_AI, MD520_COMM,
+  MD520_PARAM_MAP, MD520_UNITS, MD520_AI, MD520_COMM,
 } from '../vfd/md520Spec';
 
 const SEGMENTS: Record<string, string> = {
@@ -298,7 +298,7 @@ export function VfdKeypadPanel() {
           <span style={{ fontSize: 9, color: C.inkSoft }}>
             {['面板', '端子', '通信', '自定义'][source] ?? '面板'}
             {' · '}
-            {['数字', '掉电记忆', 'AI1', 'AI2', 'AI3', '脉冲', '多段', '—', 'PID', '通讯'][freqSource] ?? '数字'}
+            {['数字', '掉电记忆', 'AI1', 'AI2', 'AI3', '脉冲', '多段', '简易PLC', 'PID', '通讯'][freqSource] ?? '数字'}
           </span>
         </div>
 
@@ -458,7 +458,7 @@ export function VfdKeypadPanel() {
             ))}
             <span data-dt-vfd-multi style={{ marginLeft: 'auto', fontSize: 9,
               fontFamily: 'monospace', color: C.ink }}>
-              段{multiIndex} {MD520_MULTI_SPEED[multiIndex]}Hz
+              段{multiIndex} {Math.round(Math.abs(Number(params[`FC-0${multiIndex}`] ?? 0)) / 100 * (params['F0-10'] || 50))}Hz
             </span>
           </div>
 

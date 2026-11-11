@@ -16,7 +16,7 @@
 import { create } from 'zustand';
 import {
   MD520_PARAMS, MD520_PARAM_MAP, MD520_DI, MD520_DO, MD520_COMMAND,
-  MD520_STATUS, MD520_MULTI_SPEED, MD520_SOURCE, MD520_AI,
+  MD520_STATUS, MD520_SOURCE, MD520_AI,
   type Md520Ai2Mode, type Md520Param,
 } from '../vfd/md520Spec';
 import {
@@ -297,7 +297,9 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     if (source === MD520_SOURCE.COMM || freqSource === MD520_SOURCE.FREQ_COMM) {
       targetHz = s.externalSetpointHz;
     } else if (freqSource === MD520_SOURCE.FREQ_MULTI) {
-      targetHz = MD520_MULTI_SPEED[multiSpeedIndex(s.di)] ?? 0;
+      // 17.2.22：段速真值来自 FC-00~FC-07 百分比（相对 F0-10），不再用硬编码 Hz 表
+      const seg = multiSpeedIndex(s.di);
+      targetHz = Math.abs(Number(s.params[`FC-0${seg}`] ?? 0)) / 100 * (s.params['F0-10'] || 50);
     } else if (freqSource === MD520_SOURCE.FREQ_AI1 || freqSource === MD520_SOURCE.FREQ_AI2) {
       targetHz = aiFrequency(s.params, s.ai1, s.ai2, s.ai2Mode);
     } else {

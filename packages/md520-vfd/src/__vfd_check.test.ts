@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   MD520_PARAMS, MD520_PARAM_MAP, MD520_GROUPS, MD520_COMM, MD520_MULTI_SPEED,
+  MD520_FC_DEFAULT_PERCENT,
   paramCommAddress, paramRamAddress, groupHex,
 } from './vfd/md520Spec';
 import {
@@ -119,6 +120,58 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     });
   });
 
+  it('306 页起各调试章节的常用功能码齐全', () => {
+    for (const code of [
+      'F0-02', 'F0-03', 'F0-01', 'F0-17', 'F0-18', 'F0-25',
+      'F6-10', 'F6-11', 'F6-12', 'F6-13', 'F6-14',
+      'F4-00', 'F5-04',
+      'FC-00', 'FC-01', 'FC-02', 'FC-03', 'FC-04', 'FC-05', 'FC-06', 'FC-07',
+    ]) expect(MD520_PARAM_MAP[code]).toBeDefined();
+  });
+
+  it('17.2.8 主频率源X 的 0~9 十档与手册一致', () => {
+    const p = MD520_PARAM_MAP['F0-03'];
+    expect(p.name).toBe('主频率源X选择');
+    expect(Object.keys(p.options ?? {}).map(Number).sort((a, b) => a - b))
+      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(p.options?.[5]).toContain('PULSE');
+    expect(p.options?.[7]).toBe('简易PLC');
+  });
+
+  it('17.2.13 / 17.2.17 / 17.2.20 / 17.2.21 新增码口径', () => {
+    expect(MD520_PARAM_MAP['F0-25'].options?.[0]).toContain('F0-10');
+    expect(MD520_PARAM_MAP['F6-10'].options)
+      .toEqual({ 0: '减速停机', 1: '自由停机', 2: '最大能力停机' });
+    expect(MD520_PARAM_MAP['F6-13'].defaultValue).toBe(50);
+    expect(MD520_PARAM_MAP['F4-00'].options?.[12]).toBe('多段指令端子1');
+    expect(MD520_PARAM_MAP['F5-04'].options?.[1]).toBe('变频器运行中');
+  });
+
+  it('17.2.22 FC 组按百分比口径，默认值与 Hz 演示表一一对应', () => {
+    const fc = MD520_PARAMS.filter((p) => p.group === 'FC');
+    expect(fc).toHaveLength(8);
+    expect(fc.every((p) => p.min === -100 && p.max === 100 && p.unit === '%')).toBe(true);
+    fc.forEach((p, i) => {
+      expect(p.defaultValue).toBe(MD520_FC_DEFAULT_PERCENT[i]);
+      expect(p.defaultValue).toBeCloseTo(MD520_MULTI_SPEED[i] / 50 * 100, 5);
+    });
+  });
+
+  it('段速真值来自 FC 百分比：改 FC-02 后输出频率随之变化', () => {
+    useVfdStore.getState().setParam('F0-02', 1);
+    useVfdStore.getState().setParam('F0-03', 6);
+    useVfdStore.getState().setParam('F0-17', 0.1);
+    useVfdStore.getState().setParam('F0-18', 0.1);
+    const s = useVfdStore.getState();
+    s.setDi('DI4', true);
+    s.setDi('DI2', true);
+    for (let i = 0; i < 200; i += 1) useVfdStore.getState().tick(1 / 60);
+    expect(useVfdStore.getState().outputHz).toBeCloseTo(20, 1);
+    useVfdStore.getState().setParam('FC-02', 10);
+    for (let i = 0; i < 200; i += 1) useVfdStore.getState().tick(1 / 60);
+    expect(useVfdStore.getState().outputHz).toBeCloseTo(5, 1);
+  });
+
   it('功能码通信地址 = 组号高 8 位 + 组内序号（通信手册 2.2）', () => {
     expect(groupHex('F0')).toBe(0xf0);
     expect(paramCommAddress('F0-16' in MD520_PARAM_MAP ? 'F0-16' : 'F0-02')).toBe(0xf002);
@@ -168,8 +221,8 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
   });
 
   it('只读参数不进三级菜单，运行中锁定参数拒绝编辑', () => {
-    // 组顺序 F0/F1/F4/F5/F7/FD/FP/U0，U0 只读组位于索引 7
-    const readonlyState = { ...INITIAL_KEYPAD, level: 1 as const, groupIndex: 7 };
+    // 组顺序 F0/F1/F4/F5/F6/F7/FC/FD/FP/U0，U0 只读组位于索引 9
+    const readonlyState = { ...INITIAL_KEYPAD, level: 1 as const, groupIndex: 9 };
     const r = reduceKeypad({ ...readonlyState, level: 2 }, 'OK', defaults, false);
     expect(r.state.level).toBeLessThanOrEqual(3);
     // F0 组顺序 F0-01/02/03/08/10/17/18，F0-08（runLocked）位于索引 3
