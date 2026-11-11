@@ -208,4 +208,65 @@ export const materials = {
   ground: new THREE.MeshStandardMaterial({
     color: VISUAL.PANEL_COLOR, metalness: 0.0, roughness: 0.85,
   }),
+
+  // ============================================
+  // 变频器驱动台（第 7 个部件展台）
+  // ============================================
+
+  /** 柜体：控制柜石墨蓝灰；柜门：RAL7035 浅灰 */
+  vfdCabinet: new THREE.MeshStandardMaterial({
+    color: VISUAL.CABINET_COLOR, metalness: 0.35, roughness: 0.62,
+  }),
+  vfdDoor: new THREE.MeshStandardMaterial({
+    color: VISUAL.PANEL_COLOR, metalness: 0.25, roughness: 0.68,
+  }),
+  /** 电机筒体：铝银；散热筋与风扇叶片：深一档石墨灰 */
+  vfdMotor: new THREE.MeshStandardMaterial({
+    color: VISUAL.CYL_BODY_COLOR, metalness: 0.58, roughness: 0.42,
+  }),
+  vfdMotorFin: new THREE.MeshStandardMaterial({
+    color: VISUAL.SLEEVE_COLOR, metalness: 0.5, roughness: 0.55,
+  }),
+  vfdFanBlade: new THREE.MeshStandardMaterial({
+    color: VISUAL.STRUCT_COLOR, metalness: 0.35, roughness: 0.6,
+  }),
+  /** 皮带面稍亮于背景，条纹用中灰而非亮银，避免远景读成一排栅栏 */
+  vfdBelt: new THREE.MeshStandardMaterial({
+    color: VISUAL.STRUCT_COLOR, metalness: 0.05, roughness: 0.9,
+  }),
+  vfdStripe: new THREE.MeshStandardMaterial({
+    color: VISUAL.SLEEVE_COLOR, metalness: 0.3, roughness: 0.7, ...decalOptions,
+  }),
+  /**
+   * 演示台滚筒：纯金属度高的材质在只有三点布光、无 envMap 的场景里会读成黑圆盘，
+   * 这里降金属度并给一点自发光，保证远端滚筒端面在暗背景下也可辨。
+   */
+  vfdRoller: new THREE.MeshStandardMaterial({
+    color: VISUAL.SILVER_COLOR, metalness: 0.12, roughness: 0.6,
+    emissive: VISUAL.SILVER_COLOR, emissiveIntensity: 0.10,
+  }),
+  vfdRollerFace: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENDCAP_COLOR, metalness: 0.15, roughness: 0.55,
+    emissive: VISUAL.ENDCAP_COLOR, emissiveIntensity: 0.16,
+  }),
+  vfdNameplate: new THREE.MeshStandardMaterial({
+    color: VISUAL.ENDCAP_COLOR, metalness: 0.75, roughness: 0.3, ...decalOptions,
+  }),
+  /** 柜门三只状态灯：灭态共用一份，亮态按运行/故障/通讯分色 */
+  vfdLedOff: new THREE.MeshStandardMaterial({
+    color: VISUAL.LAMP_DARK, emissive: '#000000', emissiveIntensity: 0,
+    roughness: 0.4, metalness: 0.2,
+  }),
+  vfdLedRun: new THREE.MeshStandardMaterial({
+    color: VISUAL.LAMP_GREEN, emissive: VISUAL.LAMP_GREEN,
+    emissiveIntensity: VISUAL.LED_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.1,
+  }),
+  vfdLedFault: new THREE.MeshStandardMaterial({
+    color: VISUAL.LAMP_RED, emissive: VISUAL.LAMP_RED,
+    emissiveIntensity: VISUAL.LED_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.1,
+  }),
+  vfdLedComm: new THREE.MeshStandardMaterial({
+    color: VISUAL.MATERIAL_BLUE_COLOR, emissive: VISUAL.MATERIAL_BLUE_COLOR,
+    emissiveIntensity: VISUAL.LED_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.1,
+  }),
 } as const;

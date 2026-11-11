@@ -437,6 +437,49 @@ export type ConveyorViewKey = keyof typeof VIEW_PRESETS;
 export const VIEW_BUTTONS: ConveyorViewKey[] = ['overview', 'top', 'feed', 'sorting', 'tower'];
 
 // ============================================================
+// VFD DRIVE 变频器驱动台（第 7 个部件展台）
+//
+// 教学演示装置，不参与分拣业务逻辑：柜体 + 三相电机 + 短皮带双滚筒。
+// 动画只认 useVfdStore.outputFactor()（输出频率 / 50Hz），不受
+// conveyorRunning 门控；整机启停真值仍归 useDeviceStore / CONVEYOR 线圈。
+// 所有可见尺寸集中在此，几何走 components/scene/shared/geometries.ts 单例。
+// ============================================================
+
+export const VFD_DRIVE_DETAIL = {
+  /** 底座：y=0 为展台网格面，z 略后移给外露风扇留位 */
+  BASE_W: 1.90, BASE_D: 0.80, BASE_T: 0.04, BASE_Y: -0.02, BASE_Z: -0.08,
+
+  /** 变频器柜体：面板朝 -Z（与整机默认 -Z 机位一致），x 在皮带左侧且不被电机遮挡 */
+  CABINET_W: 0.40, CABINET_H: 0.72, CABINET_D: 0.24,
+  CABINET_X: -0.72, CABINET_Z: 0.06,
+  DOOR_T: 0.012,
+  DISPLAY_W: 0.30, DISPLAY_H: 0.14, DISPLAY_Y: 0.50,
+  /** 三只灯放在数字牌上方，避开电机接线盒对柜门下部的遮挡 */
+  LED_R: 0.017, LED_Y: 0.64, LED_GAP: 0.082,
+  VENT_W: 0.22, VENT_H: 0.006, VENT_GAP: 0.019, VENT_COUNT: 5,
+  NAMEPLATE_W: 0.20, NAMEPLATE_H: 0.055, NAMEPLATE_Y: 0.11,
+
+  /** 三相电机：轴线沿 Z，与左滚筒同轴；尾端风扇朝 -Z 外露 */
+  MOTOR_R: 0.105, MOTOR_LEN: 0.28,
+  MOTOR_X: -0.22, MOTOR_Y: 0.30, MOTOR_Z: -0.31,
+  FIN_T: 0.008, FIN_COUNT: 8, FIN_LEN: 0.22,
+  FAN_R: 0.088, FAN_BLADE_L: 0.072, FAN_BLADE_W: 0.038, FAN_BLADE_H: 0.007,
+  FAN_BLADE_COUNT: 6,
+  SHAFT_R: 0.016, SHAFT_LEN: 0.16,
+  COUPLING_R: 0.032, COUPLING_LEN: 0.075, COUPLING_Z: -0.13,
+
+  /** 短皮带与双滚筒：带面沿 X，滚筒轴沿 Z */
+  BELT_LEN: 0.94, BELT_W: 0.22, BELT_T: 0.012, BELT_Y: 0.30,
+  BELT_CENTER_X: 0.22,
+  ROLLER_R: 0.068, ROLLER_LEN: 0.26, ROLLER_DX: 0.44,
+  STRIPE_W: 0.020, STRIPE_T: 0.004, STRIPE_COUNT: 10,
+  STAND_H: 0.23, STAND_W: 0.028,
+
+  /** 动画：50Hz 对应 4 极电机 1500rpm；这里用视觉演示转速，不做真实传动比 */
+  MAX_RPS: 2.6, BELT_SPEED: 0.46, RPM_PER_HZ: 30,
+} as const;
+
+// ============================================================
 // ASSEMBLY 装配层 / PART STAGE 部件展台
 //
 // 与自动配药 constants.ts 同一套三层结构：
@@ -448,7 +491,7 @@ export const VIEW_BUTTONS: ConveyorViewKey[] = ['overview', 'top', 'feed', 'sort
 // ============================================================
 
 export type Vec3 = [number, number, number];
-export type PartKind = 'belt' | 'cylinder' | 'sensor' | 'chute' | 'tower' | 'table';
+export type PartKind = 'belt' | 'cylinder' | 'sensor' | 'chute' | 'tower' | 'table' | 'drive';
 
 export interface PartPlacement {
   /** 部件局部原点在整机世界坐标中的位置 */
@@ -482,6 +525,11 @@ export const ASSEMBLY: Record<PartKind, PartPlacement> = {
   tower: {
     position: [...COMPONENT.TOWER_POSITION] as Vec3,
     origin: '底座法兰底面；y=0 为地面，三色灯罩沿 +Y 分层',
+  },
+  drive: {
+    // 教学演示台只在展台使用，整机 AssembledScene 不摆放；此处给装配层的名义位置。
+    position: [0, 0, 0],
+    origin: '驱动台底座中心；y=0 为展台网格面，+X 沿短皮带方向，柜体在 -X 侧且面板朝 -Z',
   },
 };
 
@@ -533,6 +581,11 @@ export const PART_STAGES: Record<PartKind, PartStage> = {
     label: '上料物料台',
     camera: [0.95, 0.55, 1.20], target: [0, -0.40, 0], fov: 40, grid: 1, gridY: -0.90,
   },
+  drive: {
+    label: '变频器驱动台',
+    camera: [0.95, 0.98, -2.05], target: [-0.10, 0.34, -0.10],
+    fov: 42, grid: 2, gridY: -0.02,
+  },
 };
 
 /** 展台部件的局部原点定义：截图 / 自检时明确「这个部件以哪个面为基准」 */
@@ -543,6 +596,7 @@ export const PART_STAGE_ORIGIN: Record<PartKind, string> = {
   chute: ASSEMBLY.chute.origin,
   tower: ASSEMBLY.tower.origin,
   table: ASSEMBLY.table.origin,
+  drive: ASSEMBLY.drive.origin,
 };
 
 /**

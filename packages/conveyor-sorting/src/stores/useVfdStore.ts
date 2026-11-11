@@ -82,7 +82,13 @@ interface VfdStore {
   setCommOnline: (online: boolean) => void;
   /** 每帧推进加减速斜坡，返回频率倍率供 3D 消费 */
   tick: (delta: number) => number;
+  /** 整机带速倍率：未接管时恒 1，保住手动/演示/评分的原有额定带速 */
   speedFactor: () => number;
+  /**
+   * 演示装置倍率：严格按输出频率，不做 engaged 保底。
+   * 变频器驱动台只表现「变频器 → 电机」这一层，不参与分拣业务启停。
+   */
+  outputFactor: () => number;
   multiSpeedIndex: () => number;
   snapshot: () => VfdSnapshot;
   applyBroadcast: (v: Record<string, boolean | number>) => void;
@@ -307,6 +313,11 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
   speedFactor: () => {
     const s = get();
     if (!s.engaged) return 1;
+    return s.faultCode ? 0 : Math.max(0, s.outputHz / NOMINAL_HZ);
+  },
+
+  outputFactor: () => {
+    const s = get();
     return s.faultCode ? 0 : Math.max(0, s.outputHz / NOMINAL_HZ);
   },
 
