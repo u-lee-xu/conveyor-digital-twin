@@ -46,7 +46,8 @@ export const MD520_FC_DEFAULT_PERCENT = [0, 20, 40, 60, 80, 100, 70, 50] as cons
 
 export const MD520_PARAMS: Md520Param[] = [
   /** 08 用户手册 17.2.9：默认 2（V/f）；0=SVC 无速度传感器矢量、1=FVC 带 PG 闭环、2=V/f 开环。
-   *  本虚拟面板只做参数镜像，不实现矢量控制算法，运行中不可改。 */
+   *  教学近似只做低速段爬升增益（SVC 1.6 / FVC 1.25）与 FVC 频率到达容差，
+   *  **不实现矢量控制算法**；默认 2 与原斜坡逐值一致，运行中不可改。 */
   { code: 'F0-01', group: 'F0', index: 1, name: '第1电机控制方式', defaultValue: 2, min: 0, max: 2, decimals: 0, unit: '',
     options: { 0: 'SVC', 1: 'FVC', 2: 'V/f' }, runLocked: true },
   { code: 'F0-02', group: 'F0', index: 2, name: '运行指令选择', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
@@ -63,8 +64,8 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F0-25', group: 'F0', index: 25, name: '加减速时间基准频率', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '最大频率(F0-10)', 1: '设定频率', 2: '100Hz', 3: '额定频率' } },
   /** F1-00~F1-05 电机铭牌参数：08 用户手册 30 章参数表，调试流程 17.1.1 第 5 步整组设定。
-   *  均为「停机更改」；F1-01 / F1-03 参与只读监视量（输出功率 / 电流），F1-04 参与 F0-25=3 的斜坡基准，
-   *  其余不实现矢量辨识与转矩计算。 */
+   *  均为「停机更改」；F1-01 / F1-03 参与只读监视量（输出功率 / 电流），F1-00 给监视电流一个效率系数，
+   *  F1-04 参与 F0-25=3 的斜坡基准；不实现矢量辨识与转矩计算。 */
   { code: 'F1-00', group: 'F1', index: 0, name: '电机类型选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
     options: { 0: '普通异步电机', 1: '变频异步电机', 2: '永磁同步电机',
       3: '无助磁磁阻电机', 4: '电磁线圈' }, runLocked: true },
@@ -87,8 +88,8 @@ export const MD520_PARAMS: Md520Param[] = [
     options: { 0: '无输出', 1: '变频器运行中', 2: '故障输出', 3: '频率水平检测FDT1',
       4: '频率到达', 5: '零速运行中', 19: '欠压状态输出', 20: '通信设定' } },
   /** 313 页 17.2.17 停机参数：F6-10 决定停机方式（减速 / 自由 / 最大能力），
-   *  F6-14 直流制动时间给自由停机一个短制动段；F6-11~13 仍只作参数镜像，
-   *  教学子集不实现直流制动电流闭环。 */
+   *  F6-14 直流制动时间开启制动段，F6-11 起始频率 / F6-12 等待时间 / F6-13 制动电流
+   *  只在制动段生效；教学子集不实现直流制动电流闭环。 */
   { code: 'F6-10', group: 'F6', index: 10, name: '停机方式', defaultValue: 0, min: 0, max: 2, decimals: 0, unit: '',
     options: { 0: '减速停机', 1: '自由停机', 2: '最大能力停机' } },
   { code: 'F6-11', group: 'F6', index: 11, name: '停机直流制动起始频率', defaultValue: 0, min: 0, max: 599, decimals: 2, unit: 'Hz' },
@@ -97,7 +98,7 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F6-14', group: 'F6', index: 14, name: '停机直流制动时间', defaultValue: 0, min: 0, max: 100, decimals: 1, unit: 's' },
   { code: 'F7-01', group: 'F7', index: 1, name: 'MF.K键功能选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
     options: { 0: '无效', 1: '强制面板控制', 2: '正反转切换', 3: '正转点动', 4: '反转点动' } },
-  /** 285 页表 16-6：STOP/RESET 键功能四档 */
+  /** 285 页表 16-6：STOP/RESET 键功能四档；教学近似为停机方式覆盖（0 用 F6-10 / 1 自由 / 2 最大能力 / 3 减速） */
   { code: 'F7-02', group: 'F7', index: 2, name: 'STOP/RESET键功能', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '键盘方式S/R有效', 1: 'OFF1命令S/R有效', 2: 'OFF2命令S/R有效', 3: 'OFF3命令S/R有效' } },
   /** 331 页 17.2.22：FC-00~FC-15 共 16 段，教学子集取 DI1~DI3 三位选段对应的前 8 段。
@@ -117,6 +118,7 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'FP-01', group: 'FP', index: 1, name: '参数初始化', defaultValue: 0, min: 0, max: 503, decimals: 0, unit: '',
     options: { 0: '无操作', 1: '恢复出厂不含电机参数', 2: '清除记录信息',
       4: '备份用户当前参数', 501: '恢复用户备份参数', 503: '恢复出厂含电机参数' }, runLocked: true },
+  /** 教学近似：低 10 位按组顺序控制「用户自定义参数」菜单可见组，基本菜单不受影响 */
   { code: 'FP-02', group: 'FP', index: 2, name: '功能参数组显示选择', defaultValue: 63, min: 0, max: 65535, decimals: 0, unit: '' },
   { code: 'U0-00', group: 'U0', index: 0, name: '运行频率', defaultValue: 0, min: 0, max: 655.35, decimals: 2, unit: 'Hz', readOnly: true },
 ];

@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useVfdStore } from './stores/useVfdStore';
 import { MD520_PARAMS } from './vfd/md520Spec';
-import { INITIAL_KEYPAD } from './vfd/md520Keypad';
+import { INITIAL_KEYPAD, visibleParams } from './vfd/md520Keypad';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = (p: string) => readFileSync(join(here, p), 'utf8');
@@ -160,5 +160,78 @@ describe('补 3：F1 铭牌参数驱动只读监视量', () => {
     expect(panel).toContain('data-dt-vfd-monitor');
     expect(panel).toContain('outputCurrent.toFixed(2)');
     expect(panel).toContain('outputPower.toFixed(2)');
+  });
+});
+
+describe('继续补：其余只存值参数的教学近似效果（默认档零回归）', () => {
+  const riseIn1s = () => {
+    useVfdStore.getState().dispatchKey('RUN');
+    advance(1);
+    return useVfdStore.getState().outputHz;
+  };
+
+  it('F0-01 默认 2(V/f) 仍是 2.5Hz/秒；SVC=0 更快、FVC=1 居中', () => {
+    expect(riseIn1s()).toBeCloseTo(2.5, 1);
+  });
+  it('F0-01=0 (SVC) 低速段爬升 ×1.6', () => {
+    useVfdStore.getState().setParam('F0-01', 0);
+    expect(riseIn1s()).toBeCloseTo(4, 1);
+  });
+  it('F0-01=1 (FVC) 低速段爬升 ×1.25，且频率到达容差更宽', () => {
+    useVfdStore.getState().setParam('F0-01', 1);
+    expect(riseIn1s()).toBeCloseTo(3.13, 1);
+    expect(src('stores/useVfdStore.ts')).toContain('ctrlMode === 1 ? 0.2 : 0.05');
+  });
+
+  it('F7-02=1 (OFF1) 覆盖 F6-10=0，STOP 后立即归零', () => {
+    useVfdStore.getState().setParam('F6-10', 0);
+    useVfdStore.getState().setParam('F7-02', 1);
+    runToFull();
+    useVfdStore.getState().dispatchKey('STOP');
+    useVfdStore.getState().tick(step);
+    expect(useVfdStore.getState().outputHz).toBe(0);
+  });
+
+  it('F6-13 制动电流加大，制动段降得更快', () => {
+    const brakingWith = (current: number) => {
+      useVfdStore.setState({ outputHz: 0 });
+      useVfdStore.getState().setParam('F6-10', 1);
+      useVfdStore.getState().setParam('F6-14', 2);
+      useVfdStore.getState().setParam('F6-13', current);
+      runToFull();
+      useVfdStore.getState().dispatchKey('STOP');
+      advance(0.3);
+      return useVfdStore.getState().outputHz;
+    };
+    expect(brakingWith(100)).toBeLessThan(brakingWith(50));
+  });
+
+  it('F6-11 制动起始频率：高于起始频率时不加制动增益', () => {
+    useVfdStore.getState().setParam('F6-10', 1);
+    useVfdStore.getState().setParam('F6-14', 2);
+    useVfdStore.getState().setParam('F6-13', 100);
+    useVfdStore.getState().setParam('F6-11', 1);
+    runToFull();
+    useVfdStore.getState().dispatchKey('STOP');
+    advance(0.3);
+    expect(useVfdStore.getState().outputHz).toBeGreaterThan(0);
+  });
+
+  it('F1-00 电机类型给输出电流效率系数', () => {
+    runToFull();
+    const base = useVfdStore.getState().outputCurrent;
+    useVfdStore.getState().setParam('F1-00', 2);
+    useVfdStore.getState().tick(step);
+    expect(useVfdStore.getState().outputCurrent).toBeCloseTo(base * 0.88, 1);
+  });
+
+  it('FP-02 掩码控制用户自定义参数菜单；默认 63 仍显示 4 项', () => {
+    expect(visibleParams('user', defaults)).toHaveLength(4);
+    expect(visibleParams('user', { ...defaults, 'FP-02': 0 })).toHaveLength(0);
+    expect(visibleParams('basic', { ...defaults, 'FP-02': 0 }).length).toBeGreaterThan(30);
+  });
+
+  it('FD-01 Modbus 数据格式在 485 状态行可见', () => {
+    expect(src('platform/VfdKeypadPanel.tsx')).toContain("FD-01 {params['FD-01']}");
   });
 });

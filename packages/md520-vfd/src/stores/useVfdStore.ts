@@ -356,19 +356,41 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
           : maxHz;
 
     // F6-10 停机方式（313 页 17.2.17）：0 按 F0-18 减速 / 1 自由停机 / 2 最大能力停机。
-    // F6-14 直流制动时间给自由停机一个短的制动减速段（教学近似，不实现电流闭环）。
-    const stopMode = Math.trunc(s.params['F6-10'] ?? 0);
+    // F7-02 STOP/RESET 键功能（285 页表 16-6）教学近似为停机方式覆盖：
+    //   0 用 F6-10 / 1(OFF1) 自由停机 / 2(OFF2) 最大能力 / 3(OFF3) 减速停机。
+    // 默认 0 时完全沿用 F6-10，既有演示与 CDP 断言不回归。
+    const stopKeyMode = Math.trunc(s.params['F7-02'] ?? 0);
+    const stopMode = stopKeyMode === 0
+      ? Math.trunc(s.params['F6-10'] ?? 0)
+      : stopKeyMode === 1 ? 1 : stopKeyMode === 2 ? 2 : 0;
     const stopping = !running && goal < s.outputHz;
+
+    // F0-01 控制方式教学近似（不实现矢量算法）：低速段 SVC 响应最快、FVC 居中，
+    // V/f（默认 2）保持原斜坡；FVC 另给更宽的频率到达判定。
+    const ctrlMode = Math.trunc(s.params['F0-01'] ?? 2);
+    const lowSpeedGain = ctrlMode === 0 ? 1.6 : ctrlMode === 1 ? 1.25 : 1;
+
     let outputHz: number;
     if (stopping && stopMode === 1) {
       const brakeTime = Math.max(0, Number(s.params['F6-14']) || 0);
-      outputHz = brakeTime > 0
-        ? Math.max(goal, s.outputHz - maxHz / Math.max(0.1, brakeTime) * dt)
-        : goal;
+      if (brakeTime <= 0) {
+        outputHz = goal;
+      } else {
+        // F6-11 制动起始频率 / F6-12 等待时间 / F6-13 制动电流，
+        // 只在 F6-14>0 的制动段生效；默认 0/0/50 时与单看 F6-14 的结果一致。
+        const startHz = Math.max(0, Number(s.params['F6-11']) || 0);
+        const wait = Math.max(0, Number(s.params['F6-12']) || 0);
+        const brakeCurrent = Math.max(1, Number(s.params['F6-13']) || 50);
+        const inBrake = startHz <= 0 || s.outputHz <= startHz;
+        const brakeRate = maxHz / Math.max(0.1, brakeTime + wait)
+          * (inBrake ? brakeCurrent / 50 : 1);
+        outputHz = Math.max(goal, s.outputHz - brakeRate * dt);
+      }
     } else {
       const seconds = stopping && stopMode === 2 ? Math.max(0.1, dec / 5)
         : goal > s.outputHz ? acc : dec;
-      const rate = baseHz / seconds * dt;
+      const gain = goal > s.outputHz && s.outputHz < 5 ? lowSpeedGain : 1;
+      const rate = baseHz / seconds * dt * gain;
       outputHz = goal > s.outputHz
         ? Math.min(goal, s.outputHz + rate)
         : Math.max(goal, s.outputHz - rate);
@@ -376,16 +398,20 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
 
     // F1-03 额定电流 / F1-01 额定功率参与只读监视量计算：
     // 空载按 15% 额定电流，负载率随输出频率线性上升（教学近似，非矢量模型）。
+    // F1-00 电机类型再给一个效率系数：永磁同步(2) 电流低 12%，电磁线圈(4) 高 20%。
     const load = Math.min(1, outputHz / maxHz);
     const ratedCurrent = Math.max(0.01, Number(s.params['F1-03']) || 9);
     const ratedPower = Math.max(0, Number(s.params['F1-01']) || 3.7);
+    const motorType = Math.trunc(s.params['F1-00'] ?? 0);
+    const motorFactor = motorType === 2 ? 0.88 : motorType === 4 ? 1.2 : 1;
     const motoring = running || outputHz > 0.01;
-    const outputCurrent = motoring ? ratedCurrent * (0.15 + 0.85 * load) : 0;
+    const outputCurrent = motoring ? ratedCurrent * (0.15 + 0.85 * load) * motorFactor : 0;
     const outputPower = motoring ? ratedPower * load : 0;
 
+    const reachTolerance = ctrlMode === 1 ? 0.2 : 0.05;
     const doFlags = {
       DO1: running,
-      FM: running && Math.abs(outputHz - goal) < 0.05,
+      FM: running && Math.abs(outputHz - goal) < reachTolerance,
       RELAY: faulted,
     };
     const status = faulted ? MD520_STATUS.FAULT

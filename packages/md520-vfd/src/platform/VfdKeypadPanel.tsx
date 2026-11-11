@@ -504,6 +504,7 @@ export function VfdKeypadPanel() {
             <span>485</span>
             <span>站{params['FD-02']}</span>
             <span>FD-00 {params['FD-00']}</span>
+            <span>FD-01 {params['FD-01']}</span>
             {/* 2000H 无 0 档：未连 PLC 时没有有效控制字，不显示 store 的初始占位 0 */}
             <span>2000H 命令 {commOnline ? command : '—'}</span>
             <span>1008H DI {plcDiFlags}</span>

@@ -66,7 +66,13 @@ export const INITIAL_KEYPAD: KeypadState = {
 /** 当前菜单下可见的参数（用户自定义参数 / 用户更改参数按真实语义过滤） */
 export function visibleParams(menu: Md520Menu, values: Record<string, number>): Md520Param[] {
   if (menu === 'user') {
-    return MD520_PARAMS.filter((p) => ['F0-02', 'F0-08', 'F0-17', 'F0-18'].includes(p.code));
+    // FP-02 功能参数组显示选择：低 10 位按 MD520_GROUPS 顺序掩码控制可见组。
+    // 基本菜单始终显示全部参数，掩码只作用于「用户自定义参数」菜单；
+    // 默认 63 的 bit0 为 1，F0 组四个常用码仍全部可见。
+    const mask = Math.trunc(values['FP-02'] ?? 63);
+    const allowed = new Set(MD520_GROUPS.filter((_g, i) => (mask & (1 << i)) !== 0));
+    return MD520_PARAMS.filter((p) => allowed.has(p.group)
+      && ['F0-02', 'F0-08', 'F0-17', 'F0-18'].includes(p.code));
   }
   if (menu === 'changed') {
     return MD520_PARAMS.filter((p) => {
