@@ -316,7 +316,7 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
 
   it('按键区：SVG 凹弧四瓣 + 双层轮廓 + 30° 斜键 + 倒梯形 MF.K', () => {
     expect(panel).toContain('data-dt-vfd-nav');
-    expect(panel).toContain("width: 132, height: 132, borderRadius: '50%'");
+    expect(panel).toContain("width: 140, height: 140, borderRadius: '50%'");
     // 真机按键区没有外圈轮廓，四瓣自己围成圆环
     expect(panel).not.toContain('boxShadow: \'inset 0 2px 5px rgba(50,64,78,.16)\'');
     expect(panel).toContain('function KeyOutline');
@@ -336,6 +336,30 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(panel).toContain("transform: 'rotate(30deg)'");
     expect(panel).toContain('shape="mfk" w={62} h={26}');                    // 倒梯形 MF.K
     expect(panel).toContain('MF. K');
+  });
+
+  it('四个导航瓣包围盒互不重叠，且与 OK 圆留十字缝', () => {
+    // 尺寸链与 JSX 一致，改数值时必须同步这里，否则立刻红
+    expect(panel).toContain("width: 140, height: 140, borderRadius: '50%'");
+    expect(panel).toContain('shape="up" w={62} h={32}');
+    expect(panel).toContain('shape="down" w={62} h={32}');
+    expect(panel).toContain('shape="left" w={34} h={64}');
+    expect(panel).toContain('shape="right" w={34} h={64}');
+    expect(panel).toContain('shape="ok" w={58} h={58}');
+    const NAV = 140;
+    const rects = [
+      { x: (NAV - 62) / 2, y: 4, w: 62, h: 32 },
+      { x: (NAV - 62) / 2, y: NAV - 4 - 32, w: 62, h: 32 },
+      { x: 4, y: (NAV - 64) / 2, w: 34, h: 64 },
+      { x: NAV - 4 - 34, y: (NAV - 64) / 2, w: 34, h: 64 },
+    ];
+    const ok = { x: (NAV - 58) / 2, y: (NAV - 58) / 2, w: 58, h: 58 };
+    const hit = (a: typeof ok, b: typeof ok) =>
+      a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    for (let i = 0; i < rects.length; i += 1) {
+      for (let j = i + 1; j < rects.length; j += 1) expect(hit(rects[i], rects[j])).toBe(false);
+      expect(hit(rects[i], ok)).toBe(false);
+    }
   });
 
   it('10 键 aria-label 齐全，菜单键用 pointer 长按切主辅显示区', () => {

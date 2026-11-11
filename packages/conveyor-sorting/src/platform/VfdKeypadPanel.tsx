@@ -338,28 +338,30 @@ export function VfdKeypadPanel() {
         {/* 按键区：真机布局，按键轮廓全部走 SVG path */}
         <div data-dt-vfd-keypad style={{ position: 'relative', height: 200 }}>
 
-          {/* 导航环：真机没有外圈轮廓，四瓣按键自己围成圆环 */}
+          {/* 导航环：真机没有外圈轮廓，四瓣按键自己围成圆环。
+              四瓣的矩形包围盒在四个角完全分离（x 留 1px、y 留 2px），
+              与中央 OK 圆之间留 3~5px 均匀间隙，形成真机的十字缝。 */}
           <div data-dt-vfd-nav style={{ position: 'absolute', left: '50%', top: 3, transform: 'translateX(-50%)',
-            width: 132, height: 132, borderRadius: '50%' }}>
+            width: 140, height: 140, borderRadius: '50%' }}>
             <PanelKey label="UP" name="递增键" onPress={press} disabled={readOnly}
-              shape="up" w={78} h={40}
-              style={{ left: '50%', top: 3, transform: 'translateX(-50%)', fontSize: 13 }}>
-              <span style={{ transform: 'translateY(-6px)' }}>△</span>
+              shape="up" w={62} h={32}
+              style={{ left: '50%', top: 4, transform: 'translateX(-50%)', fontSize: 13 }}>
+              <span style={{ transform: 'translateY(-4px)' }}>△</span>
             </PanelKey>
             <PanelKey label="DOWN" name="递减键" onPress={press} disabled={readOnly}
-              shape="down" w={78} h={40}
-              style={{ left: '50%', bottom: 3, transform: 'translateX(-50%)', fontSize: 13 }}>
-              <span style={{ transform: 'translateY(6px)' }}>▽</span>
+              shape="down" w={62} h={32}
+              style={{ left: '50%', bottom: 4, transform: 'translateX(-50%)', fontSize: 13 }}>
+              <span style={{ transform: 'translateY(4px)' }}>▽</span>
             </PanelKey>
             <PanelKey label="LEFT" name="左移位键" onPress={press} disabled={readOnly}
-              shape="left" w={40} h={78}
-              style={{ left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
-              <span style={{ transform: 'translateX(-6px)' }}>◀</span>
+              shape="left" w={34} h={64}
+              style={{ left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
+              <span style={{ transform: 'translateX(-4px)' }}>◀</span>
             </PanelKey>
             <PanelKey label="RIGHT" name="右移位键" onPress={press} disabled={readOnly}
-              shape="right" w={40} h={78}
-              style={{ right: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
-              <span style={{ transform: 'translateX(6px)' }}>▶</span>
+              shape="right" w={34} h={64}
+              style={{ right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
+              <span style={{ transform: 'translateX(4px)' }}>▶</span>
             </PanelKey>
             <PanelKey label="OK" name="确认键" onPress={press} disabled={readOnly}
               shape="ok" w={58} h={58}
