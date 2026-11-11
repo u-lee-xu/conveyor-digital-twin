@@ -22,6 +22,7 @@ const startLab = read('../../../scripts/start-lab.cjs');
 const server = read('../../../websocket-server/server.js');
 const relay = read('../../../websocket-server/broadcast.js');
 const mockPlc = read('../../../websocket-server/mock-dispensing-server.js');
+const conveyorPlc = read('../../../websocket-server/mock-conveyor-server.js');
 const edge = read('../../../websocket-server/edge-broadcast.json');
 const shellHtml = read('../../platform/index.html');
 const platformVite = read('../../platform/vite.config.ts');
@@ -53,6 +54,15 @@ describe('内部服务绑定：只监听 127.0.0.1', () => {
   it('虚拟 PLC 的 Modbus 口与状态口仍绑回环', () => {
     expect(mockPlc).toContain("host: '127.0.0.1'");
     expect(mockPlc).toContain("httpServer.listen(HTTP_PORT, '127.0.0.1'");
+  });
+
+  it('传送带场景独立虚拟 PLC 也只绑回环，且两个场景不共用寄存器区', () => {
+    expect(conveyorPlc).toContain("host: '127.0.0.1'");
+    expect(conveyorPlc).toContain("httpServer.listen(HTTP_PORT, '127.0.0.1'");
+    expect(conveyorPlc).toContain('vfdPlcScan');
+    expect(conveyorPlc).not.toContain('DISPENSING_ADDRESSES');
+    expect(mockPlc).not.toContain('isVfdAddress');
+    expect(mockPlc).not.toContain('vfdWords');
   });
 
   it('只有 Web 服务对外监听', () => {
@@ -92,6 +102,13 @@ describe('启动脚本：端口漂移 fail-fast，占用不再静默复用', () 
     expect(startLab).toContain('WS_PORT');
     expect(startLab).toContain('broadcastPort');
     expect(startLab).toContain('与同源代理目标');
+  });
+
+  it('两个场景各自启动独立虚拟 PLC，端口不混用', () => {
+    expect(startLab).toContain('CONVEYOR_PLC_PORT = 1503');
+    expect(startLab).toContain("path.join(WSS, 'mock-conveyor-server.js')");
+    expect(startLab).toContain("path.join(WSS, 'mock-dispensing-server.js')");
+    expect(startLab).toContain('两个场景必须独立');
   });
 
   it('端口被占用改为明确告警，不再写成静默沿用', () => {

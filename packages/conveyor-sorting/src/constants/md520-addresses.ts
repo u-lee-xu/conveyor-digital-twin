@@ -21,6 +21,9 @@ export const MD520_HOLDING_REGISTERS = {
   VFD_FREQ2: 29456,       // 7310H 通信设定频率2
   VFD_COMMAND1: 29457,    // 7311H 控制命令1
   VFD_STATUS2: 28740,     // 7044H 读取变频器状态2
+  VFD_PARAM_F0_02: 61442, // F002H 运行指令选择（面板写 → PLC 读）
+  VFD_PARAM_F0_03: 61443, // F003H 主频率指令输入选择（面板写 → PLC 读）
+  VFD_PARAM_F0_10: 61450, // F00AH 最大频率（面板写 → PLC 读，0.01Hz）
 } as const;
 
 /** 功能码参数通信地址：组号高 8 位 + 组内序号低 8 位（通信手册 2.2） */

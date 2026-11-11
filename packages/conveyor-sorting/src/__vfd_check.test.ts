@@ -259,7 +259,8 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
   const index = src('index.ts');
   const shared = rootSrc('packages/shared/src/services/modbus-websocket.ts');
   const server = rootSrc('websocket-server/server.js');
-  const mockPlc = rootSrc('websocket-server/mock-dispensing-server.js');
+  const mockPlc = rootSrc('websocket-server/mock-conveyor-server.js');
+  const dispensingPlc = rootSrc('websocket-server/mock-dispensing-server.js');
   const addresses = src('constants/md520-addresses.ts');
 
   it('面板挂进仿真模式，链路挂进常驻 effects', () => {
@@ -386,6 +387,27 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(server).toContain("'uint16'");
     expect(server).toContain('spec.type ===');
     expect(mockPlc).toContain('isVfdAddress');
+  });
+
+  it('场景独立：变频器从站只在 conveyor 虚拟 PLC，配药 PLC 零残留', () => {
+    expect(mockPlc).toContain('vfdPlcScan');
+    expect(mockPlc).toContain('VFD_REGISTERS');
+    expect(mockPlc).not.toContain('DISPENSING_ADDRESSES');
+    for (const token of ['isVfdAddress', 'vfdWords', 'VFD_ADDR_MIN', 'MD520']) {
+      expect(dispensingPlc).not.toContain(token);
+    }
+  });
+
+  it('PLC 三条接口与读写分离在链路两侧都接线', () => {
+    expect(mockPlc).toContain('VR.VFD_DI_FLAGS');
+    expect(mockPlc).toContain('VR.VFD_AI1');
+    expect(mockPlc).toContain('VR.VFD_COMMAND2');
+    expect(mockPlc).toContain('VR.VFD_DO_FLAGS');
+    expect(link).toContain('VFD_DI_FLAGS');
+    expect(link).toContain('VFD_AI1');
+    expect(link).toContain('VFD_PARAM_F0_02');
+    expect(link).toContain('VFD_DO_FLAGS');
+    expect(panel).toContain('data-dt-vfd-plc');
   });
 
   it('数值快照成对，观众端不自建 PLC 通道', () => {

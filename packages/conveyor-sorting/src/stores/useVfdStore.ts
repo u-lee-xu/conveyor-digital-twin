@@ -44,6 +44,8 @@ export interface VfdSnapshot {
   status: number;
   diFlags: number;
   doFlags: number;
+  /** AI1 模拟量数值镜像（V），由 PLC AO 经 100AH 下发 */
+  ai1: number;
   faultCode: string;
   engaged: boolean;
 }
@@ -230,6 +232,12 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     if (typeof frame.status === 'number' && Number.isFinite(frame.status)) patch.status = Math.trunc(frame.status);
     if (typeof frame.diFlags === 'number' && Number.isFinite(frame.diFlags)) {
       patch.di = Object.fromEntries(MD520_DI.map((d, i) => [d.key, !!(frame.diFlags! & (1 << i))]));
+      // PLC 经 DIDO 下达给定即视为接管；未下达的零帧由 VfdLink 跳过
+      patch.engaged = true;
+    }
+    if (typeof frame.ai1 === 'number' && Number.isFinite(frame.ai1)) {
+      patch.ai1 = Math.max(MD520_AI.AI1.min, Math.min(MD520_AI.AI1.max, frame.ai1));
+      patch.engaged = true;
     }
     if (frame.faultCode) {
       patch.faultCode = frame.faultCode;
@@ -332,6 +340,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       status: s.status,
       diFlags: bitFlags(s.di),
       doFlags: doBitFlags(s.doFlags),
+      ai1: Math.round(s.ai1 * 100) / 100,
       faultCode: s.faultCode ?? '',
       engaged: s.engaged,
     };
