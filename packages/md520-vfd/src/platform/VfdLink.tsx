@@ -17,7 +17,7 @@
 import { useEffect } from 'react';
 import { modbusService, isViewerRuntime } from '@digital-twin/shared';
 import { useVfdStore } from '../stores/useVfdStore';
-import { MD520_SOURCE } from '../vfd/md520Spec';
+import { MD520_SOURCE, MD520_COMMAND } from '../vfd/md520Spec';
 
 /** PLC 侧写入的给定 / 监视字，由 conveyor 虚拟 PLC 的参考程序生成 */
 const READ_NAMES: string[] = [
@@ -87,9 +87,14 @@ export function VfdLink() {
           const diFlags = Number(v['VFD_DI_FLAGS'] ?? 0);
           const ai1V = signed16(Number(v['VFD_AI1'] ?? 0)) / 100;
 
-          // 零帧跳过：PLC 默认停机时不接管带速，也不冲刷面板本地 DI / AI 控件
+          // 零帧跳过：PLC 默认停机时不接管带速，也不冲刷面板本地 DI / AI 控件。
+          // 18.3 表 18-2 中 2000H 没有 0 档，停机命令是 6（按 F6-10）或 5（自由停机），
+          // 所以不能再用「控制字非零」判断 PLC 是否下达给定，只认 1/2/3/4 运行命令。
+          const RUN_COMMANDS: number[] = [MD520_COMMAND.FWD, MD520_COMMAND.REV,
+            MD520_COMMAND.FJOG, MD520_COMMAND.RJOG];
+          const runCommand = RUN_COMMANDS.includes(command);
           const plcActive = store.engaged
-            || (source === MD520_SOURCE.COMM && (command !== 0 || setpointHz > 0.001))
+            || (source === MD520_SOURCE.COMM && (runCommand || setpointHz > 0.001))
             || (source === MD520_SOURCE.TERMINAL && (diFlags !== 0 || Math.abs(ai1V) > 0.001));
           if (plcActive && source === MD520_SOURCE.COMM) {
             store.setPlcFrame({ command, setpointHz });

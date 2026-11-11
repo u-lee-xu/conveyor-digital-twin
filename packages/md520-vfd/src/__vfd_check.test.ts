@@ -100,6 +100,30 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     expect(paramCommAddress('F1-05')).toBe(0xf105);
   });
 
+  it('339 页 18.3 Modbus 专用参数通信地址表', () => {
+    expect(MD520_COMM.SETPOINT).toBe(0x1000);
+    expect(MD520_COMM.RUN_FREQ).toBe(0x1001);
+    expect(MD520_COMM.BUS_VOLTAGE).toBe(0x1002);
+    expect(MD520_COMM.OUTPUT_VOLTAGE).toBe(0x1003);
+    expect(MD520_COMM.OUTPUT_CURRENT).toBe(0x1004);
+    expect(MD520_COMM.DI_FLAGS).toBe(0x1008);
+    expect(MD520_COMM.DO_FLAGS).toBe(0x1009);
+    expect(MD520_COMM.AI1).toBe(0x100a);
+    expect(MD520_COMM.AI2).toBe(0x100b);
+    expect(MD520_COMM.COMMAND1).toBe(0x7311);
+    expect(MD520_COMM.FREQ2).toBe(0x7310);
+    expect(MD520_COMM.COMMAND2).toBe(0x2000);
+    expect(MD520_COMM.DO_CONTROL).toBe(0x2001);
+    expect(MD520_COMM.AO1).toBe(0x2002);
+    expect(MD520_COMM.AO2).toBe(0x2003);
+    expect(MD520_COMM.PULSE_OUT).toBe(0x2004);
+    expect(MD520_COMM.STATUS1).toBe(0x3000);
+    expect(MD520_COMM.STATUS2).toBe(0x7044);
+    expect(MD520_COMM.PASSWORD).toBe(0x1f00);
+    expect(MD520_COMM.PARAM_INIT).toBe(0x1f01);
+    expect(MD520_COMM.FAULT_DESC).toBe(0x8000);
+  });
+
   it('FP-01 按 302 页 17.2.3：默认 0、六档、停机更改、通信地址 0x1F01', () => {
     const fp01 = MD520_PARAM_MAP['FP-01'];
     expect(fp01.defaultValue).toBe(0);

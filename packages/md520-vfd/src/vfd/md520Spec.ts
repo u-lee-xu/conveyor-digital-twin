@@ -154,20 +154,39 @@ export function paramRamAddress(code: string): number {
  * Modbus 专用参数通信地址（通信手册 2.3 表 2-1/2-2）。
  * 十进制书写，供 mock-addresses.js --check 的十进制正则对照。
  */
+/**
+ * 08 用户手册 339 页 18.3「Modbus 专用参数通信地址」表 18-1 / 18-2。
+ * 1000H~1020H 是监视 / 给定字，2000H~2004H 是只写控制参数，
+ * 3000H / 7044H / 8000H 是状态与故障，7310H / 7311H 是频率与控制命令的另一组入口。
+ * 教学子集只把 15 个常用字接入网关读写链路（CONNECT_WORDS / VFD_REGISTERS），
+ * 其余在此登记地址口径，供现场通信程序查表，不进单字变量表。
+ */
 export const MD520_COMM = {
-  SETPOINT: 4096,       // 1000H 通信设定值 -10000~10000
-  RUN_FREQ: 4097,       // 1001H
-  DI_FLAGS: 4104,       // 1008H
-  DO_FLAGS: 4105,       // 1009H
-  AI1: 4106,            // 100AH
-  FREQ2: 29456,         // 7310H 通信设定频率2
-  COMMAND1: 29457,      // 7311H 控制命令1
-  COMMAND2: 8192,       // 2000H 控制命令2
-  DO_CONTROL: 8193,     // 2001H 数字量输出端子控制
-  AO1: 8194,            // 2002H
+  SETPOINT: 4096,       // 1000H 通信设定值 -10000~10000（相对 F0-10 的百分比）
+  RUN_FREQ: 4097,       // 1001H 运行频率
+  BUS_VOLTAGE: 4098,    // 1002H 母线电压（只读）
+  OUTPUT_VOLTAGE: 4099, // 1003H 输出电压（只读）
+  OUTPUT_CURRENT: 4100, // 1004H 输出电流（只读）
+  OUTPUT_POWER: 4101,   // 1005H 输出功率（只读）
+  OUTPUT_TORQUE: 4102,  // 1006H 输出转矩（只读）
+  RUN_SPEED: 4103,      // 1007H 运行速度（只读）
+  DI_FLAGS: 4104,       // 1008H DI 输入标志
+  DO_FLAGS: 4105,       // 1009H DO 输出标志
+  AI1: 4106,            // 100AH AI1 电压
+  AI2: 4107,            // 100BH AI2 电压（只读）
+  AI3: 4108,            // 100CH AI3 电压（只读）
+  FREQ2: 29456,         // 7310H 通信设定频率2（单位由 FD-09、小数点与 F0-22 一致）
+  COMMAND1: 29457,      // 7311H 控制命令1（0 按 F6-10 停机 / 1~7）
+  COMMAND2: 8192,       // 2000H 控制命令2（**无 0 档**，1~7；停机用 5 或 6）
+  DO_CONTROL: 8193,     // 2001H 数字量输出端子控制（bit0 DO1 / bit1 DO2 / bit2 RELAY1…）
+  AO1: 8194,            // 2002H 模拟输出 AO1 控制（0~7FFF = 0~100%）
+  AO2: 8195,            // 2003H 模拟输出 AO2 控制
+  PULSE_OUT: 8196,      // 2004H 脉冲 PULSE 输出控制
   STATUS1: 12288,       // 3000H 1正转/2反转/3停机/4辨识/5故障
   STATUS2: 28740,       // 7044H bit0运行 bit1方向 bit2故障 bit3到达 bit4通信正常
-  FAULT_DESC: 32768,    // 8000H
+  PASSWORD: 7936,       // 1F00H 参数锁定密码校验（返回实际密码即校验通过）
+  PARAM_INIT: 7937,     // 1F01H 通信专用参数初始化（1 恢复出厂 / 4 恢复备份 / 501 备份当前）
+  FAULT_DESC: 32768,    // 8000H 变频器故障描述
 } as const;
 
 export const MD520_COMMAND = {
