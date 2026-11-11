@@ -292,6 +292,55 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(visible).not.toContain('）');
   });
 
+  it('真机外观：浅灰双层圆角外壳 + 独立显示窗 + 下方紧凑教学信号区', () => {
+    expect(panel).toContain('data-dt-vfd-shell');
+    expect(panel).toContain('data-dt-vfd-window');
+    expect(panel).toContain('data-dt-vfd-signal');
+    expect(panel).toContain('borderRadius: 24');
+    expect(panel).toContain('borderRadius: 18');
+    expect(panel).toContain('shell: \'linear-gradient(');
+    expect(panel).toContain('gridTemplateColumns: \'40px 1fr\'');
+  });
+
+  it('显示窗：左侧状态丝印、6 位斜体辅显示 + 5 位主显示、单位灯方框、菜单灯竖线', () => {
+    ['FWD', 'REV', 'DRIVE', 'AXIS'].forEach((s) => expect(panel).toContain(`>${s}</span>`));
+    expect(panel).toContain('<StatusIcon');
+    expect(panel).toContain('skewX(-7deg)');
+    expect(panel).toContain('aux ? 6 : 5');
+    expect(panel).toContain('<SevenSegment chars={auxChars}');
+    expect(panel).toContain('<SevenSegment chars={display.main}');
+    expect(panel).toContain('MD520_UNITS.map');
+    expect(panel).toContain('MD520_MENUS.map');
+    expect(panel).toContain('MENU_ICONS');
+  });
+
+  it('按键区：圆形导航环 + 左右竖长键 + 斜置 RUN/STOP + MF.K', () => {
+    expect(panel).toContain('data-dt-vfd-nav');
+    expect(panel).toContain("width: 132, height: 132, borderRadius: '50%'");
+    expect(panel).toContain("borderRadius: '60px 60px 8px 8px'");   // 上扇形
+    expect(panel).toContain("borderRadius: '8px 8px 60px 60px'");   // 下扇形
+    expect(panel).toContain("borderRadius: '60px 8px 8px 60px'");   // 左扇形
+    expect(panel).toContain("borderRadius: '8px 60px 60px 8px'");   // 右扇形
+    expect(panel).toContain("borderRadius: '50%', fontSize: 12, zIndex: 2"); // 中央 OK
+    expect(panel).toContain("width: 40, height: 72, borderRadius: 12");     // PRG / MENU 竖长键
+    expect(panel).toContain("transform: 'rotate(-22deg)'");
+    expect(panel).toContain("transform: 'rotate(22deg)'");
+    expect(panel).toContain('MF. K');
+  });
+
+  it('10 键 aria-label 齐全，菜单键用 pointer 长按切主辅显示区', () => {
+    const labels = ['菜单键', '编程/返回键', '确认键', '递增键', '递减键', '左移位键',
+      '右移位键', '运行键', '停止键/故障复位', '多功能选择键'];
+    labels.forEach((l) => {
+      // 菜单键是独立 button（带 pointer 长按），其余走 PanelKey 的 name 属性
+      expect(panel.includes(`name="${l}"`) || panel.includes(`aria-label="${l}"`)).toBe(true);
+    });
+    expect(panel).toContain('onPointerDown={menuDown}');
+    expect(panel).toContain('onPointerUp={menuUp}');
+    expect(panel).toContain("press('MENU_LONG')");
+    expect(panel).toContain('data-dt-vfd-area={keypad.area}');
+  });
+
   it('地址表、数值通道与单字网关分支齐全', () => {
     expect(addresses).toContain('VFD_SETPOINT: 4096');
     expect(addresses).toContain('VFD_COMMAND2: 8192');
