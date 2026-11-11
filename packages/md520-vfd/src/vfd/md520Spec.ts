@@ -59,11 +59,12 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F0-10', group: 'F0', index: 10, name: '最大频率', defaultValue: 50, min: 50, max: 599, decimals: 2, unit: 'Hz', runLocked: true },
   { code: 'F0-17', group: 'F0', index: 17, name: '加速时间1', defaultValue: 20, min: 0, max: 6500, decimals: 1, unit: 's' },
   { code: 'F0-18', group: 'F0', index: 18, name: '减速时间1', defaultValue: 20, min: 0, max: 6500, decimals: 1, unit: 's' },
-  /** 311 页 17.2.13：加减速时间的基准频率，教学子集仍按 F0-17/18 直接斜坡，此码作参数镜像 */
+  /** 311 页 17.2.13：加减速时间的基准频率，决定斜坡速率标尺（0 F0-10 / 1 设定 / 2 100Hz / 3 额定） */
   { code: 'F0-25', group: 'F0', index: 25, name: '加减速时间基准频率', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '最大频率(F0-10)', 1: '设定频率', 2: '100Hz', 3: '额定频率' } },
   /** F1-00~F1-05 电机铭牌参数：08 用户手册 30 章参数表，调试流程 17.1.1 第 5 步整组设定。
-   *  均为「停机更改」，虚拟面板只作参数镜像，不参与矢量辨识与输出计算。 */
+   *  均为「停机更改」；F1-01 / F1-03 参与只读监视量（输出功率 / 电流），F1-04 参与 F0-25=3 的斜坡基准，
+   *  其余不实现矢量辨识与转矩计算。 */
   { code: 'F1-00', group: 'F1', index: 0, name: '电机类型选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
     options: { 0: '普通异步电机', 1: '变频异步电机', 2: '永磁同步电机',
       3: '无助磁磁阻电机', 4: '电磁线圈' }, runLocked: true },
@@ -85,8 +86,9 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F5-04', group: 'F5', index: 4, name: 'DO1输出功能选择', defaultValue: 0, min: 0, max: 40, decimals: 0, unit: '',
     options: { 0: '无输出', 1: '变频器运行中', 2: '故障输出', 3: '频率水平检测FDT1',
       4: '频率到达', 5: '零速运行中', 19: '欠压状态输出', 20: '通信设定' } },
-  /** 313 页 17.2.17 停机参数：F6-10 决定停机方式；F6-11~14 为直流制动，
-   *  教学子集只作参数镜像（停机仍按 F0-18 斜坡），不实现直流制动电流闭环。 */
+  /** 313 页 17.2.17 停机参数：F6-10 决定停机方式（减速 / 自由 / 最大能力），
+   *  F6-14 直流制动时间给自由停机一个短制动段；F6-11~13 仍只作参数镜像，
+   *  教学子集不实现直流制动电流闭环。 */
   { code: 'F6-10', group: 'F6', index: 10, name: '停机方式', defaultValue: 0, min: 0, max: 2, decimals: 0, unit: '',
     options: { 0: '减速停机', 1: '自由停机', 2: '最大能力停机' } },
   { code: 'F6-11', group: 'F6', index: 11, name: '停机直流制动起始频率', defaultValue: 0, min: 0, max: 599, decimals: 2, unit: 'Hz' },
