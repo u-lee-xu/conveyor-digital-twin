@@ -108,6 +108,45 @@ describe('正反转切换先减速再反向加速', () => {
     const during = useVfdStore.getState().outputHz;
     expect(before - during).toBeGreaterThan(8);
   });
+
+  /** 从固定 10Hz 起换向，测降到 0 所需帧数与翻转后 1 秒的反向频率 */
+  const measure = (decSeconds: number, accSeconds: number) => {
+    useVfdStore.setState({ outputHz: 10, running: true, direction: 1, runDirection: 1 });
+    useVfdStore.getState().setParam('F0-18', decSeconds);
+    useVfdStore.getState().setParam('F0-17', accSeconds);
+    useVfdStore.setState({ direction: -1 });
+    let frames = 0;
+    while (useVfdStore.getState().runDirection === 1 && frames < 3000) {
+      useVfdStore.getState().tick(step);
+      frames += 1;
+    }
+    advance(1);
+    return { frames, reversedHz: useVfdStore.getState().outputHz };
+  };
+
+  it('换向时间不是常数：F0-18 由 20s 改成 2s，减速帧数约缩到十分之一', () => {
+    const slow = measure(20, 20);
+    const fast = measure(2, 2);
+    expect(slow.frames).toBeGreaterThan(fast.frames * 5);
+    // 50Hz 基准 / 20s = 2.5Hz/s，10Hz 落到 0 约 4s（240 帧）
+    expect(slow.frames).toBeGreaterThan(200);
+    expect(fast.frames).toBeLessThan(60);
+  });
+
+  it('反向加速速率由 F0-17 决定，不是固定爬升量', () => {
+    const slow = measure(20, 20);
+    const fast = measure(20, 2);
+    expect(fast.reversedHz).toBeGreaterThan(slow.reversedHz * 5);
+  });
+
+  it('源码中没有另设的换向时间常数，斜坡只取 F0-17 / F0-18 / F0-25', () => {
+    const store = read('packages/md520-vfd/src/stores/useVfdStore.ts');
+    expect(store).toContain("Math.max(0.1, s.params['F0-17'])");
+    expect(store).toContain("Math.max(0.1, s.params['F0-18'])");
+    expect(store).toContain("Math.trunc(s.params['F0-25'] ?? 0)");
+    expect(store).not.toContain('REVERSE_TIME');
+    expect(store).not.toContain('const reversingSeconds');
+  });
 });
 
 describe('3D 与观众端方向口径', () => {

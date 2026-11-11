@@ -65,6 +65,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <tr><td>2</td><td>正反转切换（频率指令方向）</td><td>仅 F0-02=0 操作面板命令源有效</td></tr>
 <tr><td>3 / 4</td><td>正转点动 FJOG / 反转点动 RJOG</td><td>仅 F0-02=0 有效</td></tr></table>
 <p>方向切换的真值分两层：<code>direction</code> 是目标方向，指令下达立刻改控制字、状态字与 FWD/REV 丝印；<code>runDirection</code> 是实际输出方向，3D 电机 / 皮带用它。换向时先按 <code>F0-18</code> 把频率降到 0（仍按原方向转、只是变慢），归零后才翻转方向并按 <code>F0-17</code> 反向加速，不会瞬间反转。观众端通过 <code>VFD_DIRECTION</code> / <code>VFD_RUN_DIRECTION</code> 数值镜像跟随整个过程。</p>
+<p><strong>换向时长完全由加减速参数决定，没有另设常数</strong>：减速速率 = 斜坡基准 / <code>F0-18</code>，反向加速速率 = 斜坡基准 / <code>F0-17</code>；斜坡基准由 <code>F0-25</code> 决定（默认 0 时取 <code>F0-10</code> 最大频率，1 取设定频率，2 固定 100Hz，3 取 <code>F1-04</code> 额定频率），低速段加速还会乘 <code>F0-01</code> 的教学增益。手册 30.5.4（681 页）另有 <code>F8-12 正反转死区时间</code>，设定「输出 0Hz 处的过渡时间」，默认 <strong>0.0s</strong>（范围 0.0~3000.0s）；本教学子集未收录该参数，因此默认档「归零即换向」与手册默认一致。现场若把 F8-12 设成非零，需要另补参数与 0Hz 保持段。</p>
 </section>
 
 <section id="s3"><h2>3 常用参数速查（39 个 / 10 组）</h2>
