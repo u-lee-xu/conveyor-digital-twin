@@ -65,6 +65,8 @@ export const md520VfdDevice: DeviceDefinition = {
       VFD_OUTPUT_HZ: vfd.outputHz,
       VFD_CURRENT: vfd.outputCurrent,
       VFD_POWER: vfd.outputPower,
+      VFD_DIRECTION: vfd.direction,
+      VFD_RUN_DIRECTION: vfd.runDirection,
       VFD_COMMAND: vfd.command,
       VFD_STATUS: vfd.status,
       VFD_DI_FLAGS: vfd.diFlags,

@@ -303,16 +303,17 @@ export const LABS: LabEntry[] = [
   {
     "g": "C",
     "n": 17,
-    "name": "正反转切换与 3D 联动",
+    "name": "正反转切换：减速到零再反向加速",
     "mode": "手动",
-    "goal": "验证方向切换不只是面板丝印变化，电机与皮带真的反向。",
+    "goal": "验证换向不是瞬间反转，而是先按 F0-18 减速到 0、翻转输出方向、再按 F0-17 反向加速。",
     "steps": [
-      "设 F7-01=2、F0-02=0，RUN 到有输出。",
-      "按 MF.K，间隔 0.5 秒采样两次 3D 诊断（?debug=1 的 __dtVfdDrive）。"
+      "设 F7-01=2、F0-02=0，RUN 到有输出（建议先把 F0-18 / F0-17 改小到 2s 缩短等待）。",
+      "按 MF.K，立刻看 __dtVfdDrive：targetDirection 变 -1、direction 仍是 1、reversing=true、hz 持续下降。",
+      "连续采样直到 hz 归零、direction 翻成 -1，再看 hz 反向上升；随后间隔 0.5 秒采两次 fanAngle / beltPhase。"
     ],
-    "expect": "direction 由 1 变 -1；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）；FWD/REV 丝印颜色互换。",
-    "watch": "__dtVfdDrive.direction / fanAngle / beltPhase、FWD/REV 灯",
-    "trap": "只看面板灯会误判；必须看 3D 角度差符号是否反号。"
+    "expect": "换向期间电机仍按原方向转、只是越来越慢（减速阶段风扇角差仍为负）；频率归零后 direction 才由 1 变 -1 并反向加速；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）；FWD/REV 丝印指令下达即互换。",
+    "watch": "__dtVfdDrive.direction / targetDirection / reversing / hz / fanAngle / beltPhase、FWD/REV 灯",
+    "trap": "别在减速阶段就断言反向：那时 direction 还是 1；面板丝印显示的是目标方向，3D 用的是实际输出方向 runDirection。"
   },
   {
     "g": "C",

@@ -34,8 +34,12 @@ const DEBUG_ENABLED = typeof window !== 'undefined'
 interface DriveDebug {
   hz: number;
   factor: number;
-  /** 1 正转 / -1 反转：285 页 F7-01=2 的正反转切换必须让 3D 转向跟着变 */
+  /** 实际输出方向：换向要先把频率降到 0 才翻转，减速阶段仍按原方向转 */
   direction: 1 | -1;
+  /** 目标方向（面板丝印/控制字），换向中与 direction 不同 */
+  targetDirection: 1 | -1;
+  /** 正在减速换向 */
+  reversing: boolean;
   fanAngle: number;
   beltPhase: number;
   leds: boolean[];
@@ -94,8 +98,9 @@ export function PhysicsVfdDrive() {
     const dt = Math.min(delta, 0.05);
 
     // 电机风扇 / 轴 / 双滚筒：同一个角速度，50Hz 对应 MAX_RPS 转/秒。
-    // direction 来自 F7-01=2 的正反转切换，反转时角速度取负，电机与滚筒真的反着转。
-    const direction = s.direction;
+    // 用 runDirection 而非目标 direction：换向时先按 F0-18 减速到 0（仍按原方向转，
+    // 只是越来越慢），频率归零后才翻转，再按 F0-17 反向加速，避免瞬间反转。
+    const direction = s.runDirection;
     const angle = factor * V.MAX_RPS * Math.PI * 2 * dt * direction;
     if (fanRef.current) fanRef.current.rotation.z -= angle;
     rollerRefs.current.forEach((r) => { if (r) r.rotation.z -= angle; });
@@ -125,7 +130,10 @@ export function PhysicsVfdDrive() {
 
     if (DEBUG_ENABLED) {
       (window as unknown as { __dtVfdDrive?: DriveDebug }).__dtVfdDrive = {
-        hz, factor, direction: s.direction,
+        hz, factor,
+        direction: s.runDirection,
+        targetDirection: s.direction,
+        reversing: s.direction !== s.runDirection && s.outputHz > 0.01,
         fanAngle: fanRef.current?.rotation.z ?? 0,
         beltPhase: beltPhase.current,
         leds: states,
