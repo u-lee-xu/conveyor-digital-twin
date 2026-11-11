@@ -42,9 +42,13 @@ describe('MD520 教学手册（② 教学资料）', () => {
     expect(gen).toContain('MD520_FC_DEFAULT_PERCENT');
   });
 
-  it('11 个章节与接线图齐全', () => {
+  it('12 个章节与接线图齐全', () => {
     const html = readFileSync(bookPath, 'utf8');
-    for (let i = 1; i <= 11; i += 1) expect(html).toContain(`id="s${i}"`);
+    for (let i = 1; i <= 12; i += 1) expect(html).toContain(`id="s${i}"`);
+    for (const t of ['B 档真实 485 主从', 'mock-vfd-slave.js', 'vfd-485-master.cjs',
+      ':1508', ':5088', 'DT_VFD_485_MASTER=0', 'masterFrames', 'FC03/06/16/01/05/15']) {
+      expect(html).toContain(t);
+    }
     expect(html).toContain('<svg');
     for (const t of ['DI1', 'DI5', 'AI1', 'AI2', 'AO1', 'DO1', 'FM', 'T/A', '485+', '485-', 'STO1']) {
       expect(html).toContain(t);

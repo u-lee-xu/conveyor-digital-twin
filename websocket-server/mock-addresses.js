@@ -486,6 +486,61 @@ function checkWordProtocolChain() {
   return true;
 }
 
+/**
+ * B 档真实 485 主从：独立纯从站 :1508 + 真实 Modbus 主站轮询进程，
+ * 与三个场景 PLC 端口隔离、寄存器区独立、已定稿场景零残留。
+ */
+function checkVfd485Slave() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  let slave, master, startLab, dispensing, conveyor;
+  try {
+    slave = readFile('./mock-vfd-slave.js');
+    master = readFile('./vfd-485-master.cjs');
+    startLab = readFile('../scripts/start-lab.cjs');
+    dispensing = readFile('./mock-dispensing-server.js');
+    conveyor = readFile('./mock-conveyor-server.js');
+  } catch (e) {
+    console.error(`[check][vfd-485] ❌ B 档文件缺失: ${e.message}`);
+    return false;
+  }
+  const slaveNeed = ['VFD_REGISTERS', "host: '127.0.0.1'", 'setRegisterArray', 'pure-slave', 'isVfdAddress'];
+  for (const token of slaveNeed) {
+    if (!slave.includes(token)) {
+      console.error(`[check][vfd-485] ❌ 独立从站缺 ${token}`);
+      return false;
+    }
+  }
+  if (slave.includes('vfdPlcScan') || slave.includes('setInterval(vfdPlcScan')) {
+    console.error('[check][vfd-485] ❌ 独立从站混入 PLC 参考程序，必须是纯从站');
+    return false;
+  }
+  const masterNeed = ['connectTCP', 'writeRegister(', 'writeCoils(', 'readHoldingRegisters(', 'readCoils(', 'VFD_REGISTERS'];
+  for (const token of masterNeed) {
+    if (!master.includes(token)) {
+      console.error(`[check][vfd-485] ❌ 主站轮询缺真实帧 ${token}`);
+      return false;
+    }
+  }
+  const labNeed = ['VFD_SLAVE_PORT = 1508', 'mock-vfd-slave.js', 'vfd-485-master.cjs',
+    'portBusy(VFD_SLAVE_PORT)', 'DT_VFD_485_MASTER'];
+  for (const token of labNeed) {
+    if (!startLab.includes(token)) {
+      console.error(`[check][vfd-485] ❌ start-lab.cjs 缺 ${token}`);
+      return false;
+    }
+  }
+  for (const [name, source] of [['自动配药 PLC', dispensing], ['传送带分拣 PLC', conveyor]]) {
+    if (source.includes('VFD_SLAVE') || source.includes('mock-vfd-slave')) {
+      console.error(`[check][vfd-485] ❌ ${name} 残留 B 档从站逻辑`);
+      return false;
+    }
+  }
+  console.log('[check][vfd-485] ✅ B 档独立从站 :1508 + 真实主站轮询，端口与场景隔离');
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -501,6 +556,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkVfdChain() && ok;
   ok = checkVfdIsolation() && ok;
   ok = checkWordProtocolChain() && ok;
+  ok = checkVfd485Slave() && ok;
   process.exit(ok ? 0 : 1);
 }
 

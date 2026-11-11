@@ -4,12 +4,15 @@
  *
  *   npm run start:lab
  *
- * 起 6 个进程，但浏览器（含智能电视）只需要访问一个地址：
+ * 起 8 个进程，但浏览器（含智能电视）只需要访问一个地址：
  *   http://<教师机当前任一可达 IP>:5201/
- * 内部链路 8081 / 8082 / 1505 / 5085 / 1503 / 5083 / 1507 / 5087 已显式绑定 127.0.0.1，
- * 只有 Vite preview 的 /ws/plc 与 /ws/relay 同源代理能触达，CSP 的 'self' 直接放行。
+ * 内部链路 8081 / 8082 / 1505 / 5085 / 1503 / 5083 / 1507 / 5087 / 1508 / 5088
+ * 已显式绑定 127.0.0.1，只有 Vite preview 的 /ws/plc 与 /ws/relay 同源代理能触达，
+ * CSP 的 'self' 直接放行。
  * 三个场景各自一个虚拟 PLC，不共用线圈表 / 数值段 / 参考程序：
  *   1505 自动配药、1503 传送带分拣、1507 MD520 变频器（独立设备包）。
+ * 另有 B 档独立 485 从站 1508（纯从站，无参考程序）与真实 Modbus 主站轮询进程；
+ * 外部 PLC 要独占从站时设 DT_VFD_485_MASTER=0。
  *
  * 【不固化 IP】教室/实验室网络会变：DHCP 续租、换 WiFi、有线无线并存、虚拟网卡。因此：
  *  - 实际通信一律同源相对路径（wsEndpoints.ts 用 location.host），与 IP 无关；
@@ -51,6 +54,8 @@ const PORT = Number(process.env.DT_PORT || 5201);
 const CONVEYOR_PLC_PORT = 1503;
 /** MD520 变频器独立设备场景的虚拟 PLC 端口 */
 const VFD_PLC_PORT = 1507;
+/** B 档：独立的 485 从站端口（纯从站，与 :1507 的寄存器区完全分离） */
+const VFD_SLAVE_PORT = 1508;
 
 /**
  * 取默认路由所在网卡的 IPv4，即「本机 IP」：不发包，只让内核按路由表选源地址。
@@ -200,6 +205,10 @@ function assertInternalPorts() {
   if (VFD_PLC_PORT === 1505 || VFD_PLC_PORT === CONVEYOR_PLC_PORT) {
     throw new Error('MD520 虚拟 PLC 端口不能与配药 / 分拣虚拟 PLC 相同，三个场景必须独立');
   }
+  // B 档从站必须与三个场景 PLC 都不共用端口，也不共用寄存器区
+  if ([1505, CONVEYOR_PLC_PORT, VFD_PLC_PORT].includes(VFD_SLAVE_PORT) || VFD_SLAVE_PORT === 8081 || VFD_SLAVE_PORT === 8082) {
+    throw new Error('B 档 485 从站端口不能与配药 / 分拣 / MD520 虚拟 PLC 或网关 / 中继相同');
+  }
 }
 
 const children = [];
@@ -253,9 +262,9 @@ async function main() {
   console.log(`[lab] 平台壳 Web 服务已监听 :${PORT}`);
   previewServer.printUrls();
 
-  const [busy8081, busy8082, busy1505, busy1503, busy1507] = await Promise.all([
+  const [busy8081, busy8082, busy1505, busy1503, busy1507, busy1508] = await Promise.all([
     portBusy(8081), portBusy(8082), portBusy(1505),
-    portBusy(CONVEYOR_PLC_PORT), portBusy(VFD_PLC_PORT),
+    portBusy(CONVEYOR_PLC_PORT), portBusy(VFD_PLC_PORT), portBusy(VFD_SLAVE_PORT),
   ]);
 
   launch('PLC 网关 :8081', process.execPath, [path.join(WSS, 'server.js')], WSS, !busy8081);
@@ -266,6 +275,13 @@ async function main() {
       [path.join(WSS, 'mock-conveyor-server.js'), String(CONVEYOR_PLC_PORT)], WSS, !busy1503);
     launch('MD520 虚拟 PLC :1507', process.execPath,
       [path.join(WSS, 'mock-vfd-server.js'), String(VFD_PLC_PORT)], WSS, !busy1507);
+    // B 档：独立 485 从站（纯从站）+ 真实 Modbus 主站轮询进程
+    launch('MD520 B 档 485 从站 :1508', process.execPath,
+      [path.join(WSS, 'mock-vfd-slave.js'), String(VFD_SLAVE_PORT)], WSS, !busy1508);
+    if (process.env.DT_VFD_485_MASTER !== '0') {
+      launch('MD520 485 主站轮询', process.execPath,
+        [path.join(WSS, 'vfd-485-master.cjs')], WSS, true);
+    }
   }
 
   console.log('');
@@ -283,7 +299,7 @@ async function main() {
   lines.forEach((l) => console.log(l));
   console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
   console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可');
-  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 MD520，均绑定 127.0.0.1，外部访问不到');
+  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 MD520 / 1508+5088 B档485从站，均绑定 127.0.0.1，外部访问不到');
   console.log('  WS 升级鉴权：LAN 只能订阅中继，PLC 写入通道只对主控回环开放；内部链路 token 每次启动重新签发');
   console.log(`  PLC 主机白名单：${process.env.DT_PLC_HOSTS ? process.env.DT_PLC_HOSTS : '默认仅回环；接实体 PLC 请设 DT_PLC_HOSTS'}`);
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
