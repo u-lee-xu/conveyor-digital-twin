@@ -13,6 +13,7 @@ import { PhysicsMaterialTable } from './components/PhysicsMaterialTable';
 import { PhysicsSignalTower } from './components/PhysicsSignalTower';
 import { PhysicsLabel } from './components/PhysicsLabel';
 import { PhysicsSortChute } from './components/PhysicsSortChute';
+import { PhysicsVfdDrive } from './components/PhysicsVfdDrive';
 import { CameraRig } from './CameraRig';
 import { CylinderMotionDriver } from './CylinderMotionDriver';
 import { BIN_CENTER_Z, sortSlotX } from './sortChute';
@@ -55,6 +56,9 @@ function renderMountedPart(kind: PartKind, instance: string, tower: TowerState):
           red={tower.red} green={tower.green} yellow={tower.yellow}
         />
       );
+    // 驱动台是教学演示装置，只在展台使用；整机 AssembledScene 不摆放，
+    // 但保留 case 以维持「整机 / 展台复用同一批组件」的单一来源契约。
+    case 'drive': return <PhysicsVfdDrive />;
     default: return null;
   }
 }
@@ -77,6 +81,8 @@ function renderBarePart(kind: PartKind, tower: TowerState, sensorVariant: Sensor
       );
     // 三只型号可切换：色标传感器不再被写死成上料光电
     case 'sensor': return <PhysicsSensor name={sensorVariant} position={[0, 0, 0]} />;
+    // 驱动台自身就以局部原点为基准，无需再传 position
+    case 'drive': return <PhysicsVfdDrive />;
     case 'tower':
       return (
         <PhysicsSignalTower

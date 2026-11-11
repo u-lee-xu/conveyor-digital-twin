@@ -35,7 +35,7 @@ const cylinderSource = src('scenes/conveyor-sorting/components/PhysicsCylinder.t
 
 const PART_COMPONENTS = [
   'PhysicsConveyorBelt', 'PhysicsSortChute', 'PhysicsMaterialTable',
-  'PhysicsCylinder', 'PhysicsSensor', 'PhysicsSignalTower',
+  'PhysicsCylinder', 'PhysicsSensor', 'PhysicsSignalTower', 'PhysicsVfdDrive',
 ];
 
 /** 取某个函数声明到下一个常量声明之间的源码，用于精确判断「展台里有什么」 */
@@ -53,7 +53,7 @@ const bareBody = bodyOf(sceneSource, 'function renderBarePart', 'const CYLINDER_
 describe('装配表：整机部件位置只有一个来源', () => {
   it('ASSEMBLY / PART_STAGES / PART_STAGE_ORIGIN 键集合严格一致', () => {
     const kinds = Object.keys(PART_STAGES) as PartKind[];
-    expect(kinds).toHaveLength(6);
+    expect(kinds).toHaveLength(7);
     expect(Object.keys(ASSEMBLY).sort()).toEqual([...kinds].sort());
     expect(Object.keys(PART_STAGE_ORIGIN).sort()).toEqual([...kinds].sort());
     kinds.forEach((k) => {
