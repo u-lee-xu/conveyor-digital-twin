@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MD520 虚拟变频器实验指导书</title>
+<style>
+:root{--ink:#1f2937;--soft:#5b6675;--line:#dfe5ec;--accent:#1d4ed8;--warn:#b45309;--bg:#f7f9fc}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:28px 24px 70px}
+header{border-bottom:3px solid var(--accent);padding-bottom:18px;margin-bottom:22px}
+h1{font-size:27px;margin:0 0 8px}
+h2{font-size:19px;margin:26px 0 14px;padding-left:11px;border-left:4px solid var(--accent)}
+p{margin:8px 0}
+section{background:transparent}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0;background:#fff}
+th,td{border:1px solid var(--line);padding:6px 9px;text-align:left}
+th{background:#eef2f8}
+.num{font-family:Consolas,Menlo,monospace}
+code{font-family:Consolas,Menlo,monospace;background:#f1f4f9;padding:1px 5px;border-radius:4px;font-size:12px}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+b{font-weight:600}
+.notice{background:#fff8e8;border:1px solid #f3d79a;border-radius:8px;padding:11px 14px;margin:10px 0;color:#7c4a08}
+nav a{margin-right:12px;font-size:13px}
+footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
+@media print{body{background:#fff}article{break-inside:avoid}}
+</style>
+</head>
+<body><div class="wrap">
+<header>
+<h1>MD520 虚拟变频器实验指导书</h1>
+<p>共 <b>30</b> 个实验，分 6 类。每个实验给出目的、操作步骤、预期现象（带具体数值）、观察窗口与易错点。参数默认值由 <code>generate-lab-guide.cjs</code> 从 <code>md520Spec.ts</code> 读取，参数变动后重跑脚本即同步。</p>
+<p class="notice"><b>教学边界</b>：变频器是教学子集，不是真机。矢量控制、直流制动电流闭环、电机辨识均为近似或不做；39 个参数里约 20 多个真正生效，其余只存值；S7 / 三菱 / AutoShop 的真实仿真站与实物 PLC 本机未跑，相关实验只能做网关层与帧级验证。</p>
+</header>
+<nav><a href="#grpA">A 面板与菜单</a><a href="#grpB">B 给定与频率</a><a href="#grpC">C 停机方向与状态</a><a href="#grpD">D 外部 PLC 三协议</a><a href="#grpE">E B 档真实 485 主从</a><a href="#grpF">F 平台与安全</a></nav>
+<h2>实验速查表</h2>
+<table><tr><th>编号</th><th>实验名称</th><th>类别</th><th>所需模式</th></tr><tr><td class="num">1</td><td><a href="#lab1">三级菜单读写参数</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">2</td><td><a href="#lab2">四种菜单与主辅显示区</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">3</td><td><a href="#lab3">面板 RUN/STOP 与预置频率</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">4</td><td><a href="#lab4">参数初始化 FP-01 六档</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">5</td><td><a href="#lab5">FP-02 掩码控制自定义菜单</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">6</td><td><a href="#lab6">四种给定切换</a></td><td>给定与频率</td><td>手动 + 仿真</td></tr>
+<tr><td class="num">7</td><td><a href="#lab7">DI 多段速 8 段</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">8</td><td><a href="#lab8">FC 段速成为真值</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">9</td><td><a href="#lab9">AI 模拟量给定</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">10</td><td><a href="#lab10">485 通信给定与状态回读</a></td><td>给定与频率</td><td>仿真</td></tr>
+<tr><td class="num">11</td><td><a href="#lab11">加减速时间与基准频率</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">12</td><td><a href="#lab12">最大频率与控制方式</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">13</td><td><a href="#lab13">F6-10 三种停机方式</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">14</td><td><a href="#lab14">F6-11~14 直流制动段</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">15</td><td><a href="#lab15">F7-02 STOP/RESET 四档</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">16</td><td><a href="#lab16">MF.K 五档功能</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">17</td><td><a href="#lab17">正反转切换与 3D 联动</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">18</td><td><a href="#lab18">DO 状态、故障与只读监视量</a></td><td>停机方向与状态</td><td>手动 + 仿真</td></tr>
+<tr><td class="num">19</td><td><a href="#lab19">AutoShop / Modbus TCP 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
+<tr><td class="num">20</td><td><a href="#lab20">博途 / S7-PLCSIM 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
+<tr><td class="num">21</td><td><a href="#lab21">GX Works2 / GX Simulator2 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
+<tr><td class="num">22</td><td><a href="#lab22">实物档统一 M 区</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
+<tr><td class="num">23</td><td><a href="#lab23">三协议对照与外部写入让位</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
+<tr><td class="num">24</td><td><a href="#lab24">纯从站 :1508 发真实帧</a></td><td>B 档真实 485 主从</td><td>帧级</td></tr>
+<tr><td class="num">25</td><td><a href="#lab25">内置主站轮询节拍</a></td><td>B 档真实 485 主从</td><td>帧级</td></tr>
+<tr><td class="num">26</td><td><a href="#lab26">外部 PLC 独占从站</a></td><td>B 档真实 485 主从</td><td>帧级</td></tr>
+<tr><td class="num">27</td><td><a href="#lab27">A/B 隔离与面板跟随 B 档</a></td><td>B 档真实 485 主从</td><td>仿真 + 帧级</td></tr>
+<tr><td class="num">28</td><td><a href="#lab28">主控—观众只读跟随</a></td><td>平台与安全</td><td>平台</td></tr>
+<tr><td class="num">29</td><td><a href="#lab29">拓扑与 P0 安全认知</a></td><td>平台与安全</td><td>平台</td></tr>
+<tr><td class="num">30</td><td><a href="#lab30">教学近似边界识别</a></td><td>平台与安全</td><td>综合</td></tr></table>
+<section id="grpA"><h2 style="color:#185FA5">A 类　面板与菜单（5 项）</h2><article id="lab1" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 1　三级菜单读写参数 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握真机式 L1 参数组 → L2 参数 → L3 设定值的编辑、保存与放弃。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设备列表进入「MD520 变频器」，保持手动模式。</li><li>按 PRG 进一级菜单，用递增键切到 F0 组，OK 进二级，选 <code>F0-08</code> 后 OK 进三级。</li><li>左右键选闪烁位，上下键把预置频率从 50Hz 改成 30Hz。</li><li>OK 保存（自动跳到下一个参数）；再改一次后用 PRG 放弃，对比两次结果。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　保存后主显 30.00、状态行显示下一个参数码；PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　主/辅显示区、闪烁位、状态行 L1/L2/L3</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　闪烁位用左右键，数值用上下键；不要按菜单键退出（那是切菜单）。</p>
+</article>
+<article id="lab2" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 2　四种菜单与主辅显示区 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　区分 basic / user / changed / fault 四种菜单，掌握菜单键点按与长按。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>点按菜单键循环四种菜单，观察 basic 与 user 的参数条数。</li><li>先改几个参数，再切到 changed，确认只列出改过出厂值的参数。</li><li>长按菜单键 600ms 切主/辅显示区；切到 fault 看故障列表。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　basic 显示全部 39 个参数；user 默认 4 项；changed 只列偏离默认值的码；fault 显示 6 条教学故障码。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　辅显示区代码、菜单指示灯</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　长按必须超过 600ms，短按只切菜单。</p>
+</article>
+<article id="lab3" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 3　面板 RUN/STOP 与预置频率 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解面板命令源与加减速斜坡，建立频率与 3D 转速的对应关系。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>确认 <code>F0-02=0</code>（操作面板）、<code>F0-03=0</code>（数字设定）、<code>F0-08</code> = 50Hz、<code>F0-17</code> = 20s。</li><li>按 RUN，每 1 秒记录一次输出频率；到稳态后按 STOP。</li><li>把 <code>F0-17</code> 改成 2s，复位后重做一次。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　默认 20s 斜坡下 1 秒约升 2.5Hz、约 20 秒到 50Hz；改成 2s 后 1 秒约升 25Hz。3D 风扇、双滚筒、皮带条纹与频率牌同步。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、3D 风扇转速、皮带条纹位移</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　斜坡时间是从 0 到最大频率的时间，不是到目标频率的时间。</p>
+</article>
+<article id="lab4" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 4　参数初始化 FP-01 六档 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　分辨恢复出厂、保留电机铭牌、清记录与备份用户参数的差别。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>先把 <code>F1-05</code> 从 1460rpm 改成 2000rpm，并制造一条故障记录。</li><li>依次试 FP-01=1、2、4、501、503，每次记录 F1-05 与故障列表。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　=1 时 F1 铭牌保持 2000rpm；=2 只清故障记录、参数不动；=503 全部回出厂（F1-05=1460）；=4 / 501 为备份/恢复用户参数（教学镜像）。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　参数菜单、fault 菜单</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　FP-01 是「停机更改」，运行中改不了；0=无操作。</p>
+</article>
+<article id="lab5" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 5　FP-02 掩码控制自定义菜单 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解功能参数组显示选择对菜单的影响，以及基本菜单不受影响。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>记下 user 菜单默认 4 项（F0-02、F0-08、F0-17、F0-18）。</li><li>把 FP-02 设 0，回 user 菜单；再设 63、1023 各看一次。</li><li>每次都切回 basic 对照。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　FP-02=0 → user 菜单空；=63（默认）→ 4 项；basic 始终是 39 个参数，索引不变。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　user / basic 菜单条数</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　低 10 位按组顺序掩码；只作用 user 菜单，别误以为整个参数表被隐藏。</p>
+</article></section>
+<section id="grpB"><h2 style="color:#0F6E56">B 类　给定与频率（7 项）</h2><article id="lab6" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 6　四种给定切换 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　分辨命令源 F0-02 与频率源 F0-03，理解谁能抢运行权。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>依次设 F0-02=0/1/2，观察面板 RUN 是否生效。</li><li>固定 F0-02=0，依次设 F0-03=0/2/3/6/9，观察目标频率从哪来。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　F0-02=2（通信）时面板 RUN/STOP 不再抢运行权，由 2000H 控制字决定；F0-03=6 走 DI 多段速、=9 走通信给定。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　485 状态行 2000H 命令、运行/停机徽标</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　命令源与频率源是两个独立参数，不要一起改。</p>
+</article>
+<article id="lab7" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 7　DI 多段速 8 段 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握 DI1~DI3 三位二进制选段 + DI4 运行使能。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-02=1、F0-03=6；教学信号区按 DI4 使能。</li><li>按 DI1~DI3 组合出 000~111，逐段记录「段N xxHz」。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　默认 FC 百分比 0/20/40/60/80/100/70/50% 对应 0/10/20/30/40/50/35/25Hz（F0-10=50Hz）。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　段速标签、面板输出频率、3D 转速</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　DI4 不使能时不会运行；DI5 是高速脉冲输入，不参与选段。</p>
+</article>
+<article id="lab8" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 8　FC 段速成为真值 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证段速不是硬编码 Hz 表，而是 FC 百分比 × F0-10。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>停在段 2（DI2 单独 ON），记下频率。</li><li>把 <code>FC-02</code> 从 40% 改成 10%，保存后回到监控页。</li><li>再把 F0-10 从 50 改成 60，看同一段的变化。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　FC-02=40% → 20Hz；改成 10% → 5Hz；F0-10=60 后 10% → 6Hz。面板、PLC 参考程序、3D 读数同源。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　段速标签、1008H DI 位字、3D</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　FC 单位是相对最大频率的百分比，不是 Hz。</p>
+</article>
+<article id="lab9" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 9　AI 模拟量给定 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解 AI1 双极性电压、AI2 电压/电流拨码与频率映射。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-03=2，拖 AI1 从 0 到 5.0V，记录输出频率；再拖到 -5.0V。</li><li>设 F0-03=3，用「0~10V / 0~20mA」按钮切档，拖 AI2 到 5.0V 或 10mA。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　目标频率 = |AI| / 满量程 × F0-10：AI1 5.0V → 25Hz（取绝对值）；AI2 5.0V / 10mA → 25Hz。100AH 数值镜像同步。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　AI1/AI2 滑块读数、100AH</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　AI1 是 -10~10V 双极性，负电压给的是频率绝对值；方向另由 FWD/REV 决定。</p>
+</article>
+<article id="lab10" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 10　485 通信给定与状态回读 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　用控制字与频率给定控制变频器，并读懂回读状态。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-02=2、F0-03=9，连 MD520 虚拟 PLC :1507。</li><li>PLC 侧写 2000H=1（正转）、7310H=3000（30.00Hz）、1000H=6000（60.00%）。</li><li>读 3000H、1001H、1009H、7044H。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　输出 30.00Hz；3000H=1（正转）、1001H=3000（0.01Hz）、1009H 的 DO1 位为 1；停机写 2000H=6 后 3000H=3。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　485 只读状态行、:5087/status</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　2000H 没有 0 档，写 0 无意义；7310H 是 0.01Hz，1000H 是 ±100.00% 百分比。</p>
+</article>
+<article id="lab11" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 11　加减速时间与基准频率 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　对比 F0-17/18 与 F0-25 四档基准对斜坡速率的影响。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>默认 F0-25=0，RUN 后记录 1 秒爬升量。</li><li>依次把 F0-25 设 1（同时 F0-08=30）、2、3（同时 F1-04=25），各跑 1 秒。</li><li>改 F0-18 观察停机回落。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　1 秒爬升量依次为 2.5 / 1.5 / 5 / 1.25Hz；F0-18 变小时回落明显加快。默认档 0 与旧行为一致。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、3D 转速</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F0-25=1 的基准是「设定频率」，所以要先改 F0-08 才看得出差别。</p>
+</article>
+<article id="lab12" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 12　最大频率与控制方式 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解 F0-10 上限、FC 换算基准，以及 F0-01 三种控制方式的教学近似。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>段 2（40%）下把 F0-10 从 50 改 60，记录频率。</li><li>把 F0-01 依次设 0(SVC)、1(FVC)、2(V/f)，各 RUN 1 秒记录爬升量。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　F0-10=60 后段 2 从 20Hz 变 24Hz；1 秒爬升 SVC 4.0Hz / FVC 3.13Hz / V/f 2.5Hz；FVC 频率到达灯容差更宽。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　段速标签、FM 徽标、3D</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这里只是低速段增益近似，没有真实矢量控制算法。</p>
+</article></section>
+<section id="grpC"><h2 style="color:#BA7517">C 类　停机方向与状态（6 项）</h2><article id="lab13" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 13　F6-10 三种停机方式 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　对比减速停机、自由停机、最大能力停机的曲线差异。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>先 RUN 到 50Hz。</li><li>把 F6-10 依次设 0、1、2，每次从 50Hz 按 STOP，0.5 秒后记录输出频率。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　F6-10=0 约 48.75Hz（按 F0-18 减速）；=1 → 0Hz（立即断输出）；=2 约 43.75Hz（F0-18/5 强制斜坡）。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、3D 是否立即停转</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　自由停机不是「慢慢停」，是立刻断输出。</p>
+</article>
+<article id="lab14" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 14　F6-11~14 直流制动段 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　观察制动起始频率、等待时间、制动电流对自由停机过程的影响。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F6-10=1、F6-14=2（制动时间 2s），从 50Hz STOP，记录 0.3 秒频率。</li><li>把 F6-13 从 50% 改 100% 重做；再设 F6-11=20、F6-12=1 各做一次。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　F6-14&gt;0 时自由停机不再瞬间归零，而是有制动减速段；F6-13=100% 比 50% 降得快；F6-12 拉长时间；F6-11 高于当前频率时不加制动增益。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、停机用时</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这四个参数只在 F6-14&gt;0 的制动段生效，默认 0/0/50 时行为与只看 F6-14 一致。</p>
+</article>
+<article id="lab15" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 15　F7-02 STOP/RESET 四档 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解 OFF1/OFF2/OFF3 对停机方式的覆盖。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>保持 F6-10=0（减速停机），把 F7-02 依次设 0、1、2、3，各从 50Hz STOP。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　=0 沿用 F6-10 减速；=1(OFF1) 立刻自由停机；=2(OFF2) 最大能力停机；=3(OFF3) 减速停机。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　输出频率回落曲线</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F7-02 优先级高于 F6-10，排查停机异常时先看它。</p>
+</article>
+<article id="lab16" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 16　MF.K 五档功能 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握 F7-01 五档分派与「仅操作面板命令源有效」的约束。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>F7-01 依次设 0、1、2、3、4，每档按一次 MF.K 观察。</li><li>把 F0-02 改成 2（通信）后，再试 F7-01=2/3/4。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　=0 无动作；=1 把命令源切回面板；=2 正反转切换；=3/4 正/反转点动（5Hz 上限）。F0-02≠0 时 2/3/4 全部无效。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　FWD/REV 丝印、运行/停机、控制字</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　手册 285 页表 16-6：2、3、4 只在 F0-02=0 有效。</p>
+</article>
+<article id="lab17" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 17　正反转切换与 3D 联动 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证方向切换不只是面板丝印变化，电机与皮带真的反向。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F7-01=2、F0-02=0，RUN 到有输出。</li><li>按 MF.K，间隔 0.5 秒采样两次 3D 诊断（?debug=1 的 __dtVfdDrive）。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　direction 由 1 变 -1；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）；FWD/REV 丝印颜色互换。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　__dtVfdDrive.direction / fanAngle / beltPhase、FWD/REV 灯</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　只看面板灯会误判；必须看 3D 角度差符号是否反号。</p>
+</article>
+<article id="lab18" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 18　DO 状态、故障与只读监视量 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　读懂 DO1/FM/RELAY、3000H 状态与输出电流/功率监视量。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>RUN 到稳态，看 DO1（运行中）、FM（频率到达）亮，RELAY 灭。</li><li>制造故障后看 RELAY 与 3000H=5，再用 STOP/RESET 或 2000H=7 复位。</li><li>把 F1-03 从 9A 改 18A、F1-01 从 3.7 改 7.4kW，看监视量；再设 F1-00=2（永磁同步）。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　满载时默认显示约 9.00A / 3.70kW；铭牌翻倍后约 18.00A / 7.40kW；F1-00=2 时电流 ×0.88；停机后监视量归零。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　DO 只读徽标、data-dt-vfd-monitor、3000H / 7044H</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这些监视量是教学近似（空载 15% 电流 + 负载率线性），不是真实电机模型。</p>
+</article></section>
+<section id="grpD"><h2 style="color:#534AB7">D 类　外部 PLC 三协议（5 项）</h2><article id="lab19" style="background:#fff;border:1px solid var(--line);border-left:4px solid #534AB7;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 19　AutoShop / Modbus TCP 读写 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　用 PLC 程序通过 coils 与 15 个数值字控制变频器。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>连接预设选「汇川H5U (Modbus)」或「MD520 虚拟 PLC」:1507。</li><li>PLC 侧写 coils 130~134（DI1~DI5），读 140~142。</li><li>写 2000H / 7310H / 1000H，读 3000H / 1001H / 1009H。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　写入 DI 位组合后 1008H 位字同步（例 130/132/133 置位 → 0b01101=13）；变频器 DO 三路回写到 140~142。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　:5087/status 的 io 与 words、1008H / 1009H</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　外部写入 130~134 后内置参考程序让位 2 秒，超时会恢复覆盖。</p>
+</article>
+<article id="lab20" style="background:#fff;border:1px solid var(--line);border-left:4px solid #534AB7;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 20　博途 / S7-PLCSIM 读写 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握 S7 M 区位与 MW 字通道的对应关系。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>连接预设选「S7-1200/1500 仿真」:102，rack 0 / slot 1。</li><li>PLC 程序写 M130.0~M134.0、读 M140.0~M142.0；数值字用 MW1000~MW1014。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　点位表通过网关校验；本机无 PLCSIM 时连接层报「ISO 握手失败」，属预期，不是地址表错误。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　网关连接提示、地址浮框 S7 列</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　博途 CPU 属性要启用 PUT/GET；M 区字与位不要混用。</p>
+</article>
+<article id="lab21" style="background:#fff;border:1px solid var(--line);border-left:4px solid #534AB7;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 21　GX Works2 / GX Simulator2 读写 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握三菱仿真档 Y/X 与 D 字通道。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>连接预设选「三菱 GX Simulator2 仿真」，逻辑站号填通信设置实用程序里已配置的编号。</li><li>PLC 程序写 Y0~Y4、读 X0~X2；数值字 D1000~D1014。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　仿真器无物理刷新，Y/X 可写；本机未配置逻辑站时连接层报 Open failed，属预期。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　连接提示「逻辑站 N」、地址浮框三菱列</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　MX Component 链路里填 IP 不生效；逻辑站号必须与实用程序一致，默认 0 不是通用值。</p>
+</article>
+<article id="lab22" style="background:#fff;border:1px solid var(--line);border-left:4px solid #534AB7;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 22　实物档统一 M 区 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解为什么实物 PLC 无实际接线时必须用 M 区。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>连接预设选三菱，把「连接目标」切到「实体 FX3U / FX5U · M 区」。</li><li>对照地址浮框，确认输入/输出列都变成 M100~/M130~ 风格，本设备用 M130~M134 / M140~M142。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　同一段速程序在实物档下点位自动换成 M 区；FX3U（GX Works2）与 FX5U（GX Works3）各需一套工程。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　连接目标下拉、地址对照表</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　真实 PLC 的 X 会被 END 后物理 I/O 刷新覆盖、Y 被程序输出刷新覆盖，上位机写 X/Y 无效。</p>
+</article>
+<article id="lab23" style="background:#fff;border:1px solid var(--line);border-left:4px solid #534AB7;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 23　三协议对照与外部写入让位 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　同一控制逻辑换三种 PLC，观察点位映射与让位机制。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>用同一段速逻辑分别跑 Modbus TCP / S7 / 三菱，记录各自点位。</li><li>连 :1507 时从 Node 侧直接写 coils 130~134，马上读 :5087/status。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　三种协议下变频器行为一致；/status 的 externalDi=true，2 秒内内置参考程序不覆盖外部给定。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　三协议地址表、:5087/status.externalDi</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　让位只有 2 秒，连续实验要持续发帧或关掉内置参考程序。</p>
+</article></section>
+<section id="grpE"><h2 style="color:#993C1D">E 类　B 档真实 485 主从（4 项）</h2><article id="lab24" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 24　纯从站 :1508 发真实帧 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 帧级 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证独立从站只响应主站帧，不自己改寄存器。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>用 modbus-serial 客户端连 127.0.0.1:1508，unitId=1。</li><li>发 FC03 读 3000H、FC06 写 7310H、FC05 写 coil 140、FC15 批写 140~142、FC01 回读。</li><li>读 :5088/status。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　role=pure-slave；FC01 按字节返回 8 位，前 3 位与写入一致；masterFrames 随轮询增长。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　:5088/status、主站日志</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　FC01 返回值可能多于请求位数，比较时取 slice(0,3)；2000H/7310H/1000H 会被内置主站每 200ms 覆盖。</p>
+</article>
+<article id="lab25" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 25　内置主站轮询节拍 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 帧级 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　观察真实 Modbus 主站 200ms 轮询与联锁读回。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>启动实验室（不要设 DT_VFD_485_MASTER=0），看主站日志。</li><li>每隔 1 秒读一次 :5088/status 的 masterFrames 与 2000H。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　日志出现「停机 → 运行 30Hz → 运行 50Hz」4s 运行 / 2s 停机循环；联锁打印 3000H / 1001H / 1009H；2000H 恒为 1 或 6，不出现 0。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　start:lab 控制台、:5088/status</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　主站是演示用途，接真实 PLC 时要关掉。</p>
+</article>
+<article id="lab26" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 26　外部 PLC 独占从站 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 帧级 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　让外部 PLC 成为唯一主站，避免两个主站抢写。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>以 DT_VFD_485_MASTER=0 启动实验室。</li><li>外部 PLC（AutoShop / 博途 / GX Works2 / 实物）连 :1508 发 FC06/FC16 写、FC03 读。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　只有外部主站的帧改变从站；:5088/status 的 masterFrames 只随外部帧增长。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　:5088/status、外部 PLC 在线表</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　不关内置主站会导致两边交替覆盖 2000H/7310H，现象像「给定抖动」。</p>
+</article>
+<article id="lab27" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 27　A/B 隔离与面板跟随 B 档 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 + 帧级 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证 B 档寄存器区与教学 :1507 完全独立，并让面板跟随 B 档。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>往 :1508 写 7310H=1234，同时读 :5087/status 与 :5088/status 的 7310H。</li><li>连接预设切「MD520 485 从站 B档」127.0.0.1:1508，看面板/3D 是否跟随。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　两个 words[7310H] 互不相同；切到 :1508 后面板数值与 3D 转速跟随 B 档从站，:1507 不受影响。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　两个 status 口、面板主显</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　切预设后参数源（F002H 等）是 B 档自己的值，需要 PLC 程序重新下发。</p>
+</article></section>
+<section id="grpF"><h2 style="color:#5F5E5A">F 类　平台与安全（3 项）</h2><article id="lab28" style="background:#fff;border:1px solid var(--line);border-left:4px solid #5F5E5A;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 28　主控—观众只读跟随 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 平台 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证 LAN 观众自动跟随、只读、零上行。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>装软件的机器开 http://127.0.0.1:5201/ 作为主控，进 MD520 场景。</li><li>另一台设备用界面底部显示的局域网 IP 访问，不做任何点击。</li><li>主控改参数/按 RUN，观察观众端数值与 3D。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　观众端无角色页、无房间码；键盘/DI/AI 全部 disabled；数值随主控快照更新；观众不建 PLC 通道。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　观众端面板、:5201 界面底部 IP、中继快照</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　同一时刻只允许一个主控上报；第二个主控会被拒，关闭多余主控页面即可。</p>
+</article>
+<article id="lab29" style="background:#fff;border:1px solid var(--line);border-left:4px solid #5F5E5A;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 29　拓扑与 P0 安全认知 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 平台 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解 8 进程 / 10 口、回环绑定与出站白名单。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>看 start:lab 启动日志，列出全部内部端口。</li><li>确认只有 :5201 对外，其余绑 127.0.0.1。</li><li>查 DT_PLC_HOSTS 默认值与每次重签的内部 token。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　8081 网关 / 8082 中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 教学 / 1508+5088 B 档，全部回环；接实体 PLC 需显式放行。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　启动日志、lab-info.json、security-check 34 项</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　不要为图方便把内部口改成 0.0.0.0；端口漂移会触发 assertInternalPorts 拒绝启动。</p>
+</article>
+<article id="lab30" style="background:#fff;border:1px solid var(--line);border-left:4px solid #5F5E5A;border-radius:10px;padding:16px 20px;margin-bottom:14px">
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 30　教学近似边界识别 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 综合 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　分清哪些参数改了真有效果、哪些只存值，避免把教学模型当真机。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>打开教学手册第 3/4 章，对照「生效 / 仅显示」列。</li><li>挑 F0-17、FC-02、F6-10、F4-00、F5-04、F1-02 各改一次，记录有无现象。</li><li>总结哪些属于矢量控制/直流制动/DO 可写等未实现范围。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　F0-17 / FC-02 / F6-10 有现象；F4-00 / F5-04 / F1-02 只存值；SVC/FVC 只是低速段增益，没有真实矢量算法。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　教学手册参数表、面板与 3D</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　09 参数手册抽取失败，未收录的码不猜默认值；参数/故障码都是教学子集。</p>
+</article></section>
+<h2>通用观察窗口</h2>
+<table><tr><th>窗口</th><th>看什么</th></tr>
+<tr><td>面板</td><td>主/辅显示、FWD/REV 丝印、DO 只读徽标、485 状态行、输出电流/功率</td></tr>
+<tr><td>3D 装置</td><td>风扇与双滚筒角速度、皮带条纹位移、LED 状态灯、频率数字牌；<code>?debug=1</code> 下 <code>__dtVfdDrive</code> 有 direction / fanAngle / beltPhase</td></tr>
+<tr><td>状态口</td><td><code>:5087/status</code>（教学虚拟 PLC）、<code>:5088/status</code>（B 档纯从站，含 masterFrames / externalDi）</td></tr>
+<tr><td>帧级探针</td><td>485 帧级、布尔链路、主探针 / 三接口专项 / 方向专项 CDP 验收脚本</td></tr></table>
+<h2>建议课时顺序</h2>
+<p>入门：实验 1~5（面板与菜单）→ 6~12（给定与频率）；进阶：13~18（停机、方向、状态）；综合：19~23（外部 PLC 三协议）→ 24~27（B 档真实主从）→ 28~30（平台与边界）。配套参考《MD520教学手册.html》。</p>
+<footer>MD520 虚拟变频器实验指导书 · 由 generate-lab-guide.cjs 从源码生成 · 30 个实验</footer>
+</div></body></html>
