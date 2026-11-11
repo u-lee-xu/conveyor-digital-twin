@@ -49,6 +49,7 @@ const C = {
   ledOn: '#df432b',
   ledOff: 'rgba(70,84,96,.20)',
   key: 'linear-gradient(180deg,#f5f7f9 0%,#cbd4dc 100%)',
+  keyFill: '#e8edf1',
   keyEdge: '#8995a1',
   keyInk: '#35424e',
   signal: 'rgba(112,128,142,.16)',
@@ -100,24 +101,60 @@ function StatusIcon({ children, on, round }: {
   );
 }
 
+/**
+ * 真机按键轮廓（手册图 4-3 下半部分）：
+ * 四瓣导航键的内侧是**凹弧**，用来让开中央 OK 圆钮；所有按键都有外层描边 +
+ * 内缩一圈细线，模拟实体按键的双层凸缘。CSS border-radius 画不出凹弧，改走 SVG path。
+ */
+type KeyShape = 'up' | 'down' | 'left' | 'right' | 'ok' | 'tall' | 'tilt' | 'mfk';
+
+const PATHS: Record<KeyShape, (w: number, h: number) => string> = {
+  up: (w, h) => `M 3 ${h - 4} C 3 6 ${w * 0.22} 2 ${w / 2} 2 C ${w * 0.78} 2 ${w - 3} 6 ${w - 3} ${h - 4} Q ${w / 2} ${h * 0.44} 3 ${h - 4} Z`,
+  down: (w, h) => `M 3 4 Q ${w / 2} ${h * 0.56} ${w - 3} 4 C ${w - 3} ${h - 6} ${w * 0.78} ${h - 2} ${w / 2} ${h - 2} C ${w * 0.22} ${h - 2} 3 ${h - 6} 3 4 Z`,
+  left: (w, h) => `M ${w - 3} 3 C ${w * 0.20} 3 3 ${h * 0.20} 3 ${h / 2} C 3 ${h * 0.80} ${w * 0.20} ${h - 3} ${w - 3} ${h - 3} Q ${w * 0.55} ${h / 2} ${w - 3} 3 Z`,
+  right: (w, h) => `M 3 3 C ${w * 0.80} 3 ${w - 3} ${h * 0.20} ${w - 3} ${h / 2} C ${w - 3} ${h * 0.80} ${w * 0.80} ${h - 3} 3 ${h - 3} Q ${w * 0.45} ${h / 2} 3 3 Z`,
+  ok: (w, h) => `M ${w / 2} 2 C ${w * 0.78} 2 ${w - 2} ${h * 0.22} ${w - 2} ${h / 2} C ${w - 2} ${h * 0.78} ${w * 0.78} ${h - 2} ${w / 2} ${h - 2} C ${w * 0.22} ${h - 2} 2 ${h * 0.78} 2 ${h / 2} C 2 ${h * 0.22} ${w * 0.22} 2 ${w / 2} 2 Z`,
+  tall: (w, h) => `M 10 2 L ${w - 10} 2 Q ${w - 2} 2 ${w - 2} 10 L ${w - 2} ${h - 10} Q ${w - 2} ${h - 2} ${w - 10} ${h - 2} L 10 ${h - 2} Q 2 ${h - 2} 2 ${h - 10} L 2 10 Q 2 2 10 2 Z`,
+  tilt: (w, h) => `M 14 2 L ${w - 14} 2 Q ${w - 2} 2 ${w - 2} 14 L ${w - 2} ${h - 14} Q ${w - 2} ${h - 2} ${w - 14} ${h - 2} L 14 ${h - 2} Q 2 ${h - 2} 2 ${h - 14} L 2 14 Q 2 2 14 2 Z`,
+  mfk: (w, h) => `M ${w * 0.13} 3 L ${w * 0.87} 3 Q ${w * 0.94} 3 ${w * 0.95} 10 L ${w - 3} ${h - 10} Q ${w} ${h - 3} ${w * 0.92} ${h - 3} L ${w * 0.08} ${h - 3} Q 0 ${h - 3} 3 ${h - 10} L ${w * 0.05} 10 Q ${w * 0.06} 3 ${w * 0.13} 3 Z`,
+};
+
+function KeyOutline({ shape, w, h }: { shape: KeyShape; w: number; h: number }) {
+  const d = PATHS[shape](w, h);
+  const inner = `translate(${w / 2} ${h / 2}) scale(0.88) translate(${-w / 2} ${-h / 2})`;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true"
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+        filter: 'drop-shadow(0 2px 2px rgba(38,50,62,.30))' }}>
+      <path d={d} fill={C.keyFill} stroke={C.keyEdge} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke="rgba(255,255,255,.88)" strokeWidth="1"
+        strokeLinejoin="round" transform={inner} />
+    </svg>
+  );
+}
+
 const KEY_BASE: CSSProperties = {
   position: 'absolute', padding: 0, margin: 0,
-  background: C.key, color: C.keyInk,
-  border: `1px solid ${C.keyEdge}`,
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,.92), 0 2px 3px rgba(38,50,62,.30)',
+  background: 'transparent', border: 'none', boxShadow: 'none',
+  color: C.keyInk,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: 15, fontWeight: 700, lineHeight: 1, userSelect: 'none',
 };
 
-function PanelKey({ label, name, onPress, disabled, style, children }: {
+function PanelKey({ label, name, onPress, disabled, shape, w, h, style, children }: {
   label: KeypadKey; name: string; onPress: (k: KeypadKey) => void;
-  disabled: boolean; style: CSSProperties; children: React.ReactNode;
+  disabled: boolean; shape: KeyShape; w: number; h: number;
+  style: CSSProperties; children: React.ReactNode;
 }) {
   return (
     <button type="button" aria-label={name} title={name} disabled={disabled}
-      style={{ ...KEY_BASE, ...style, opacity: disabled ? 0.55 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer' }}
-      onClick={() => onPress(label)}>{children}</button>
+      style={{ ...KEY_BASE, width: w, height: h, ...style,
+        opacity: disabled ? 0.55 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+      onClick={() => onPress(label)}>
+      <KeyOutline shape={shape} w={w} h={h} />
+      <span style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{children}</span>
+    </button>
   );
 }
 
@@ -298,54 +335,64 @@ export function VfdKeypadPanel() {
           ))}
         </div>
 
-        {/* 按键区：真机布局 */}
-        <div style={{ position: 'relative', height: 194 }}>
+        {/* 按键区：真机布局，按键轮廓全部走 SVG path */}
+        <div data-dt-vfd-keypad style={{ position: 'relative', height: 200 }}>
 
-          {/* 圆形导航环 */}
+          {/* 导航环：真机没有外圈轮廓，四瓣按键自己围成圆环 */}
           <div data-dt-vfd-nav style={{ position: 'absolute', left: '50%', top: 3, transform: 'translateX(-50%)',
-            width: 132, height: 132, borderRadius: '50%',
-            border: `1px solid ${C.shellLine}`, background: 'rgba(255,255,255,.18)',
-            boxShadow: 'inset 0 2px 5px rgba(50,64,78,.16)' }}>
+            width: 132, height: 132, borderRadius: '50%' }}>
             <PanelKey label="UP" name="递增键" onPress={press} disabled={readOnly}
-              style={{ left: '50%', top: 4, transform: 'translateX(-50%)', width: 84, height: 42,
-                borderRadius: '60px 60px 8px 8px', fontSize: 13 }}>△</PanelKey>
+              shape="up" w={78} h={40}
+              style={{ left: '50%', top: 3, transform: 'translateX(-50%)', fontSize: 13 }}>
+              <span style={{ transform: 'translateY(-6px)' }}>△</span>
+            </PanelKey>
             <PanelKey label="DOWN" name="递减键" onPress={press} disabled={readOnly}
-              style={{ left: '50%', bottom: 4, transform: 'translateX(-50%)', width: 84, height: 42,
-                borderRadius: '8px 8px 60px 60px', fontSize: 13 }}>▽</PanelKey>
+              shape="down" w={78} h={40}
+              style={{ left: '50%', bottom: 3, transform: 'translateX(-50%)', fontSize: 13 }}>
+              <span style={{ transform: 'translateY(6px)' }}>▽</span>
+            </PanelKey>
             <PanelKey label="LEFT" name="左移位键" onPress={press} disabled={readOnly}
-              style={{ left: 4, top: '50%', transform: 'translateY(-50%)', width: 42, height: 84,
-                borderRadius: '60px 8px 8px 60px', fontSize: 12 }}>◀</PanelKey>
+              shape="left" w={40} h={78}
+              style={{ left: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
+              <span style={{ transform: 'translateX(-6px)' }}>◀</span>
+            </PanelKey>
             <PanelKey label="RIGHT" name="右移位键" onPress={press} disabled={readOnly}
-              style={{ right: 4, top: '50%', transform: 'translateY(-50%)', width: 42, height: 84,
-                borderRadius: '8px 60px 60px 8px', fontSize: 12 }}>▶</PanelKey>
+              shape="right" w={40} h={78}
+              style={{ right: 3, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
+              <span style={{ transform: 'translateX(6px)' }}>▶</span>
+            </PanelKey>
             <PanelKey label="OK" name="确认键" onPress={press} disabled={readOnly}
+              shape="ok" w={58} h={58}
               style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
-                width: 50, height: 50, borderRadius: '50%', fontSize: 12, zIndex: 2 }}>OK</PanelKey>
+                borderRadius: '50%', fontSize: 12, zIndex: 2 }}>OK</PanelKey>
           </div>
 
           {/* 左右竖长键 */}
           <PanelKey label="PRG" name="编程/返回键" onPress={press} disabled={readOnly}
-            style={{ left: 18, top: 8, width: 40, height: 72, borderRadius: 12, fontSize: 18 }}>↩</PanelKey>
+            shape="tall" w={36} h={80}
+            style={{ left: 14, top: 4, fontSize: 18 }}>↩</PanelKey>
           <button type="button" aria-label="菜单键" title="菜单键" disabled={readOnly}
             onPointerDown={menuDown} onPointerUp={menuUp} onPointerLeave={menuUp} onClick={menuClick}
-            style={{ ...KEY_BASE, right: 18, top: 8, width: 40, height: 72, borderRadius: 12,
-              fontSize: 18, opacity: readOnly ? 0.55 : 1,
-              cursor: readOnly ? 'not-allowed' : 'pointer' }}>⌂</button>
+            style={{ ...KEY_BASE, right: 14, top: 4, width: 36, height: 80, fontSize: 18,
+              opacity: readOnly ? 0.55 : 1, cursor: readOnly ? 'not-allowed' : 'pointer' }}>
+            <KeyOutline shape="tall" w={36} h={80} />
+            <span style={{ position: 'relative', zIndex: 1 }}>⌂</span>
+          </button>
 
-          {/* 左下 / 右下斜置运行键 */}
+          {/* 左下 / 右下斜置运行键：真机倾角约 30° */}
           <PanelKey label="RUN" name="运行键" onPress={press} disabled={readOnly}
-            style={{ left: 32, bottom: 4, width: 50, height: 56, borderRadius: 13,
-              transform: 'rotate(-22deg)' }}>
-            <span style={{ transform: 'rotate(22deg)', fontSize: 14 }}>◇</span>
+            shape="tilt" w={50} h={62}
+            style={{ left: 28, bottom: 8, transform: 'rotate(-30deg)' }}>
+            <span style={{ transform: 'rotate(30deg)', fontSize: 14 }}>◇</span>
           </PanelKey>
           <PanelKey label="STOP" name="停止键/故障复位" onPress={press} disabled={readOnly}
-            style={{ right: 32, bottom: 4, width: 50, height: 56, borderRadius: 13,
-              transform: 'rotate(22deg)' }}>
-            <span style={{ transform: 'rotate(-22deg)', fontSize: 14 }}>⊗</span>
+            shape="tilt" w={50} h={62}
+            style={{ right: 28, bottom: 8, transform: 'rotate(30deg)' }}>
+            <span style={{ transform: 'rotate(-30deg)', fontSize: 14 }}>⊗</span>
           </PanelKey>
           <PanelKey label="MFK" name="多功能选择键" onPress={press} disabled={readOnly}
-            style={{ left: '50%', bottom: 6, transform: 'translateX(-50%)',
-              width: 60, height: 22, borderRadius: 11, fontSize: 10 }}>MF. K</PanelKey>
+            shape="mfk" w={62} h={26}
+            style={{ left: '50%', bottom: 4, transform: 'translateX(-50%)', fontSize: 10 }}>MF. K</PanelKey>
         </div>
 
         {/* 教学信号区：DI / AI / 485 / DO，真机无此区 */}
