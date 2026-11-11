@@ -49,6 +49,9 @@ export interface VfdSnapshot {
   /** 教学近似的输出电流 / 功率，由 F1-03 额定电流、F1-01 额定功率与负载率算出 */
   outputCurrent: number;
   outputPower: number;
+  /** 方向数值镜像：观众端 3D 也要跟随换向过程，不用 !! 布尔化 */
+  direction: number;
+  runDirection: number;
   faultCode: string;
   engaged: boolean;
 }
@@ -57,7 +60,10 @@ interface VfdStore {
   params: Record<string, number>;
   keypad: KeypadState;
   running: boolean;
+  /** 目标方向：面板 FWD/REV 丝印、控制字与状态字用，切换指令下达后立刻变 */
   direction: 1 | -1;
+  /** 实际输出方向：3D 电机/皮带用它。换向要先把频率降到 0 才翻转，避免瞬间反转 */
+  runDirection: 1 | -1;
   /** 485 通信给定频率（Hz），来自 1000H 百分比或 7310H 直接频率 */
   externalSetpointHz: number;
   outputHz: number;
@@ -133,6 +139,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
   keypad: { ...INITIAL_KEYPAD },
   running: false,
   direction: 1,
+  runDirection: 1,
   externalSetpointHz: NOMINAL_HZ,
   outputHz: 0,
   outputCurrent: 0,
@@ -168,6 +175,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     message: '',
     engaged: false,
     running: false,
+    direction: 1,
+    runDirection: 1,
     outputHz: 0,
     outputCurrent: 0,
     outputPower: 0,
@@ -343,14 +352,21 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     const maxHz = s.params['F0-10'] || NOMINAL_HZ;
     const acc = Math.max(0.1, s.params['F0-17']);
     const dec = Math.max(0.1, s.params['F0-18']);
-    const goal = running ? Math.min(maxHz, targetHz) : 0;
     const dt = Math.min(delta, 0.05);
+    const runGoal = Math.min(maxHz, targetHz);
+
+    // 正反转切换的真实过程：目标方向与实际输出方向不一致时，先按 F0-18 把频率
+    // 降到 0（本帧目标 0），到零后才翻转 runDirection，再按 F0-17 反向加速到目标频率。
+    // 面板 FWD/REV 丝印与控制字仍用 s.direction（指令下达即变），3D 用 runDirection。
+    const reversing = running && s.direction !== s.runDirection && s.outputHz > 0.01;
+    const goal = reversing ? 0 : (running ? runGoal : 0);
 
     // F0-25 加减速基准频率（311 页 17.2.13）：斜坡速率的标尺，
     // 0 最大频率(F0-10) / 1 设定频率 / 2 固定 100Hz / 3 额定频率(F1-04)。
-    // 默认 0 时与原来的 maxHz/acc 完全一致，不影响既有演示与 CDP 断言。
+    // 换向减速时不能用 0 当基准，否则速率趋近 0 卡住，改用运行目标频率。
     const baseMode = Math.trunc(s.params['F0-25'] ?? 0);
-    const baseHz = baseMode === 1 ? Math.max(0.01, goal)
+    const rampBase = reversing ? runGoal : goal;
+    const baseHz = baseMode === 1 ? Math.max(0.01, rampBase)
       : baseMode === 2 ? 100
         : baseMode === 3 ? (s.params['F1-04'] || NOMINAL_HZ)
           : maxHz;
@@ -396,6 +412,15 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
         : Math.max(goal, s.outputHz - rate);
     }
 
+    // 频率归零后才真正翻转输出方向（下一帧换向结束、按 acc 反向加速）；
+    // 停机状态下没有输出，换向指令直接生效。
+    let runDirection = s.runDirection;
+    // 判定必须用帧初的 s.outputHz：帧末 outputHz 已经是「反向加速第一帧」的结果，
+    // 可能已大于 0.01，用它判断会导致不翻转、下一帧又进入减速，来回震荡。
+    if (!reversing && runDirection !== s.direction && (s.outputHz <= 0.01 || !running)) {
+      runDirection = s.direction;
+    }
+
     // F1-03 额定电流 / F1-01 额定功率参与只读监视量计算：
     // 空载按 15% 额定电流，负载率随输出频率线性上升（教学近似，非矢量模型）。
     // F1-00 电机类型再给一个效率系数：永磁同步(2) 电流低 12%，电磁线圈(4) 高 20%。
@@ -420,6 +445,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
 
     set({
       outputHz,
+      runDirection,
       outputCurrent,
       outputPower,
       running,
@@ -456,6 +482,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       ai1: Math.round(s.ai1 * 100) / 100,
       outputCurrent: Math.round(s.outputCurrent * 100) / 100,
       outputPower: Math.round(s.outputPower * 100) / 100,
+      direction: s.direction,
+      runDirection: s.runDirection,
       faultCode: s.faultCode ?? '',
       engaged: s.engaged,
     };
@@ -478,6 +506,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     const outputHz = num('VFD_OUTPUT_HZ');
     const outputCurrent = num('VFD_CURRENT');
     const outputPower = num('VFD_POWER');
+    const direction = num('VFD_DIRECTION');
+    const runDirection = num('VFD_RUN_DIRECTION');
     const command = num('VFD_COMMAND');
     const status = num('VFD_STATUS');
     const diFlags = num('VFD_DI_FLAGS');
@@ -487,6 +517,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     if (setpointHz !== undefined) patch.externalSetpointHz = setpointHz;
     if (outputCurrent !== undefined) patch.outputCurrent = outputCurrent;
     if (outputPower !== undefined) patch.outputPower = outputPower;
+    if (direction === 1 || direction === -1) patch.direction = direction;
+    if (runDirection === 1 || runDirection === -1) patch.runDirection = runDirection;
     if (outputHz !== undefined) {
       patch.outputHz = outputHz;
       mirrorParam('U0-00', Math.round(outputHz * 100) / 100);

@@ -180,7 +180,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <tr><td>1</td><td>强制面板控制</td><td>F0-02=0 时按了无效果</td></tr>
 <tr><td>2</td><td>正反转切换（频率指令方向）</td><td>仅 F0-02=0 操作面板命令源有效</td></tr>
 <tr><td>3 / 4</td><td>正转点动 FJOG / 反转点动 RJOG</td><td>仅 F0-02=0 有效</td></tr></table>
-<p>方向切换会同时改变控制字、状态字、面板 FWD/REV 丝印与 3D 电机 / 皮带的转向。</p>
+<p>方向切换的真值分两层：<code>direction</code> 是目标方向，指令下达立刻改控制字、状态字与 FWD/REV 丝印；<code>runDirection</code> 是实际输出方向，3D 电机 / 皮带用它。换向时先按 <code>F0-18</code> 把频率降到 0（仍按原方向转、只是变慢），归零后才翻转方向并按 <code>F0-17</code> 反向加速，不会瞬间反转。观众端通过 <code>VFD_DIRECTION</code> / <code>VFD_RUN_DIRECTION</code> 数值镜像跟随整个过程。</p>
 </section>
 
 <section id="s3"><h2>3 常用参数速查（${params.length} 个 / ${new Set(params.map((p) => p.group)).size} 组）</h2>
@@ -279,7 +279,7 @@ ${terminalSvg}
 <tr><td>ISO 握手失败</td><td>博途 CPU 属性 → Protection → 允许 PUT/GET；确认 rack / slot。</td></tr>
 <tr><td>无法写入频率</td><td>F0-03=0 时地址对应 F0-08；F0-03=9 时地址应为 1000H 或 7310H；检查终端电阻。</td></tr>
 <tr><td>写 2000H=0 没反应</td><td>该地址无 0 档，停机写 6（按 F6-10）或 5（自由停机）。</td></tr>
-<tr><td>面板 FWD/REV 切了但电机不反转</td><td>确认 F7-01=2 且 F0-02=0；方向切换只在操作面板命令源有效。</td></tr>
+<tr><td>面板 FWD/REV 切了但电机还在原方向转</td><td>这是正常的换向减速过程：先按 F0-18 降到 0 才翻转。想缩短等待把 F0-17 / F0-18 改小；同时确认 F7-01=2 且 F0-02=0。</td></tr>
 <tr><td>改参数没效果</td><td>核对第 4 章「生效 / 仅显示」列；部分参数只记录数值，属教学子集边界。</td></tr>
 <tr><td>观众端数值不跟随</td><td>中继只允许一个主控上报；第二个主控会被拒绝，关闭多余主控页面即可。</td></tr>
 </table>

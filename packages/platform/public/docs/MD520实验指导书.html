@@ -50,7 +50,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <tr><td class="num">14</td><td><a href="#lab14">F6-11~14 直流制动段</a></td><td>停机方向与状态</td><td>手动</td></tr>
 <tr><td class="num">15</td><td><a href="#lab15">F7-02 STOP/RESET 四档</a></td><td>停机方向与状态</td><td>手动</td></tr>
 <tr><td class="num">16</td><td><a href="#lab16">MF.K 五档功能</a></td><td>停机方向与状态</td><td>手动</td></tr>
-<tr><td class="num">17</td><td><a href="#lab17">正反转切换与 3D 联动</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">17</td><td><a href="#lab17">正反转切换：减速到零再反向加速</a></td><td>停机方向与状态</td><td>手动</td></tr>
 <tr><td class="num">18</td><td><a href="#lab18">DO 状态、故障与只读监视量</a></td><td>停机方向与状态</td><td>手动 + 仿真</td></tr>
 <tr><td class="num">19</td><td><a href="#lab19">AutoShop / Modbus TCP 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
 <tr><td class="num">20</td><td><a href="#lab20">博途 / S7-PLCSIM 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
@@ -193,12 +193,12 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　手册 285 页表 16-6：2、3、4 只在 F0-02=0 有效。</p>
 </article>
 <article id="lab17" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 17　正反转切换与 3D 联动 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　验证方向切换不只是面板丝印变化，电机与皮带真的反向。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F7-01=2、F0-02=0，RUN 到有输出。</li><li>按 MF.K，间隔 0.5 秒采样两次 3D 诊断（?debug=1 的 __dtVfdDrive）。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　direction 由 1 变 -1；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）；FWD/REV 丝印颜色互换。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　__dtVfdDrive.direction / fanAngle / beltPhase、FWD/REV 灯</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　只看面板灯会误判；必须看 3D 角度差符号是否反号。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 17　正反转切换：减速到零再反向加速 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证换向不是瞬间反转，而是先按 F0-18 减速到 0、翻转输出方向、再按 F0-17 反向加速。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F7-01=2、F0-02=0，RUN 到有输出（建议先把 F0-18 / F0-17 改小到 2s 缩短等待）。</li><li>按 MF.K，立刻看 __dtVfdDrive：targetDirection 变 -1、direction 仍是 1、reversing=true、hz 持续下降。</li><li>连续采样直到 hz 归零、direction 翻成 -1，再看 hz 反向上升；随后间隔 0.5 秒采两次 fanAngle / beltPhase。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　换向期间电机仍按原方向转、只是越来越慢（减速阶段风扇角差仍为负）；频率归零后 direction 才由 1 变 -1 并反向加速；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）；FWD/REV 丝印指令下达即互换。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　__dtVfdDrive.direction / targetDirection / reversing / hz / fanAngle / beltPhase、FWD/REV 灯</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　别在减速阶段就断言反向：那时 direction 还是 1；面板丝印显示的是目标方向，3D 用的是实际输出方向 runDirection。</p>
 </article>
 <article id="lab18" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 18　DO 状态、故障与只读监视量 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>

@@ -679,7 +679,7 @@ describe('285 页面板参数与 MF.K 正反转切换', () => {
     expect(keypad).toContain('panelSource');
   });
 
-  it('方向切换立刻反映到控制字 / 状态字，3D 动画乘 direction', () => {
+  it('方向切换立刻反映到控制字 / 状态字，3D 动画乘 runDirection', () => {
     useVfdStore.getState().setParam('F7-01', 2);
     useVfdStore.getState().setParam('F0-02', 0);
     useVfdStore.getState().dispatchKey('RUN');
@@ -689,10 +689,12 @@ describe('285 页面板参数与 MF.K 正反转切换', () => {
     expect(s.direction).toBe(-1);
     expect(s.command).toBe(MD520_COMMAND.REV);
     expect(s.status).toBe(MD520_STATUS.REV);
-    expect(rig).toContain('const direction = s.direction');
+    expect(rig).toContain('const direction = s.runDirection');
     expect(rig).toContain('* dt * direction');
     expect(rig).toContain('beltPhase.current += factor * V.BELT_SPEED * dt * direction');
-    expect(rig).toContain('direction: s.direction');
+    expect(rig).toContain('direction: s.runDirection');
+    expect(rig).toContain('targetDirection: s.direction');
+    expect(rig).toContain('reversing:');
   });
 
   it('F7-01=0 时按 MF.K 不改变方向', () => {
