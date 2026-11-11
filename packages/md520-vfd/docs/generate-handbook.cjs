@@ -309,7 +309,7 @@ ${terminalSvg}
 <p class="notice">B 档从站与已定稿的配药 :1505、分拣 :1503 以及默认教学 :1507 全部隔离；改动 B 档不会影响那三条既有链路。</p>
 </section>
 
-<footer>MD520 虚拟变频器教学手册 · 由 generate-handbook.cjs 从源码生成 · 教学子集，非全量表</footer>
+<footer>MD520 虚拟变频器教学手册 · 由 generate-handbook.cjs 从源码生成 · 教学子集，非全量表 · 配套 <a href="MD520实验指导书.html">MD520实验指导书.html</a>（30 个实验）</footer>
 </div></body></html>
 `;
 
