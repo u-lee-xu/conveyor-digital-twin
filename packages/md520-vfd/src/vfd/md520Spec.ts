@@ -190,6 +190,8 @@ export const MD520_COMM = {
 } as const;
 
 export const MD520_COMMAND = {
+  /** 7311H「控制命令1」的 0 档（按 F6-10 停机），也是面板内部停机状态；
+   *  2000H「控制命令2」没有 0 档，绝不把 0 写到 2000H，停机用 5/6。 */
   STOP: 0,
   FWD: 1,
   REV: 2,

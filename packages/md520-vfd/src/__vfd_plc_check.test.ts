@@ -148,6 +148,9 @@ describe('PLC 参考程序：三条接口 + 读写分离 + 默认停机', () => 
   it('18.3 表 18-2：2000H 无 0 档，PLC 停机写 6（按 F6-10）', () => {
     expect(conveyorPlc).toContain('comm ? 1 : 6');
     expect(conveyorPlc).not.toContain('comm ? 1 : 0');
+    // 未连 PLC 时面板不得把 store 初始 0 标成 2000H 命令值
+    expect(panel).toContain("commOnline ? command : '—'");
+    expect(panel).not.toContain('2000H 命令 {command}');
   });
 
   it('默认停机，不写运行命令也不置位 DI', () => {
