@@ -302,6 +302,9 @@ describe('观众镜像与平台壳接线', () => {
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     expect(scene).toContain('applyProceduralTextures()');
     expect(scene).toContain('useMemo');
+    // 性能 A/B 开关：只在显式 ?noProcTex=1 时跳过，默认行为不变
+    expect(scene).toContain("has('noProcTex')");
+    expect(scene).toContain('if (!skipProcTex) applyProceduralTextures()');
   });
 
   it('建模质量对齐自动配药：材质单例 + metalness/roughness 分层 + polygonOffset 贴面', () => {
