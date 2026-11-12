@@ -72,6 +72,18 @@ export const M = {
   pieceFace: new THREE.MeshStandardMaterial({ color: V.ENDCAP_COLOR, metalness: 0.45, roughness: 0.5, ...decal }),
   /** 柜体 / 控制箱 */
   cabinet: new THREE.MeshStandardMaterial({ color: V.CABINET_COLOR, metalness: 0.4, roughness: 0.55 }),
+  /** 原点传感器 LED（触发亮绿） */
+  ledOrigin: new THREE.MeshStandardMaterial({
+    color: V.LAMP_GREEN, emissive: V.LAMP_GREEN, emissiveIntensity: 1.6, roughness: 0.35,
+  }),
+  /** 终端限位 LED（触发亮黄） */
+  ledEnd: new THREE.MeshStandardMaterial({
+    color: V.LAMP_YELLOW, emissive: V.LAMP_YELLOW, emissiveIntensity: 1.6, roughness: 0.35,
+  }),
+  /** 灭态 LED */
+  ledOff: new THREE.MeshStandardMaterial({
+    color: V.LAMP_DARK, emissive: V.MAGSWITCH_COLOR, emissiveIntensity: 0, roughness: 0.6, metalness: 0.4,
+  }),
 } as const;
 
 /** 相邻可见面最小贴面错开量，与配药 / 传送带场景共用同一口径 */

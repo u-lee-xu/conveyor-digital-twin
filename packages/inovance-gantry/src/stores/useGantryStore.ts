@@ -10,7 +10,7 @@
 import { create } from 'zustand';
 import {
   GANTRY_AXIS, GANTRY_BOARD, CHESS_POSITIONS, INITIAL_PIECES,
-  cellToMm, type ChessPiece, type ChessLabel,
+  cellToMm, computeSensors, type ChessPiece, type ChessLabel, type GantrySensorState,
 } from '../constants/gantryConstants';
 import { GANTRY_PHASE, type GantryPhase } from '../constants/gantryVariables';
 
@@ -52,6 +52,8 @@ interface GantryStore {
   pickCell: CellRef;
   placeCell: CellRef;
   autoRunning: boolean;
+  /** 3 个轴上接近开关：1 原点 + 2 终端，由 y.position 派生（PLC 输入 / 面板 / 观众同源） */
+  sensors: GantrySensorState;
   /** 位置变量由谁给：本地面板 / 外部 PLC position 变量 */
   controlSource: 'local' | 'plc';
   connected: boolean;
@@ -108,6 +110,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
   pickCell: { row: 0, col: 0 },
   placeCell: { row: 2, col: 0 },
   autoRunning: false,
+  sensors: computeSensors(0),
   controlSource: 'local',
   connected: false,
   estop: false,
@@ -160,6 +163,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     if (typeof frame.vacuum === 'boolean') patch.suction = { vacuum: frame.vacuum, hasPart: frame.vacuum };
     if (typeof frame.enableX === 'boolean') patch.x = { ...(patch.x ?? s.x), enabled: frame.enableX };
     if (typeof frame.enableY === 'boolean') patch.y = { ...(patch.y ?? s.y), enabled: frame.enableY };
+    patch.sensors = computeSensors(patch.y?.position ?? s.y.position);
     return patch;
   }),
 
@@ -168,6 +172,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     cylinder: { extended: false }, suction: { vacuum: false, hasPart: false },
     pieces: initialPieces(), heldPieceId: null,
     phase: GANTRY_PHASE.IDLE, autoRunning: false,
+    sensors: computeSensors(0),
     pickCell: { row: 0, col: 0 }, placeCell: { row: 2, col: 0 },
     estop: false, controlSource: 'local',
   }),
@@ -204,7 +209,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
         : p));
     }
 
-    const patch: Partial<GantryStore> = { x, y, z, pieces };
+    const patch: Partial<GantryStore> = { x, y, z, pieces, sensors: computeSensors(y.position) };
 
     // 4) 自动吸取 → 移动 → 放置状态机（只写 position 坐标变量与信号）
     if (s.autoRunning && s.controlSource === 'local') {
@@ -297,9 +302,23 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     const zPos = num('GANTRY_Z_POS');
     const phase = num('GANTRY_PHASE');
     if (xPos !== undefined) patch.x = { ...s.x, position: xPos };
-    if (yPos !== undefined) patch.y = { ...s.y, position: yPos };
+    if (yPos !== undefined) {
+      patch.y = { ...s.y, position: yPos };
+      patch.sensors = computeSensors(yPos);
+    }
     if (zPos !== undefined) patch.z = zPos;
     if (phase !== undefined) patch.phase = clamp(Math.trunc(phase), 0, 9) as GantryPhase;
+    // 传感器状态优先用主控快照，缺字段时保留按 y 坐标派生的结果
+    const sensorOrigin = num('GANTRY_SENSOR_ORIGIN');
+    const sensorEndMinus = num('GANTRY_SENSOR_END_MINUS');
+    const sensorEndPlus = num('GANTRY_SENSOR_END_PLUS');
+    if (sensorOrigin !== undefined && sensorEndMinus !== undefined && sensorEndPlus !== undefined) {
+      patch.sensors = {
+        origin: sensorOrigin === 1,
+        endMinus: sensorEndMinus === 1,
+        endPlus: sensorEndPlus === 1,
+      };
+    }
     if (num('GANTRY_CYL_DOWN') !== undefined) patch.cylinder = { extended: num('GANTRY_CYL_DOWN') === 1 };
     if (num('GANTRY_VACUUM') !== undefined) patch.suction = { vacuum: num('GANTRY_VACUUM') === 1, hasPart: num('GANTRY_VACUUM') === 1 };
     const pieces = s.pieces.map((p, i) => {
@@ -329,6 +348,9 @@ export function exportGantrySnapshot(): Record<string, number> {
     GANTRY_HAS_PART: s.suction.hasPart ? 1 : 0,
     GANTRY_X_ENABLE: s.x.enabled ? 1 : 0,
     GANTRY_Y_ENABLE: s.y.enabled ? 1 : 0,
+    GANTRY_SENSOR_ORIGIN: s.sensors.origin ? 1 : 0,
+    GANTRY_SENSOR_END_MINUS: s.sensors.endMinus ? 1 : 0,
+    GANTRY_SENSOR_END_PLUS: s.sensors.endPlus ? 1 : 0,
   };
   s.pieces.forEach((p, i) => {
     out[`GANTRY_PIECE_${i + 1}_ROW`] = p.row;

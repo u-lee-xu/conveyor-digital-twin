@@ -90,3 +90,43 @@ export const INITIAL_PIECES: ChessPiece[] = [
 
 /** 吸盘吸取判定半径（mm）：吸盘中心与格心距离小于此值才认为对准棋子 */
 export const PICK_TOLERANCE = 8;
+
+/**
+ * Y 驱动模组上的 3 个接近开关（参考 STEP 的「光遮断器固定片」「GTH8-感应片」）：
+ *   1 个原点（ORIGIN，绿色），2 个终端限位（END_MINUS / END_PLUS，黄色）。
+ * 原点在轴内侧 20mm，负终端在机械零点 0mm，正终端在行程末端 600mm；
+ * 上电停在机械零点时负终端压住、原点未触发，符合「未回零」状态。
+ */
+export const GANTRY_SENSOR = {
+  ORIGIN_Y: 20,
+  END_MINUS_Y: 0,
+  END_PLUS_Y: 600,
+  TOLERANCE: 8,
+  END_TOLERANCE: 4,
+  /** 3D 中沿 Y 模组（世界 Z 方向）的安装位置 mm */
+  ORIGIN_MM: 20,
+  END_MINUS_MM: 0,
+  END_PLUS_MM: 588,
+  /** 安装侧：原点在模组左侧，两个终端在右侧，避免同位置重叠 */
+  SIDE_X: 0.048,
+  BODY_W: 0.024,
+  BODY_H: 0.036,
+  BODY_D: 0.018,
+  LED_R: 0.007,
+} as const;
+
+export interface GantrySensorState {
+  origin: boolean;
+  endMinus: boolean;
+  endPlus: boolean;
+}
+
+/** 由 Y 轴 position 坐标变量派生的传感器触发状态（PLC 输入 / 面板 / 观众共用） */
+export function computeSensors(yMm: number): GantrySensorState {
+  const s = GANTRY_SENSOR;
+  return {
+    origin: Math.abs(yMm - s.ORIGIN_Y) <= s.TOLERANCE,
+    endMinus: yMm <= s.END_MINUS_Y + s.END_TOLERANCE,
+    endPlus: yMm >= s.END_PLUS_Y - s.END_TOLERANCE,
+  };
+}

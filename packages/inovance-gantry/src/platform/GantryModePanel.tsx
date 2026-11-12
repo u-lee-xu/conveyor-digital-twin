@@ -53,6 +53,7 @@ export function GantryModePanel() {
   const placeCell = useGantryStore((s) => s.placeCell);
   const autoRunning = useGantryStore((s) => s.autoRunning);
   const estop = useGantryStore((s) => s.estop);
+  const sensors = useGantryStore((s) => s.sensors);
   const [showMap, setShowMap] = useState(false);
   const [varX, setVarX] = useState('120');
   const [varY, setVarY] = useState('120');
@@ -105,6 +106,9 @@ export function GantryModePanel() {
         </div>
         <div data-dt-gantry-io style={{ fontFamily: 'monospace', marginTop: 5 }}>
           CYL_DOWN {cylinder.extended ? 1 : 0} VACUUM {suction.vacuum ? 1 : 0} HAS_PART {suction.hasPart ? 1 : 0}
+        </div>
+        <div data-dt-gantry-sensors style={{ fontFamily: 'monospace', marginTop: 4 }}>
+          原点 {sensors.origin ? 'ON' : 'OFF'} 负终端 {sensors.endMinus ? 'ON' : 'OFF'} 正终端 {sensors.endPlus ? 'ON' : 'OFF'}
         </div>
       </div>
 

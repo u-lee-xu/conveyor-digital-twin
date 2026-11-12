@@ -31,11 +31,11 @@ import { useFrame } from '@react-three/fiber';
 import { Grid } from '@react-three/drei';
 import type { Group } from 'three';
 import { useGantryStore } from '../stores/useGantryStore';
-import { GANTRY_AXIS, GANTRY_BOARD, GANTRY_VISUAL } from '../constants/gantryConstants';
+import { GANTRY_AXIS, GANTRY_BOARD, GANTRY_VISUAL, GANTRY_SENSOR } from '../constants/gantryConstants';
 import { M, GAP } from './shared/gantryMaterials';
 import {
   Profile, LinearModule, ServoHousing, PenCylinder, SuctionHead,
-  ChessPieceMesh, WeldedTable, ChessboardTable, Bolt,
+  ChessPieceMesh, WeldedTable, ChessboardTable, Bolt, LimitSensor,
 } from './shared/GantryParts';
 
 const L = GANTRY_VISUAL.SCENE_LIGHTING;
@@ -76,6 +76,22 @@ function ChessPieces() {
   );
 }
 
+/** Y 模组上的 3 个接近开关：1 原点（左/绿）+ 2 终端限位（右/黄） */
+function AxisSensors({ sensorY }: { sensorY: number }) {
+  const sensors = useGantryStore((s) => s.sensors);
+  const s = GANTRY_SENSOR;
+  return (
+    <>
+      <LimitSensor kind="origin" side={-1} on={sensors.origin}
+        position={[-s.SIDE_X, sensorY, toM(s.ORIGIN_MM)]} />
+      <LimitSensor kind="endMinus" side={1} on={sensors.endMinus}
+        position={[s.SIDE_X, sensorY, toM(s.END_MINUS_MM)]} />
+      <LimitSensor kind="endPlus" side={1} on={sensors.endPlus}
+        position={[s.SIDE_X, sensorY, toM(s.END_PLUS_MM)]} />
+    </>
+  );
+}
+
 export function GantrySceneContent() {
   const yBridge = useRef<Group>(null);
   const xSlider = useRef<Group>(null);
@@ -103,9 +119,10 @@ export function GantrySceneContent() {
       <ChessboardTable boardX={BOARD_X} boardZ={BOARD_Z} cell={CELL} boardY={BOARD_Y} tableH={TABLE_H} />
       <ChessPieces />
 
-      {/* Y 轴线性模组-600：左侧驱动侧，端部 HG-KR43 伺服 */}
+      {/* Y 轴线性模组-600：左侧驱动侧，端部 HG-KR43 伺服 + 3 个接近开关 */}
       <LinearModule length={RAIL_Y} axis="z" position={[0, TABLE_H + 0.05, RAIL_Y / 2]} />
       <ServoHousing position={[0, TABLE_H + 0.05, RAIL_Y + 0.045]} axis="z" label="Y轴 HG-KR43 伺服" />
+      <AxisSensors sensorY={TABLE_H + 0.05} />
 
       {/* 另一侧从动：导轨固定板 + D20 直线导轨 600 */}
       <mesh position={[RAIL_X, TABLE_H + 0.02, RAIL_Y / 2]} material={M.base}>
