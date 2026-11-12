@@ -124,7 +124,9 @@ export function LinearModule({ length, axis = 'z', position = [0, 0, 0] }: {
   length: number; axis?: 'x' | 'z'; position?: [number, number, number];
 }) {
   const half = 0.031;
-  const along: [number, number, number] = axis === 'z' ? [0, 0, length] : [length, 0, 0];
+  /** 圆柱默认轴沿 Y；转到模组长边方向（Z 或 X） */
+  const screwRotation: [number, number, number] = axis === 'z'
+    ? [Math.PI / 2, 0, 0] : [0, 0, Math.PI / 2];
   const railSize: [number, number, number] = axis === 'z'
     ? [0.007, 0.004, length - 0.03] : [length - 0.03, 0.004, 0.007];
   const screwR = 0.006;
@@ -143,16 +145,17 @@ export function LinearModule({ length, axis = 'z', position = [0, 0, 0] }: {
           </group>
         );
       })}
-      {/* 滚珠丝杆：亮银主轴 */}
-      <mesh position={[along[0] / 2, along[1] + half + GAP * 2, along[2] / 2]}
-        rotation={[Math.PI / 2, 0, axis === 'x' ? Math.PI / 2 : 0]} material={M.silver}>
+      {/* 滚珠丝杆：亮银主轴，以模组中心为原点沿长边放置，两端收进轴承座内。
+          之前误加了 length/2 偏移且旋转矩阵写错，导致丝垂直戳出横梁。 */}
+      <mesh position={[0, half + GAP * 2, 0]}
+        rotation={screwRotation} material={M.silver}>
         <cylinderGeometry args={[screwR, screwR, length - 0.05, 14]} />
       </mesh>
       {[-1, 1].map((s) => {
         const p: [number, number, number] = axis === 'z'
-          ? [0, half + GAP, s * (length / 2 - 0.018)] : [s * (length / 2 - 0.018), half + GAP, 0];
+          ? [0, half + GAP * 2, s * (length / 2 - 0.018)] : [s * (length / 2 - 0.018), half + GAP * 2, 0];
         return (
-          <mesh key={`bearing-${s}`} position={p} material={M.sleeve}>
+          <mesh key={`bearing-${s}`} position={p} rotation={screwRotation} material={M.sleeve}>
             <cylinderGeometry args={[0.013, 0.013, 0.014, 14]} />
           </mesh>
         );

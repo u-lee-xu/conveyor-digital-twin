@@ -220,6 +220,15 @@ describe('观众镜像与平台壳接线', () => {
     expect(scene).not.toContain('<meshStandardMaterial color=');
   });
 
+  it('滚珠丝杆沿模组长边居中，不再垂直戳出导轨/横梁', () => {
+    const parts = read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx');
+    expect(parts).toContain('screwRotation');
+    expect(parts).toContain('position={[0, half + GAP * 2, 0]}');
+    expect(parts).toContain('rotation={screwRotation}');
+    expect(parts).not.toContain('along[0] / 2');
+    expect(parts).not.toContain('axis === \'x\' ? Math.PI / 2 : 0');
+  });
+
   it('绿色接线端子与青色软管已按用户要求去掉', () => {
     const all = [
       read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx'),
