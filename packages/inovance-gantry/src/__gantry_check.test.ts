@@ -196,13 +196,34 @@ describe('观众镜像与平台壳接线', () => {
     expect(scene).not.toContain('四角立柱');
   });
 
-  it('3D 外观按实物照片校准：米白台面 / 浅绿支撑柱 / 深棕多格棋盘小桌 / 黑吸盘 + 青色气管 / HMI 与 PLC 接口板', () => {
+  it('3D 外观：深棕多格棋盘小桌 / 黑吸盘 + 青色气管 / 铝银灰整板 + 细 T 槽线', () => {
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     for (const t of [
-      'SupportColumn', '浅绿圆柱', 'HmiPanel', 'PlcIoBoard',
-      '深棕多格棋盘', '黑色波纹橡胶吸盘', '青色气管', '铝型材条纹台面',
-      'VISUAL_ROWS', 'VISUAL_COLS', 'boardEdge', 'C.hose', 'C.cup', 'C.column',
+      '深棕多格棋盘', '黑色波纹橡胶吸盘', '青色气管', '铝银灰整板', '细 T 槽线',
+      'VISUAL_ROWS', 'VISUAL_COLS', 'boardEdge', 'C.hose', 'C.cup',
     ]) expect(scene).toContain(t);
+  });
+
+  it('按用户要求去掉所有非必要装饰件', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    for (const t of [
+      'SupportColumn', 'function Sensor', '<Sensor', 'C.column', 'C.sensor', 'ref={fan}',
+      'HmiPanel', 'PlcIoBoard', 'DragChain', 'chain-l-',
+    ]) expect(scene).not.toContain(t);
+    expect(scene).toContain('低调深灰伺服端盖');
+  });
+
+  it('视觉接入共享工业视觉令牌：与传送带 / 配药同一套结构色与三点布光', () => {
+    const c = read('packages/inovance-gantry/src/constants/gantryConstants.ts');
+    expect(c).toContain("from '@digital-twin/shared'");
+    for (const t of ['INDUSTRIAL_VISUAL', 'INDUSTRIAL_LIGHTING', 'INDUSTRIAL_DETAIL', '...INDUSTRIAL_VISUAL']) {
+      expect(c).toContain(t);
+    }
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    expect(scene).toContain('GANTRY_VISUAL.SCENE_LIGHTING');
+    for (const t of ['L.ambient', 'L.key', 'L.fillColor', 'GANTRY_VISUAL.BASE_COLOR']) expect(scene).toContain(t);
+    const wrapper = read('packages/inovance-gantry/src/platform/GantrySceneWrapper.tsx');
+    expect(wrapper).toContain('GANTRY_VISUAL.SCENE_BACKGROUND');
   });
 
   it('黑色坦克链（拖链）按用户要求移除', () => {
