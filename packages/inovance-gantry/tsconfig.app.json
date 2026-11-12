@@ -22,7 +22,7 @@
     "paths": {
       "@digital-twin/shared": ["../shared/src"],
       "@digital-twin/shared/*": ["../shared/src/*"],
-      "@digital-twin/platform": ["../platform/src"],
+      "@digital-twin/platform": ["../platform/src/types.ts", "../platform/src"],
       "@digital-twin/platform/*": ["../platform/src/*"]
     }
   },

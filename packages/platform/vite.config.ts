@@ -91,6 +91,7 @@ export default defineConfig({
       '@digital-twin/auto-dispensing': path.resolve(__dirname, '../auto-dispensing/src'),
       '@digital-twin/md520-vfd': path.resolve(__dirname, '../md520-vfd/src'),
       '@digital-twin/inovance-gantry': path.resolve(__dirname, '../inovance-gantry/src'),
+      '@digital-twin/liquid-mixing': path.resolve(__dirname, '../liquid-mixing/src'),
     },
   },
   server: {
