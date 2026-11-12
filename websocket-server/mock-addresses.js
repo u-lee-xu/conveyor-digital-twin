@@ -710,6 +710,45 @@ function checkGantryPlc() {
   return true;
 }
 
+/**
+ * 三菱 MX 内存设备替身（DT_MX_MOCK=1）安全性：
+ * 必须默认关闭、桥脚本路径来自 __dirname（绝不进客户端帧）、命令协议与真实 PS 桥一致，
+ * 且替身本身不触碰 ActUtlType COM；真实 PS 桥仍原样保留供现场使用。
+ */
+function checkMxMockSafety() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  let server, bridge;
+  try {
+    server = readFile('./server.js');
+    bridge = readFile('./mx-mock-bridge.cjs');
+  } catch (e) {
+    console.error(`[check][mx-mock] ❌ 网关/替身文件缺失: ${e.message}`);
+    return false;
+  }
+  for (const token of ["const mxMock = process.env.DT_MX_MOCK === '1'",
+    "path.join(__dirname, 'mx-mock-bridge.cjs')", 'const spawnArgs = mxMock',
+    '_buildPSScript()', "'READY'"]) {
+    if (!server.includes(token)) {
+      console.error(`[check][mx-mock] ❌ 网关缺 ${token}`);
+      return false;
+    }
+  }
+  if (bridge.includes('ActUtlType') || bridge.includes('New-Object -ComObject')) {
+    console.error('[check][mx-mock] ❌ 替身不应触碰真实 MX Component COM');
+    return false;
+  }
+  for (const cmd of ['read', 'read-words', 'write', 'write-batch', 'exit']) {
+    if (!bridge.includes(`case '${cmd}'`)) {
+      console.error(`[check][mx-mock] ❌ 替身缺命令 ${cmd}`);
+      return false;
+    }
+  }
+  console.log('[check][mx-mock] ✅ 三菱内存替身默认关闭、协议与真实 PS 桥一致、不碰 COM');
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -728,6 +767,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkVfd485Slave() && ok;
   ok = checkGantryIsolation() && ok;
   ok = checkGantryPlc() && ok;
+  ok = checkMxMockSafety() && ok;
   process.exit(ok ? 0 : 1);
 }
 
