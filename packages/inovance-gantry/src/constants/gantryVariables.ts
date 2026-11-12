@@ -69,6 +69,36 @@ export const GANTRY_COILS = {
   GANTRY_CONFIRM: 37,
 } as const;
 
+/**
+ * 6 路接近开关反馈（sensor → PLC）：仿真模式由设备按 position 派生后写回 PLC。
+ * 顺序与 GANTRY_COILS 的 C29~C34、地址表的 X1~X6 / M140.1~M140.6 一一对应。
+ * Modbus TCP 走数字线圈地址；S7 / 三菱按变量名走 writeVars，表随 connect 帧下发。
+ */
+export const GANTRY_SENSOR_FEEDBACK = [
+  { key: 'GANTRY_SENSOR_ORIGIN', modbus: GANTRY_COILS.GANTRY_SENSOR_ORIGIN, s7: 'M140.1', mitsubishi: 'X1' },
+  { key: 'GANTRY_SENSOR_END_MINUS', modbus: GANTRY_COILS.GANTRY_SENSOR_END_MINUS, s7: 'M140.2', mitsubishi: 'X2' },
+  { key: 'GANTRY_SENSOR_END_PLUS', modbus: GANTRY_COILS.GANTRY_SENSOR_END_PLUS, s7: 'M140.3', mitsubishi: 'X3' },
+  { key: 'GANTRY_SENSOR_X_ORIGIN', modbus: GANTRY_COILS.GANTRY_SENSOR_X_ORIGIN, s7: 'M140.4', mitsubishi: 'X4' },
+  { key: 'GANTRY_SENSOR_X_END_MINUS', modbus: GANTRY_COILS.GANTRY_SENSOR_X_END_MINUS, s7: 'M140.5', mitsubishi: 'X5' },
+  { key: 'GANTRY_SENSOR_X_END_PLUS', modbus: GANTRY_COILS.GANTRY_SENSOR_X_END_PLUS, s7: 'M140.6', mitsubishi: 'X6' },
+] as const;
+
+/** 把传感器状态拆成与 GANTRY_SENSOR_FEEDBACK 同序的布尔数组（面板 / 广播 / 回写同源） */
+export function gantrySensorBits(s: {
+  origin: boolean; endMinus: boolean; endPlus: boolean;
+  xOrigin: boolean; xEndMinus: boolean; xEndPlus: boolean;
+}): boolean[] {
+  return [s.origin, s.endMinus, s.endPlus, s.xOrigin, s.xEndMinus, s.xEndPlus];
+}
+
+/** S7 / 三菱按变量名写布尔；Modbus TCP 走 coils 数字地址，不下发表 */
+export function gantryBoolVarsFor(protocol: string): Record<string, string> | undefined {
+  if (!protocol || protocol === 'modbus') return undefined;
+  return Object.fromEntries(GANTRY_SENSOR_FEEDBACK.map((r) => [
+    r.key, protocol === 's7' ? r.s7 : r.mitsubishi,
+  ]));
+}
+
 /** 状态机步号，写进 GANTRY_PHASE 供 PLC / 面板读取 */
 export const GANTRY_PHASE = {
   IDLE: 0,

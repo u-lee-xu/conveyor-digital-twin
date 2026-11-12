@@ -1,7 +1,7 @@
 /** 仿真模式 PLC 连接（统一 shared 面板 + 龙门自己的字变量表） */
 /* eslint-disable react-refresh/only-export-components */
 import { PlcConnectionPanel, modbusService, type PlcConnConfig } from '@digital-twin/shared';
-import { GANTRY_WORD_VARIABLES, GANTRY_COILS } from '../constants/gantryVariables';
+import { GANTRY_WORD_VARIABLES, GANTRY_COILS, gantryBoolVarsFor } from '../constants/gantryVariables';
 import { useGantryAppStore } from '../stores/useGantryAppStore';
 import { useGantryStore } from '../stores/useGantryStore';
 
@@ -34,6 +34,9 @@ export function GantryPlcConnection({ modeLabel = '仿真模式' }: { modeLabel?
   const setControlSource = useGantryStore((s) => s.setControlSource);
 
   const handleConnect = async (config: PlcConnConfig): Promise<string | null> => {
+    // S7 / 三菱按变量名写传感器反馈，布尔表随 connect 帧下发；
+    // Modbus TCP 走 coils 数字地址，不下发表（与 MD520 同口径）。
+    const boolVariables = gantryBoolVarsFor(config.protocol ?? 'modbus');
     const result = await modbusService.connect({
       host: config.host,
       port: config.port,
@@ -41,6 +44,7 @@ export function GantryPlcConnection({ modeLabel = '仿真模式' }: { modeLabel?
       rack: config.rack,
       slot: config.slot,
       wordVariables: GANTRY_WORD_VARIABLES,
+      ...(boolVariables ? { boolVariables } : {}),
     });
     if (!result.success) return result.error || '连接失败';
     setControlSource('plc');
