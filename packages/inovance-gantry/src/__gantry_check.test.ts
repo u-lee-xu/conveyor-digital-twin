@@ -196,13 +196,21 @@ describe('观众镜像与平台壳接线', () => {
     expect(scene).not.toContain('四角立柱');
   });
 
-  it('3D 外观按实物照片校准：米白台面 / 浅绿支撑柱 / 深棕多格棋盘小桌 / 黑拖链 / 黑吸盘 + 青色气管 / HMI 与 PLC 接口板', () => {
+  it('3D 外观按实物照片校准：米白台面 / 浅绿支撑柱 / 深棕多格棋盘小桌 / 黑吸盘 + 青色气管 / HMI 与 PLC 接口板', () => {
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     for (const t of [
-      'DragChain', '黑色拖链', 'SupportColumn', '浅绿圆柱', 'HmiPanel', 'PlcIoBoard',
+      'SupportColumn', '浅绿圆柱', 'HmiPanel', 'PlcIoBoard',
       '深棕多格棋盘', '黑色波纹橡胶吸盘', '青色气管', '铝型材条纹台面',
       'VISUAL_ROWS', 'VISUAL_COLS', 'boardEdge', 'C.hose', 'C.cup', 'C.column',
     ]) expect(scene).toContain(t);
+  });
+
+  it('黑色坦克链（拖链）按用户要求移除', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    expect(scene).not.toContain('DragChain');
+    expect(scene).not.toContain('chain-l-');
+    expect(scene).not.toContain('C.chain');
+    expect(scene).toContain('坦克链');
   });
 
   it('Z 高度按真实行程标定：下降 50mm 后吸盘底面贴近棋子顶面', () => {

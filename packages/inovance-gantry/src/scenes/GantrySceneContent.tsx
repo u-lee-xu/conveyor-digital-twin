@@ -11,8 +11,9 @@
  *
  * 即「一侧 Y 模组驱动 + 另一侧 D20 导轨从动、X 模组横梁跨在两侧滑座上」的
  * 典型直角坐标龙门，Z 气缸装在 X 滑块上。已用 3 张实物照片校准外观：
- * 米白/浅灰铝型材台面、四根浅绿圆柱支撑、深棕多格棋盘独立小桌、黑色拖链、
+ * 米白/浅灰铝型材台面、四根浅绿圆柱支撑、深棕多格棋盘独立小桌、
  * 黑色波纹吸盘 + 青色气管、端部黑色伺服、HMI 触摸屏与 PLC 输入输出接口板。
+ * 黑色坦克链（拖链）按用户要求移除，不画线缆拖曳件。
  *
  * 几何全自建：GLB 的 7 个 mesh 是重复整机、节点名只有 Node0~7，无法按名拆轴。
  * 动画只读取 store 的 position 坐标变量，PLC / 面板 / 三维读数同源。
@@ -53,7 +54,7 @@ const C = {
   module: '#e2e7eb', moduleDark: '#b6c0c9', rail: '#9aa7b1',
   slider: '#e8edf1', servo: '#24282d', servoCap: '#15181c',
   cylinder: '#c8ced4', rod: '#b9c2ca', bracket: '#d5dce2',
-  cup: '#1b1f24', hose: '#2aa7c4', chain: '#20252b',
+  cup: '#1b1f24', hose: '#2aa7c4',
   column: '#b9cbb2', foot: '#20252b',
   sensor: '#d8b53f', terminal: '#4ade80',
   boardLight: '#8a5836', boardDark: '#5b3520', boardEdge: '#3c2618', grid: '#3c2618',
@@ -100,30 +101,6 @@ function Sensor({ position }: { position: [number, number, number] }) {
       <mesh position={[0.012, 0, 0]}><boxGeometry args={[0.004, 0.012, 0.012]} /><meshStandardMaterial color={C.moduleDark} /></mesh>
     </group>
   );
-}
-
-/** 黑色拖链：横梁上方 U 形两段，用链节方块近似（静态装饰） */
-function DragChain() {
-  const links = [];
-  for (let i = 0; i < 12; i += 1) {
-    const t = i / 11;
-    const x = 0.06 + t * (RAIL_X * 0.42);
-    const y = FRAME_H + 0.055 + Math.sin(t * Math.PI) * 0.055;
-    links.push(
-      <mesh key={`chain-l-${i}`} position={[x, y, -0.055]} rotation={[0, 0, Math.cos(t * Math.PI) * 0.3]}>
-        <boxGeometry args={[0.028, 0.022, 0.03]} />
-        <meshStandardMaterial color={C.chain} />
-      </mesh>,
-    );
-    const x2 = RAIL_X - 0.06 - t * (RAIL_X * 0.42);
-    links.push(
-      <mesh key={`chain-r-${i}`} position={[x2, y, -0.055]} rotation={[0, 0, -Math.cos(t * Math.PI) * 0.3]}>
-        <boxGeometry args={[0.028, 0.022, 0.03]} />
-        <meshStandardMaterial color={C.chain} />
-      </mesh>,
-    );
-  }
-  return <>{links}</>;
 }
 
 /** 四根浅绿圆柱支撑 + 黑色圆形地脚（实物照片里把 Y 模组/导轨垫高） */
@@ -385,7 +362,6 @@ export function GantrySceneContent() {
         <Servo position={[RAIL_X + 0.045, FRAME_H, 0]} axis="x" label="X轴 三菱200W 伺服" />
         <Sensor position={[0.03, FRAME_H + 0.04, 0.04]} />
         <Sensor position={[RAIL_X - 0.03, FRAME_H + 0.04, 0.04]} />
-        <DragChain />
 
         <group ref={xSlider} position={[0, FRAME_H, 0]}>
           {/* 气缸固定板 / 气缸吸盘支架：X 滑块前侧的银色立板 */}
