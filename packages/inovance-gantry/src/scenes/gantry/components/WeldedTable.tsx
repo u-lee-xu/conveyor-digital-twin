@@ -22,11 +22,13 @@ export function WeldedTable({ railX, railY, tableH }: {
       </mesh>
       {slots.map((z, i) => (
         <group key={`slot-${i}`}>
+          {/* 贴面两端收进包边内：旧长度 railX+0.09 会横穿 edge-x 边框，
+              两者顶面只差 0.0001 且一个带深度偏移、一个不带 → 交叉处闪色。 */}
           <mesh position={[railX / 2, tableH + 0.004 + GAP, z]} material={M.slot}>
-            <boxGeometry args={[railX + 0.09, 0.0012, 0.005]} />
+            <boxGeometry args={[railX - 0.03, 0.0012, 0.005]} />
           </mesh>
           <mesh position={[railX / 2, tableH + 0.004 + GAP * 2, z]} material={M.decal}>
-            <boxGeometry args={[railX + 0.08, 0.0012, 0.0015]} />
+            <boxGeometry args={[railX - 0.04, 0.0012, 0.0015]} />
           </mesh>
         </group>
       ))}

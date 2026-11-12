@@ -42,8 +42,9 @@ export function Profile({ length, section = D.SECTION, axis = 'z', position = [0
     ? [section, section, length] : [length, section, section];
   const capSize: [number, number, number] = axis === 'z'
     ? [section + 0.004, section + 0.004, 0.008] : [0.008, section + 0.004, section + 0.004];
+  /** 端盖内侧面埋进型材端面 0.001：用 0.004 会让两者端面精确共面（端盖还略粗一圈） */
   const capAt = (side: number): [number, number, number] => axis === 'z'
-    ? [0, 0, side * (length / 2 + 0.004)] : [side * (length / 2 + 0.004), 0, 0];
+    ? [0, 0, side * (length / 2 + 0.003)] : [side * (length / 2 + 0.003), 0, 0];
   const slots: ReactNode[] = [];
   for (const side of [-1, 1]) {
     const along = length - 0.012;

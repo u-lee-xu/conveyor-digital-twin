@@ -88,7 +88,8 @@ export function SensorFlag({ axis, side, mountY = 0 }: {
           ? [S.FLAG_T, S.FLAG_H, S.FLAG_W]
           : [S.FLAG_W, S.FLAG_H, S.FLAG_T]} />
       </mesh>
-      <Bolt position={[0, 0.006, 0]} r={0.003} h={0.003} />
+      {/* 伸出臂顶面 = 0.003；螺栓底面埋进 0.0003，避免悬空 / 精确共面 */}
+      <Bolt position={[0, 0.0042, 0]} r={0.003} h={0.003} />
     </group>
   );
 }

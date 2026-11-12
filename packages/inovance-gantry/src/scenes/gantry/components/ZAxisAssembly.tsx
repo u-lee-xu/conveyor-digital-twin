@@ -47,8 +47,12 @@ export function ZAxisAssembly() {
       <mesh position={[0, Z_AXIS_GEOM.BODY_Y, 0]} castShadow material={M.cylinder}>
         <cylinderGeometry args={[D.BODY_R, D.BODY_R, D.BODY_LEN, 20]} />
       </mesh>
+      {/* 端盖外移一个 SURFACE_GAP：旧位置让端盖顶面与缸体端面精确共面（半径还更大），
+          换角度会在连接处闪出亮银 / 缸体色。现在端盖明确高（低）于缸体端面。 */}
       {[-1, 1].map((s) => (
-        <mesh key={`cap-${s}`} position={[0, Z_AXIS_GEOM.BODY_Y + s * (D.BODY_LEN / 2 - D.CAP_T / 2), 0]} material={M.endCap}>
+        <mesh key={`cap-${s}`}
+          position={[0, Z_AXIS_GEOM.BODY_Y + s * (D.BODY_LEN / 2 - D.CAP_T / 2 + GAP), 0]}
+          material={M.endCap}>
           <cylinderGeometry args={[D.CAP_R, D.CAP_R, D.CAP_T, 20]} />
         </mesh>
       ))}
@@ -82,8 +86,10 @@ export function ZAxisAssembly() {
         <mesh position={[0, -0.01, 0]} material={M.slider}>
           <boxGeometry args={[0.05, D.HEAD_BRACKET_T, 0.04]} />
         </mesh>
+        {/* 移动板顶面 = -0.01 + HEAD_BRACKET_T/2 = -0.006；螺栓底面埋进 0.0003，
+            旧值 -0.005+GAP 让螺栓整颗悬空 0.0025，低角度会看到浮空亮片。 */}
         {[-1, 1].map((sx) => [-1, 1].map((sz) => (
-          <Bolt key={`head-bolt-${sx}-${sz}`} position={[sx * 0.018, -0.005 + GAP, sz * 0.014]} r={0.0025} h={0.002} />
+          <Bolt key={`head-bolt-${sx}-${sz}`} position={[sx * 0.018, -0.0053, sz * 0.014]} r={0.0025} h={0.002} />
         )))}
         <mesh position={[0, -0.022, 0]} material={M.cup}>
           <cylinderGeometry args={[0.012, 0.016, 0.014, 20]} />
