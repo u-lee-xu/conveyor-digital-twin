@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { useGantryStore, exportGantrySnapshot } from './stores/useGantryStore';
 import {
   GANTRY_AXIS, GANTRY_BOARD, CHESS_POSITIONS, INITIAL_PIECES, cellToMm,
+  GANTRY_SENSOR, computeSensors,
 } from './constants/gantryConstants';
 import {
   GANTRY_HOLDING_REGISTERS, GANTRY_COILS, ETHERCAT_PDO_MAP,
@@ -90,6 +91,57 @@ describe('position 坐标变量驱动', () => {
     expect(useGantryStore.getState().x.position).toBeLessThan(120);
     runFrames(120);
     expect(useGantryStore.getState().x.position).toBeCloseTo(120, 1);
+  });
+});
+
+describe('Y 模组 3 个接近开关（1 原点 + 2 终端）', () => {
+  it('常量口径：原点 20mm、负终端 0mm、正终端 600mm，三个安装位分开', () => {
+    expect(GANTRY_SENSOR.ORIGIN_Y).toBe(20);
+    expect(GANTRY_SENSOR.END_MINUS_Y).toBe(0);
+    expect(GANTRY_SENSOR.END_PLUS_Y).toBe(GANTRY_AXIS.Y_TRAVEL);
+    expect(GANTRY_SENSOR.ORIGIN_MM).toBe(20);
+    expect(GANTRY_SENSOR.END_MINUS_MM).toBe(0);
+    expect(GANTRY_SENSOR.END_PLUS_MM).toBeGreaterThan(GANTRY_SENSOR.ORIGIN_MM);
+  });
+
+  it('触发状态由 y.position 派生，三个都能单独亮', () => {
+    expect(computeSensors(0)).toEqual({ origin: false, endMinus: true, endPlus: false });
+    expect(computeSensors(20)).toEqual({ origin: true, endMinus: false, endPlus: false });
+    expect(computeSensors(200)).toEqual({ origin: false, endMinus: false, endPlus: false });
+    expect(computeSensors(600)).toEqual({ origin: false, endMinus: false, endPlus: true });
+  });
+
+  it('store 的 tick / setPlcFrame / resetAll / applyBroadcast 都同步 sensors', () => {
+    expect(useGantryStore.getState().sensors.endMinus).toBe(true);
+    useGantryStore.getState().setPlcFrame({ yPos: 20 });
+    expect(useGantryStore.getState().sensors.origin).toBe(true);
+    useGantryStore.getState().tick(1 / 60);
+    expect(useGantryStore.getState().sensors.origin).toBe(true);
+    useGantryStore.getState().applyBroadcast({ GANTRY_Y_POS: 600,
+      GANTRY_SENSOR_ORIGIN: 0, GANTRY_SENSOR_END_MINUS: 0, GANTRY_SENSOR_END_PLUS: 1 });
+    expect(useGantryStore.getState().sensors.endPlus).toBe(true);
+    useGantryStore.getState().resetAll();
+    expect(useGantryStore.getState().sensors.endMinus).toBe(true);
+  });
+
+  it('场景装 3 个 LimitSensor、面板有只读状态、EtherCAT 与线圈表有对应信号', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    expect((scene.match(/<LimitSensor/g) || []).length).toBe(3);
+    for (const t of ['AxisSensors', 'kind="origin"', 'kind="endMinus"', 'kind="endPlus"']) {
+      expect(scene).toContain(t);
+    }
+    const parts = read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx');
+    for (const t of ['function LimitSensor', 'L 形吊架', 'ledOrigin', 'ledEnd', 'ledOff']) {
+      expect(parts).toContain(t);
+    }
+    expect(read('packages/inovance-gantry/src/platform/GantryModePanel.tsx')).toContain('data-dt-gantry-sensors');
+    const vars = read('packages/inovance-gantry/src/constants/gantryVariables.ts');
+    for (const t of ['GANTRY_SENSOR_ORIGIN', 'GANTRY_SENSOR_END_MINUS', 'GANTRY_SENSOR_END_PLUS',
+      'Y_Axis.OriginSensor', 'Y_Axis.NegativeLimit', 'Y_Axis.PositiveLimit']) expect(vars).toContain(t);
+    const snap = exportGantrySnapshot();
+    for (const k of ['GANTRY_SENSOR_ORIGIN', 'GANTRY_SENSOR_END_MINUS', 'GANTRY_SENSOR_END_PLUS']) {
+      expect(Object.keys(snap)).toContain(k);
+    }
   });
 });
 
@@ -248,9 +300,12 @@ describe('观众镜像与平台壳接线', () => {
       read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts'),
     ].join('\n');
     expect(all).not.toContain('C.terminal');
-    expect(all).not.toContain('LAMP_GREEN');
     expect(all).not.toContain('HOSE_COLOR');
     expect(all).toContain('中性色气管');
+    // LAMP_GREEN 现在只作为原点传感器 LED 的安全色（共享令牌标准用法），不再是绿色端子方块
+    const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
+    expect(mat).toContain('ledOrigin');
+    expect(mat).not.toContain('terminal:');
   });
 
   it('按用户要求去掉所有非必要装饰件', () => {

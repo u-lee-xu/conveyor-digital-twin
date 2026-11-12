@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from 'react';
 import { M, GAP } from './gantryMaterials';
-import { GANTRY_BOARD } from '../../constants/gantryConstants';
+import { GANTRY_BOARD, GANTRY_SENSOR } from '../../constants/gantryConstants';
 
 /** 沉头安装螺栓 */
 export function Bolt({ position, r = 0.004, h = 0.003 }: {
@@ -224,6 +224,43 @@ export function SuctionHead() {
       <mesh position={[0.028, -0.012, 0.012]} rotation={[0, 0, -0.32]} material={M.hose}>
         <cylinderGeometry args={[0.0035, 0.0035, 0.075, 10]} />
       </mesh>
+    </group>
+  );
+}
+
+/**
+ * Y 模组上的接近开关（参考配药 MachineFrame.tsx 的 LimitSensor）：
+ * L 形吊架把开关固定到模组侧面 + 本体 + 感应面贴片 + 状态 LED。
+ * 原点用绿色、两个终端用黄色，未触发为灭态；由 store 的 sensors 驱动。
+ */
+export function LimitSensor({ kind, position, on, side = 1 }: {
+  kind: 'origin' | 'endMinus' | 'endPlus';
+  position: [number, number, number];
+  on: boolean;
+  side?: 1 | -1;
+}) {
+  const s = GANTRY_SENSOR;
+  const led = on ? (kind === 'origin' ? M.ledOrigin : M.ledEnd) : M.ledOff;
+  const bx = side * 0.038;
+  return (
+    <group position={position} userData={{ sensor: kind }}>
+      {/* L 形吊架：水平托臂 + 竖直吊板，把开关连到模组侧面而不是悬空 */}
+      <mesh position={[side * 0.02, 0.014, 0]} material={M.dark}>
+        <boxGeometry args={[0.04, 0.006, 0.026]} />
+      </mesh>
+      <mesh position={[bx, 0.006, 0]} material={M.dark}>
+        <boxGeometry args={[0.006, 0.03, 0.026]} />
+      </mesh>
+      <mesh position={[bx, -0.01, 0]} castShadow material={M.sleeve}>
+        <boxGeometry args={[s.BODY_W, s.BODY_H, s.BODY_D]} />
+      </mesh>
+      <mesh position={[bx, -0.01 + s.BODY_H / 2 + GAP, 0]} material={M.decal}>
+        <boxGeometry args={[s.BODY_W * 0.8, 0.002, s.BODY_D * 0.8]} />
+      </mesh>
+      <mesh position={[bx, -0.01, s.BODY_D / 2 + GAP]} material={led}>
+        <sphereGeometry args={[s.LED_R, 12, 12]} />
+      </mesh>
+      <Bolt position={[side * 0.02, 0.018, 0]} r={0.003} h={0.003} />
     </group>
   );
 }
