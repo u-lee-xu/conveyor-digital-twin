@@ -10,10 +10,12 @@
  *     └─ 气缸总装（气缸 + 气缸活塞杆）+ 气缸固定板 / 气缸吸盘支架 / 吸盘
  *
  * 即「一侧 Y 模组驱动 + 另一侧 D20 导轨从动、X 模组横梁跨在两侧滑座上」的
- * 典型直角坐标龙门，Z 气缸装在 X 滑块上。已用 3 张实物照片校准外观：
- * 米白/浅灰铝型材台面、四根浅绿圆柱支撑、深棕多格棋盘独立小桌、
- * 黑色波纹吸盘 + 青色气管、端部黑色伺服、HMI 触摸屏与 PLC 输入输出接口板。
- * 黑色坦克链（拖链）按用户要求移除，不画线缆拖曳件。
+ * 典型直角坐标龙门，Z 气缸装在 X 滑块上。
+ *
+ * 视觉风格统一接入 @digital-twin/shared 的工业视觉令牌（INDUSTRIAL_VISUAL /
+ * INDUSTRIAL_LIGHTING），与传送带分拣、自动配药等场景同一套结构色与三点布光。
+ * 按用户要求做减法：黑色坦克链、浅绿圆柱支撑、原点感应片、伺服彩色风扇均已移除，
+ * 只保留台体 / 两根模组 / X 横梁 / 气缸吸盘 / 棋盘棋子等必要结构。
  *
  * 几何全自建：GLB 的 7 个 mesh 是重复整机、节点名只有 Node0~7，无法按名拆轴。
  * 动画只读取 store 的 position 坐标变量，PLC / 面板 / 三维读数同源。
@@ -22,9 +24,11 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Grid } from '@react-three/drei';
-import type { Group, Mesh } from 'three';
+import type { Group } from 'three';
 import { useGantryStore } from '../stores/useGantryStore';
-import { GANTRY_AXIS, GANTRY_BOARD } from '../constants/gantryConstants';
+import { GANTRY_AXIS, GANTRY_BOARD, GANTRY_VISUAL } from '../constants/gantryConstants';
+
+const L = GANTRY_VISUAL.SCENE_LIGHTING;
 
 /** 视觉放大系数：mm→m 再放大，纯显示用，不改变变量坐标 */
 const S = 2;
@@ -49,28 +53,34 @@ const POST_TOP = FRAME_H - 0.031;
 const POST_H = POST_TOP - POST_BOTTOM;
 const POST_MID = (POST_TOP + POST_BOTTOM) / 2;
 
+/** 结构色全部取自共享工业视觉令牌，只有棋盘 / 棋子 / 气管是本场景特有 */
 const C = {
-  frame: '#c9d1d9', table: '#dfe5e9', slot: '#a9b4bf',
-  module: '#e2e7eb', moduleDark: '#b6c0c9', rail: '#9aa7b1',
-  slider: '#e8edf1', servo: '#24282d', servoCap: '#15181c',
-  cylinder: '#c8ced4', rod: '#b9c2ca', bracket: '#d5dce2',
-  cup: '#1b1f24', hose: '#2aa7c4',
-  column: '#b9cbb2', foot: '#20252b',
-  sensor: '#d8b53f', terminal: '#4ade80',
-  boardLight: '#8a5836', boardDark: '#5b3520', boardEdge: '#3c2618', grid: '#3c2618',
-  red: '#c62828', black: '#22262b',
-  hmi: '#e8ebe6', screen: '#1c2733', estop: '#d32f2f', green: '#22c55e',
-  ioBoard: '#eef1ec', ioRed: '#d33b3b', ioBlue: '#2b5c9b',
+  frame: GANTRY_VISUAL.BASE_COLOR,
+  table: GANTRY_VISUAL.SILVER_COLOR,
+  slot: GANTRY_VISUAL.PROFILE_SLOT_COLOR,
+  module: GANTRY_VISUAL.PANEL_COLOR,
+  moduleDark: GANTRY_VISUAL.STRUCT_COLOR,
+  rail: GANTRY_VISUAL.SLEEVE_COLOR,
+  slider: GANTRY_VISUAL.ENDCAP_COLOR,
+  servo: GANTRY_VISUAL.MAGSWITCH_COLOR,
+  servoCap: GANTRY_VISUAL.STRUCT_COLOR,
+  cylinder: GANTRY_VISUAL.CYL_BODY_COLOR,
+  rod: GANTRY_VISUAL.CYL_ROD_COLOR,
+  bracket: GANTRY_VISUAL.BASE_COLOR,
+  cup: GANTRY_VISUAL.MAGSWITCH_COLOR,
+  foot: GANTRY_VISUAL.MAGSWITCH_COLOR,
+  hose: GANTRY_VISUAL.HOSE_COLOR,
+  terminal: GANTRY_VISUAL.LAMP_GREEN,
+  boardLight: GANTRY_VISUAL.BOARD_LIGHT,
+  boardDark: GANTRY_VISUAL.BOARD_DARK,
+  boardEdge: GANTRY_VISUAL.BOARD_EDGE,
+  grid: GANTRY_VISUAL.BOARD_GRID,
+  red: GANTRY_VISUAL.PIECE_RED,
+  black: GANTRY_VISUAL.PIECE_BLACK,
 };
 
-/** 模组端部伺服（含可转风扇，转速跟随对应轴 speed） */
-function Servo({ position, axis, label }: { position: [number, number, number]; axis: 'x' | 'y'; label: string }) {
-  const fan = useRef<Mesh>(null);
-  useFrame((_, dt) => {
-    const s = useGantryStore.getState();
-    const speed = axis === 'x' ? s.x.speed : s.y.speed;
-    if (fan.current) fan.current.rotation.z += Math.min(dt, 0.05) * speed * 0.02;
-  });
+/** 模组端部的低调深灰伺服端盖（按用户要求去掉彩色风扇） */
+function Servo({ position, label }: { position: [number, number, number]; label: string }) {
   return (
     <group position={position} userData={{ label }}>
       <mesh>
@@ -81,88 +91,6 @@ function Servo({ position, axis, label }: { position: [number, number, number]; 
         <boxGeometry args={[0.05, 0.05, 0.006]} />
         <meshStandardMaterial color={C.servoCap} />
       </mesh>
-      <mesh ref={fan} position={[0, 0, 0.043]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.02, 0.02, 0.006, 12]} />
-        <meshStandardMaterial color={axis === 'x' ? C.hose : C.sensor} />
-      </mesh>
-      <mesh position={[0, 0.045, 0]}>
-        <boxGeometry args={[0.055, 0.012, 0.055]} />
-        <meshStandardMaterial color={C.moduleDark} />
-      </mesh>
-    </group>
-  );
-}
-
-/** 原点 / 限位：光遮断器固定片 + 感应片 */
-function Sensor({ position }: { position: [number, number, number] }) {
-  return (
-    <group position={position}>
-      <mesh><boxGeometry args={[0.018, 0.026, 0.004]} /><meshStandardMaterial color={C.sensor} /></mesh>
-      <mesh position={[0.012, 0, 0]}><boxGeometry args={[0.004, 0.012, 0.012]} /><meshStandardMaterial color={C.moduleDark} /></mesh>
-    </group>
-  );
-}
-
-/** 四根浅绿圆柱支撑 + 黑色圆形地脚（实物照片里把 Y 模组/导轨垫高） */
-function SupportColumn({ position }: { position: [number, number, number] }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 0.06, 0]}>
-        <cylinderGeometry args={[0.042, 0.042, 0.12, 20]} />
-        <meshStandardMaterial color={C.column} />
-      </mesh>
-      <mesh position={[0, 0.004, 0]}>
-        <cylinderGeometry args={[0.055, 0.055, 0.008, 20]} />
-        <meshStandardMaterial color={C.foot} />
-      </mesh>
-    </group>
-  );
-}
-
-/** HMI 触摸屏控制盒（红急停 / 绿启动） */
-function HmiPanel() {
-  return (
-    <group position={[RAIL_X - 0.02, TABLE_H + 0.055, -0.115]}>
-      <mesh>
-        <boxGeometry args={[0.24, 0.11, 0.16]} />
-        <meshStandardMaterial color={C.hmi} />
-      </mesh>
-      <mesh position={[0, 0.055, 0.02]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[0.17, 0.105]} />
-        <meshStandardMaterial color={C.screen} />
-      </mesh>
-      <mesh position={[0.09, 0.062, 0.05]}>
-        <cylinderGeometry args={[0.018, 0.018, 0.02, 16]} />
-        <meshStandardMaterial color={C.estop} />
-      </mesh>
-      <mesh position={[0.09, 0.062, 0.085]}>
-        <cylinderGeometry args={[0.011, 0.011, 0.012, 16]} />
-        <meshStandardMaterial color={C.green} />
-      </mesh>
-    </group>
-  );
-}
-
-/** PLC 输入输出接口板（红蓝按钮点阵） */
-function PlcIoBoard() {
-  const dots = [];
-  for (let r = 0; r < 3; r += 1) {
-    for (let c = 0; c < 8; c += 1) {
-      dots.push(
-        <mesh key={`io-${r}-${c}`} position={[-0.085 + c * 0.024, 0.008, -0.045 + r * 0.03]}>
-          <cylinderGeometry args={[0.008, 0.008, 0.006, 12]} />
-          <meshStandardMaterial color={r === 0 ? C.ioRed : C.ioBlue} />
-        </mesh>,
-      );
-    }
-  }
-  return (
-    <group position={[0.13, TABLE_H + 0.008, -0.115]} rotation={[-0.18, 0, 0]}>
-      <mesh>
-        <boxGeometry args={[0.24, 0.012, 0.14]} />
-        <meshStandardMaterial color={C.ioBoard} />
-      </mesh>
-      {dots}
     </group>
   );
 }
@@ -234,15 +162,15 @@ function Chessboard() {
   );
 }
 
-/** 焊接台体：铝型材条纹台面 + 下方框 + 四根浅绿圆柱支撑 */
+/** 焊接台体：铝银灰整板 + 细 T 槽线（与传送带 / 配药场景同一套型材写法） */
 function WeldedTable() {
-  const stripes = [];
+  const slots = [];
   const count = 16;
   for (let i = 0; i < count; i += 1) {
-    stripes.push(
-      <mesh key={`slot-${i}`} position={[RAIL_X / 2, TABLE_H + 0.001, (i + 0.5) * (RAIL_Y / count)]}>
-        <boxGeometry args={[RAIL_X + 0.1, 0.006, RAIL_Y / count - 0.006]} />
-        <meshStandardMaterial color={i % 2 === 0 ? C.table : C.slot} />
+    slots.push(
+      <mesh key={`slot-${i}`} position={[RAIL_X / 2, TABLE_H + 0.004, (i + 0.5) * (RAIL_Y / count)]}>
+        <boxGeometry args={[RAIL_X + 0.1, 0.002, 0.005]} />
+        <meshStandardMaterial color={C.slot} />
       </mesh>,
     );
   }
@@ -259,12 +187,11 @@ function WeldedTable() {
         <boxGeometry args={[RAIL_X + 0.1, 0.024, RAIL_Y + 0.1]} />
         <meshStandardMaterial color={C.frame} />
       </mesh>
-      {stripes}
-      {[[0.08, 0.08], [RAIL_X - 0.08, 0.08], [0.08, RAIL_Y - 0.08], [RAIL_X - 0.08, RAIL_Y - 0.08]].map(([x, z], i) => (
-        <SupportColumn key={`column-${i}`} position={[x, TABLE_H, z]} />
-      ))}
-      <HmiPanel />
-      <PlcIoBoard />
+      <mesh position={[RAIL_X / 2, TABLE_H + 0.001, RAIL_Y / 2]}>
+        <boxGeometry args={[RAIL_X + 0.1, 0.006, RAIL_Y + 0.1]} />
+        <meshStandardMaterial color={C.table} />
+      </mesh>
+      {slots}
     </group>
   );
 }
@@ -286,9 +213,9 @@ export function GantrySceneContent() {
 
   return (
     <>
-      <ambientLight intensity={1.35} />
-      <directionalLight position={[1.2, 1.8, 0.9]} intensity={1.4} />
-      <directionalLight position={[-0.9, 1.1, -0.7]} intensity={0.6} color="#ffffff" />
+      <ambientLight intensity={L.ambient} />
+      <directionalLight position={L.keyPosition} intensity={L.key} />
+      <directionalLight position={L.fillPosition} intensity={L.fill} color={L.fillColor} />
       <Grid position={[0, -0.002, 0]} args={[4, 4]} cellSize={0.1} cellColor="#334155" sectionColor="#1d4ed8" fadeDistance={4} infiniteGrid />
 
       <WeldedTable />
@@ -305,9 +232,7 @@ export function GantrySceneContent() {
           <boxGeometry args={[0.03, 0.006, RAIL_Y - 0.02]} />
           <meshStandardMaterial color={C.moduleDark} />
         </mesh>
-        <Servo position={[0, 0, RAIL_Y + 0.045]} axis="y" label="Y轴 HG-KR43 伺服" />
-        <Sensor position={[0.038, 0.042, 0.03]} />
-        <Sensor position={[0.038, 0.042, RAIL_Y - 0.03]} />
+        <Servo position={[0, 0, RAIL_Y + 0.045]} label="Y轴 HG-KR43 伺服" />
       </group>
 
       {/* 另一侧从动：导轨固定板 + D20 直线导轨 600 */}
@@ -320,7 +245,6 @@ export function GantrySceneContent() {
           <boxGeometry args={[0.022, 0.022, RAIL_Y]} />
           <meshStandardMaterial color={C.rail} />
         </mesh>
-        <Sensor position={[0.02, 0.03, 0.03]} />
       </group>
 
       {/* Y 移动组：两侧滑座 + X 直线模组-450 横梁 + X 滑块 + 气缸 + 吸盘 */}
@@ -359,9 +283,7 @@ export function GantrySceneContent() {
           <boxGeometry args={[RAIL_X - 0.02, 0.006, 0.03]} />
           <meshStandardMaterial color={C.moduleDark} />
         </mesh>
-        <Servo position={[RAIL_X + 0.045, FRAME_H, 0]} axis="x" label="X轴 三菱200W 伺服" />
-        <Sensor position={[0.03, FRAME_H + 0.04, 0.04]} />
-        <Sensor position={[RAIL_X - 0.03, FRAME_H + 0.04, 0.04]} />
+        <Servo position={[RAIL_X + 0.045, FRAME_H, 0]} label="X轴 三菱200W 伺服" />
 
         <group ref={xSlider} position={[0, FRAME_H, 0]}>
           {/* 气缸固定板 / 气缸吸盘支架：X 滑块前侧的银色立板 */}

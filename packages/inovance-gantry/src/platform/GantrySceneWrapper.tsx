@@ -2,6 +2,7 @@
 import type { ComponentType } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { GANTRY_VISUAL } from '../constants/gantryConstants';
 
 export function GantrySceneWrapper({
   SceneContent,
@@ -16,6 +17,7 @@ export function GantrySceneWrapper({
       shadows
       camera={{ position: cameraPosition, fov: 42, near: 0.05, far: 60 }}
     >
+      <color attach="background" args={[GANTRY_VISUAL.SCENE_BACKGROUND]} />
       <OrbitControls target={[0.45, 0.18, 0.6]} enableDamping dampingFactor={0.1}
         minDistance={0.3} maxDistance={6} maxPolarAngle={Math.PI / 2.05} />
       <SceneContent />

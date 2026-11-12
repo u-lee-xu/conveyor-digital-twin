@@ -1,8 +1,25 @@
 /**
- * 汇川龙门 XY 象棋分拣场景 —— 几何与棋盘常量（单一来源）。
- * 口径沿用 packages/inovance-control/src/scenes/inovance-gantry/constants.ts，
- * 但 3D 用自建几何（不依赖 Inovance.glb），确保平台壳内加载稳定可测。
+ * 汇川龙门 XY 象棋分拣场景 —— 几何、棋盘与视觉常量（单一来源）。
+ * 几何口径沿用 packages/inovance-control/src/scenes/inovance-gantry/constants.ts；
+ * 视觉接入 @digital-twin/shared 的工业视觉令牌，与传送带 / 配药等场景同一套风格。
  */
+import {
+  INDUSTRIAL_VISUAL, INDUSTRIAL_LIGHTING, INDUSTRIAL_DETAIL,
+} from '@digital-twin/shared';
+
+/** 结构色与三点布光统一走共享令牌；只保留棋盘 / 棋子 / 气管等本场景特有颜色 */
+export const GANTRY_VISUAL = {
+  ...INDUSTRIAL_VISUAL,
+  SCENE_LIGHTING: INDUSTRIAL_LIGHTING,
+  SURFACE_GAP: INDUSTRIAL_DETAIL.SURFACE_GAP,
+  BOARD_LIGHT: '#8a5836',
+  BOARD_DARK: '#5b3520',
+  BOARD_EDGE: '#3c2618',
+  BOARD_GRID: '#3c2618',
+  PIECE_RED: '#c62828',
+  PIECE_BLACK: '#22262b',
+  HOSE_COLOR: '#2aa7c4',
+} as const;
 
 /** 两轴行程与 Z 气缸行程，单位 mm；MM2M 把 mm 换算成 3D 世界坐标（米） */
 export const GANTRY_AXIS = {
