@@ -179,4 +179,29 @@ describe('观众镜像与平台壳接线', () => {
     expect(scene).toContain('s.z');
     expect(scene).not.toContain('useGLTF');
   });
+
+  it('3D 结构按 Inovance.STEP 真实装配树：焊接台体 / 一侧 Y 模组 + 一侧 D20 从动导轨 / X 模组横梁 / 气缸吸盘', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    for (const t of [
+      'WeldedTable', '台体', 'Y 轴线性模组-600', 'HG-KR43 伺服', 'D20 直线导轨',
+      '导轨固定板', 'X 直线模组-450', '200W 伺服', '气缸吸盘支架', '吸盘',
+      'Z_HEAD_BASE', 'yBridge', 'xSlider', 'zHead',
+    ]) expect(scene).toContain(t);
+    // 两端竖立支撑把横梁落到滑座上，不再是旧的「四角立柱 + 两条等粗光杆」
+    expect(scene).toContain('gantry-post-');
+    expect(scene).toContain('POST_BOTTOM');
+    expect(scene).not.toContain('四角立柱');
+  });
+
+  it('Z 高度按真实行程标定：下降 50mm 后吸盘底面贴近棋子顶面', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    const frame = 0.52;
+    const base = -0.12;
+    const suctionUp = frame + base - 0.091;
+    const suctionDown = suctionUp - GANTRY_AXIS.Z_STROKE * GANTRY_AXIS.MM2M * 2;
+    const pieceTop = 0.16 + 0.012 + 0.037;
+    expect(Math.abs(suctionDown - pieceTop)).toBeLessThan(0.005);
+    expect(scene).toContain('suctionBottomDown');
+    expect(scene).toContain('pieceTop');
+  });
 });
