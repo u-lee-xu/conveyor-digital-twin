@@ -646,7 +646,9 @@ function checkGantryPlc() {
       return false;
     }
   }
-  for (const token of ['1509', 'GANTRY_WORD_VARIABLES', 'wordVariables']) {
+  // 本机教学虚拟 PLC :1509（默认）与汇川真实 PLC :502 两个入口都要在面板里
+  for (const token of ['1509', '汇川H5U (Modbus :502)', '汇川EASY (Modbus :502)',
+    'port: 502', 'GANTRY_WORD_VARIABLES', 'wordVariables']) {
     if (!connection.includes(token)) {
       console.error(`[check][gantry-plc] ❌ 连接面板缺 ${token}`);
       return false;
