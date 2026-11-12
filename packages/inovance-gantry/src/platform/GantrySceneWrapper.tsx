@@ -6,7 +6,7 @@ import { GANTRY_VISUAL } from '../constants/gantryConstants';
 
 export function GantrySceneWrapper({
   SceneContent,
-  cameraPosition = [1.55, 1.0, 1.95],
+  cameraPosition = [1.9, 1.25, 2.35],
 }: {
   SceneContent: ComponentType;
   cameraPosition?: [number, number, number];
@@ -15,7 +15,7 @@ export function GantrySceneWrapper({
     <Canvas
       style={{ position: 'absolute', inset: 0 }}
       shadows
-      camera={{ position: cameraPosition, fov: 42, near: 0.05, far: 60 }}
+      camera={{ position: cameraPosition, fov: 40, near: 0.05, far: 60 }}
     >
       <color attach="background" args={[GANTRY_VISUAL.SCENE_BACKGROUND]} />
       <OrbitControls target={[0.45, 0.18, 0.6]} enableDamping dampingFactor={0.1}

@@ -196,12 +196,40 @@ describe('观众镜像与平台壳接线', () => {
     expect(scene).not.toContain('四角立柱');
   });
 
-  it('3D 外观：深棕多格棋盘小桌 / 黑吸盘 + 青色气管 / 铝银灰整板 + 细 T 槽线', () => {
+  it('3D 外观与零件复用：铝银灰整板 + 细 T 槽线 / 深棕棋盘小桌 / 波纹吸盘 / 中性色气管', () => {
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     for (const t of [
-      '深棕多格棋盘', '黑色波纹橡胶吸盘', '青色气管', '铝银灰整板', '细 T 槽线',
-      'VISUAL_ROWS', 'VISUAL_COLS', 'boardEdge', 'C.hose', 'C.cup',
+      '铝银灰整板', '细 T 槽线', 'WeldedTable', 'ChessboardTable', 'ChessPieceMesh',
+      'LinearModule', 'ServoHousing', 'PenCylinder', 'SuctionHead', 'Profile',
     ]) expect(scene).toContain(t);
+    const parts = read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx');
+    for (const t of [
+      '深棕 8x8 棋盘', '黑色波纹吸盘', '中性色气管', 'VISUAL_ROWS', 'VISUAL_COLS',
+      'M.boardEdge', 'M.hose', 'M.cup', 'BoltRow', 'T 槽', 'castShadow',
+    ]) expect(parts).toContain(t);
+  });
+
+  it('建模质量对齐自动配药：材质单例 + metalness/roughness 分层 + polygonOffset 贴面', () => {
+    const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
+    for (const t of [
+      'new THREE.MeshStandardMaterial', 'metalness', 'roughness', 'polygonOffset',
+      'V.BASE_COLOR', 'V.SILVER_COLOR', 'V.PROFILE_SLOT_COLOR', 'GAP',
+    ]) expect(mat).toContain(t);
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    // 不再内联纯色材质
+    expect(scene).not.toContain('<meshStandardMaterial color=');
+  });
+
+  it('绿色接线端子与青色软管已按用户要求去掉', () => {
+    const all = [
+      read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx'),
+      read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx'),
+      read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts'),
+    ].join('\n');
+    expect(all).not.toContain('C.terminal');
+    expect(all).not.toContain('LAMP_GREEN');
+    expect(all).not.toContain('HOSE_COLOR');
+    expect(all).toContain('中性色气管');
   });
 
   it('按用户要求去掉所有非必要装饰件', () => {
@@ -210,7 +238,7 @@ describe('观众镜像与平台壳接线', () => {
       'SupportColumn', 'function Sensor', '<Sensor', 'C.column', 'C.sensor', 'ref={fan}',
       'HmiPanel', 'PlcIoBoard', 'DragChain', 'chain-l-',
     ]) expect(scene).not.toContain(t);
-    expect(scene).toContain('低调深灰伺服端盖');
+    expect(scene).toContain('ServoHousing');
   });
 
   it('视觉接入共享工业视觉令牌：与传送带 / 配药同一套结构色与三点布光', () => {
@@ -221,7 +249,8 @@ describe('观众镜像与平台壳接线', () => {
     }
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     expect(scene).toContain('GANTRY_VISUAL.SCENE_LIGHTING');
-    for (const t of ['L.ambient', 'L.key', 'L.fillColor', 'GANTRY_VISUAL.BASE_COLOR']) expect(scene).toContain(t);
+    for (const t of ['L.ambient', 'L.key', 'L.fillColor', 'gantryMaterials', 'GantryParts']) expect(scene).toContain(t);
+    expect(c).toContain('GANTRY_VISUAL');
     const wrapper = read('packages/inovance-gantry/src/platform/GantrySceneWrapper.tsx');
     expect(wrapper).toContain('GANTRY_VISUAL.SCENE_BACKGROUND');
   });
