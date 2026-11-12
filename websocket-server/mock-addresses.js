@@ -625,9 +625,9 @@ function checkGantryPlc() {
     console.error(`[check][gantry-plc] ❌ 龙门仿真 PLC 文件缺失: ${e.message}`);
     return false;
   }
-  const plcNeed = ["host: '127.0.0.1'", 'GANTRY_X_POS', 'gantryPlcScan',
-    'setInterval(gantryPlcScan, 100)', 'setRegisterArray', 'virtual-plc', '/status',
-    'externalPosUntil', 'MAIN_COMMANDS'];
+  const plcNeed = ["host: '127.0.0.1'", 'GANTRY_X_POS', 'GANTRY_PICK_CELL', 'GANTRY_PLACE_CELL',
+    'gantryPlcScan', 'setInterval(gantryPlcScan, 100)', 'setRegisterArray', 'virtual-plc',
+    '/status', 'externalPosUntil', 'MAIN_COMMANDS'];
   for (const token of plcNeed) {
     if (!plc.includes(token)) {
       console.error(`[check][gantry-plc] ❌ 虚拟 PLC 缺 ${token}`);
@@ -652,13 +652,13 @@ function checkGantryPlc() {
       return false;
     }
   }
-  for (const token of ['readWords(WORD_NAMES)', 'setPlcFrame', 'GANTRY_PHASE_W']) {
+  for (const token of ['readWords(WORD_NAMES)', 'setPlcFrame', 'GANTRY_PHASE_W', 'GANTRY_PICK_CELL']) {
     if (!effects.includes(token)) {
       console.error(`[check][gantry-plc] ❌ effects 缺 ${token}`);
       return false;
     }
   }
-  for (const token of ['GANTRY_X_POS', 'GANTRY_Y_TGT', 'GANTRY_HELD_W']) {
+  for (const token of ['GANTRY_X_POS', 'GANTRY_Y_TGT', 'GANTRY_HELD_W', 'GANTRY_PICK_CELL', 'GANTRY_PLACE_CELL']) {
     if (!vars.includes(token)) {
       console.error(`[check][gantry-plc] ❌ 字变量表缺 ${token}`);
       return false;

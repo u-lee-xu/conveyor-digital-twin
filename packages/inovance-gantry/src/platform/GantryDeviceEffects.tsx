@@ -7,7 +7,7 @@ import { isViewerRuntime, modbusService } from '@digital-twin/shared';
 import { useGantryStore } from '../stores/useGantryStore';
 import { GANTRY_WORD_VARIABLES, GANTRY_PHASE } from '../constants/gantryVariables';
 
-/** 与 GANTRY_WORD_VARIABLES 同源：连接帧下发的 7 个 uint16 单字一次读回 */
+/** 与 GANTRY_WORD_VARIABLES 同源：连接帧下发的 9 个 uint16 单字一次读回 */
 const WORD_NAMES = Object.keys(GANTRY_WORD_VARIABLES);
 
 /** Z 下行的四个阶段：气缸伸出，Z 位置由 PLC 给定直接驱动 */
@@ -52,6 +52,8 @@ export function GantryDeviceEffects() {
           yTarget: num('GANTRY_Y_TGT'),
           cylinderDown: DOWN_PHASES.includes(phase),
           vacuum: num('GANTRY_HELD_W') > 0,
+          pickCell: num('GANTRY_PICK_CELL'),
+          placeCell: num('GANTRY_PLACE_CELL'),
         });
       } catch {
         // 断开瞬间的读失败不打断演示

@@ -39,9 +39,11 @@ const HR = {
   GANTRY_X_TGT: 204, GANTRY_X_TGT_HI: 205,
   GANTRY_Y_TGT: 206, GANTRY_Y_TGT_HI: 207,
   GANTRY_Z_POS: 208, GANTRY_PHASE: 209, GANTRY_HELD_PIECE: 210,
+  /** 吸取 / 放置目标格，row*3+col（0~8），浏览器据此完成棋子吸放 */
+  GANTRY_PICK_CELL: 211, GANTRY_PLACE_CELL: 212,
 };
 const REG_MIN = HR.GANTRY_X_POS;
-const REG_MAX = HR.GANTRY_HELD_PIECE;
+const REG_MAX = HR.GANTRY_PLACE_CELL;
 
 const COIL = {
   X_ENABLE: 20, Y_ENABLE: 21, X_IN_POS: 22, Y_IN_POS: 23,
@@ -126,6 +128,10 @@ function publish() {
   regs.set(HR.GANTRY_Z_POS, u16(Math.round(zPos)));
   regs.set(HR.GANTRY_PHASE, u16(phase));
   regs.set(HR.GANTRY_HELD_PIECE, u16(held));
+  // 当前一轮的吸取 / 放置目标格：浏览器按真空边沿吸放棋子时不用靠滞后的吸盘坐标猜
+  const route = ROUTE[routeIndex % ROUTE.length];
+  regs.set(HR.GANTRY_PICK_CELL, u16(route.pick[0] * 3 + route.pick[1]));
+  regs.set(HR.GANTRY_PLACE_CELL, u16(route.place[0] * 3 + route.place[1]));
 
   coils[COIL.X_ENABLE] = running;
   coils[COIL.Y_ENABLE] = running;
@@ -293,6 +299,8 @@ const httpServer = http.createServer((req, res) => {
       role: 'virtual-plc',
       plcScans,
       running, estop, phase, routeIndex, completed,
+      pickCell: regs.get(HR.GANTRY_PICK_CELL) ?? 0,
+      placeCell: regs.get(HR.GANTRY_PLACE_CELL) ?? 0,
       position: { x: xPos, y: yPos, z: zPos },
       target: { x: xTgt, y: yTgt },
       vacuum, cylinderDown, held,

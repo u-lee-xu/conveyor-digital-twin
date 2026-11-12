@@ -208,7 +208,8 @@ describe('仿真模式与方案 A 虚拟 PLC', () => {
       expect(parts).toContain(header);
     }
     expect(GANTRY_ADDRESS_ROWS.length).toBeGreaterThanOrEqual(10);
-    expect(Object.keys(GANTRY_WORD_VARIABLES)).toHaveLength(7);
+    // 7 个位置/阶段字 + PLC 显式下发的吸取格 / 放置格
+    expect(Object.keys(GANTRY_WORD_VARIABLES)).toHaveLength(9);
   });
 
   it('连接预设指向 :1509，并下发设备自己的单字变量表', () => {
@@ -257,5 +258,52 @@ describe('仿真模式与方案 A 虚拟 PLC', () => {
     expect(s.z).toBe(30);
     expect(s.x.position).toBe(200);
     expect(s.y.position).toBe(220);
+  });
+
+  it('PLC 显式下发吸取 / 放置目标格，浏览器不靠滞后坐标猜棋子', () => {
+    const vars = read('packages/inovance-gantry/src/constants/gantryVariables.ts');
+    expect(vars).toContain('GANTRY_PICK_CELL');
+    expect(vars).toContain('GANTRY_PLACE_CELL');
+    expect(read('websocket-server/mock-gantry-server.js')).toContain('GANTRY_PICK_CELL: 211');
+    expect(read(`${PANEL}GantryDeviceEffects.tsx`)).toContain('pickCell: num(');
+    const store = read('packages/inovance-gantry/src/stores/useGantryStore.ts');
+    expect(store).toContain("if (s.controlSource === 'plc')");
+    expect(store).toContain('pieceAt(pieces, c.x, c.y)');
+  });
+
+  it('仿真模式：真空边沿完成吸取 → 跟随吸盘 → 放置，格子与标签同步', () => {
+    const store = useGantryStore.getState();
+    // PLC 给定：吸盘在 A1(120,120) 且 Z 到底，目标 A1→C1（编码 0 / 6），真空 ON
+    store.setPlcFrame({
+      xPos: 120, yPos: 120, zPos: 50,
+      xTarget: 120, yTarget: 120,
+      cylinderDown: true, vacuum: true,
+      pickCell: 0, placeCell: 6,
+    });
+    useGantryStore.getState().tick(1 / 60);
+    let s = useGantryStore.getState();
+    expect(s.controlSource).toBe('plc');
+    expect(s.heldPieceId).toBe('piece-1');
+    expect(s.pieces[0].held).toBe(true);
+
+    // PLC 把吸盘移到 C1(120,200)，被吸棋子跟随坐标与 Z
+    s.setPlcFrame({ xPos: 120, yPos: 200, zPos: 0, xTarget: 120, yTarget: 200, vacuum: true });
+    useGantryStore.getState().tick(1 / 60);
+    s = useGantryStore.getState();
+    expect(s.pieces[0].x).toBeCloseTo(120, 1);
+    expect(s.pieces[0].y).toBeCloseTo(200, 1);
+    expect(s.pieces[0].held).toBe(true);
+
+    // 真空 OFF → 落到 C1，更新 row / col / label / held
+    s.setPlcFrame({ xPos: 120, yPos: 200, zPos: 50, vacuum: false });
+    useGantryStore.getState().tick(1 / 60);
+    s = useGantryStore.getState();
+    expect(s.heldPieceId).toBe(null);
+    expect(s.pieces[0].label).toBe('C1');
+    expect(s.pieces[0].row).toBe(2);
+    expect(s.pieces[0].col).toBe(0);
+    expect(s.pieces[0].x).toBe(120);
+    expect(s.pieces[0].y).toBe(200);
+    expect(s.pieces[0].held).toBe(false);
   });
 });
