@@ -404,7 +404,7 @@ describe('视觉与建模质量', () => {
   it('外观细节：铝银灰整板 + T 槽 / 深棕 8x8 棋盘 / 波纹吸盘 / 中性气管', () => {
     for (const t of ['BoltRow', 'T 槽', 'castShadow']) expect(read(COMP + 'IndustrialProfile.tsx')).toContain(t);
     for (const t of ['VISUAL_ROWS', 'M.boardEdge', 'M.boardGrid']) expect(read(COMP + 'ChessboardTable.tsx')).toContain(t);
-    for (const t of ['M.cup', 'M.cupLip', 'M.hose', '中性色气管', '波纹']) {
+    for (const t of ['M.cup', 'M.cupLip', 'M.brass', '节流阀接头', '波纹']) {
       expect(read(COMP + 'ZAxisAssembly.tsx')).toContain(t);
     }
   });
@@ -440,11 +440,16 @@ describe('视觉与建模质量', () => {
     expect(mod).not.toContain('along[0] / 2');
   });
 
-  it('绿色端子 / 青色软管 / HMI 盒 / 坦克链等非必要装饰已移除', () => {
-    const all = [read(SCENE), read(COMP + 'ZAxisAssembly.tsx'), read(SHARED + 'gantryMaterials.ts')].join('\n');
-    for (const t of ['C.terminal', 'HOSE_COLOR', 'C.chain', 'DragChain', 'HmiPanel',
-      'PlcIoBoard', 'SupportColumn', 'ref={fan}', 'planeGeometry']) expect(all).not.toContain(t);
-    expect(all).toContain('中性色气管');
+  it('外接气管 / 绿色端子 / HMI 盒 / 坦克链等非必要装饰已移除，只留节流阀接头', () => {
+    const all = [
+      read(SCENE), read(COMP + 'ZAxisAssembly.tsx'), read(SHARED + 'gantryMaterials.ts'),
+      read('packages/inovance-gantry/src/constants/gantryConstants.ts'),
+    ].join('\n');
+    for (const t of ['C.terminal', 'HOSE_COLOR', 'M.hose', '中性色气管', 'C.chain', 'DragChain',
+      'HmiPanel', 'PlcIoBoard', 'SupportColumn', 'ref={fan}', 'planeGeometry']) {
+      expect(all).not.toContain(t);
+    }
+    expect(read(COMP + 'ZAxisAssembly.tsx')).toContain('节流阀接头');
     expect(read(SHARED + 'gantryMaterials.ts')).toContain('ledOrigin');
   });
 
