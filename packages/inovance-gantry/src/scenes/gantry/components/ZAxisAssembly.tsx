@@ -58,7 +58,7 @@ export function ZAxisAssembly() {
           <cylinderGeometry args={[D.GUIDE_BUSH_R, D.GUIDE_BUSH_R, D.GUIDE_BUSH_LEN, 12]} />
         </mesh>
       ))}
-      {/* 黄铜气接头 */}
+      {/* 节流阀接头（气缸调速接头）：按用户要求只留接头，不画外接气管 */}
       <mesh position={[0.02, Z_AXIS_GEOM.BODY_Y + 0.02, 0.008]} rotation={[0, 0, Math.PI / 2]} material={M.brass}>
         <cylinderGeometry args={[D.BRASS_R, D.BRASS_R, D.BRASS_LEN, 12]} />
       </mesh>
@@ -96,10 +96,6 @@ export function ZAxisAssembly() {
         </mesh>
         <mesh position={[0, -0.048, 0]} material={M.cupLip}>
           <cylinderGeometry args={[0.028, 0.028, 0.004, 20]} />
-        </mesh>
-        {/* 中性色气管 */}
-        <mesh position={[0.028, 0.012, 0.012]} rotation={[0, 0, -0.32]} material={M.hose}>
-          <cylinderGeometry args={[0.0035, 0.0035, 0.075, 10]} />
         </mesh>
       </group>
     </group>

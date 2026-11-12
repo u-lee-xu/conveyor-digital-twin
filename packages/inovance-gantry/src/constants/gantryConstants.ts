@@ -18,7 +18,6 @@ export const GANTRY_VISUAL = {
   BOARD_GRID: '#3c2618',
   PIECE_RED: '#c62828',
   PIECE_BLACK: '#22262b',
-  HOSE_COLOR: '#2aa7c4',
 } as const;
 
 /** 两轴行程与 Z 气缸行程，单位 mm；MM2M 把 mm 换算成 3D 世界坐标（米） */

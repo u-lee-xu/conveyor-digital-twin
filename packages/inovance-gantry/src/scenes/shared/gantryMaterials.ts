@@ -43,8 +43,6 @@ export const M = {
   cup: new THREE.MeshStandardMaterial({ color: V.MAGSWITCH_COLOR, metalness: 0.05, roughness: 0.9 }),
   /** 吸盘唇边（略亮，表现薄橡胶） */
   cupLip: new THREE.MeshStandardMaterial({ color: V.SLEEVE_COLOR, metalness: 0.05, roughness: 0.85 }),
-  /** 中性气管：按用户要求不出现绿色 / 青色软管 */
-  hose: new THREE.MeshStandardMaterial({ color: V.SLEEVE_COLOR, metalness: 0.15, roughness: 0.8 }),
   /** 伺服电机本体 */
   servo: new THREE.MeshStandardMaterial({ color: V.MAGSWITCH_COLOR, metalness: 0.4, roughness: 0.6 }),
   /** 伺服散热筋 */
