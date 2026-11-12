@@ -5,10 +5,18 @@ import { GANTRY_WORD_VARIABLES, GANTRY_COILS } from '../constants/gantryVariable
 import { useGantryAppStore } from '../stores/useGantryAppStore';
 import { useGantryStore } from '../stores/useGantryStore';
 
+/**
+ * 预设口径与传送带分拣 / MD520 一致：
+ *  - :1509 是 start-lab 起的**本机教学虚拟 PLC**（方案 A），不接真机也能跑仿真，故作为默认；
+ *  - :502 是汇川 H5U / EASY 等真实 PLC 的 Modbus TCP 标准端口，选后把主机地址改成现场 IP 即可。
+ * 不固化现场 IP，所有预设 host 都先给回环，由界面输入框改。
+ */
 const PRESETS: { label: string; config: PlcConnConfig }[] = [
-  { label: '龙门虚拟 PLC :1509', config: { host: '127.0.0.1', port: 1509, protocol: 'modbus' } },
+  { label: '龙门虚拟 PLC (本机 :1509)', config: { host: '127.0.0.1', port: 1509, protocol: 'modbus' } },
+  { label: '汇川H5U (Modbus :502)', config: { host: '127.0.0.1', port: 502, protocol: 'modbus' } },
+  { label: '汇川EASY (Modbus :502)', config: { host: '127.0.0.1', port: 502, protocol: 'modbus' } },
   { label: 'S7-1200/1500 仿真', config: { host: '127.0.0.1', port: 102, protocol: 's7', rack: 0, slot: 1 } },
-  { label: '三菱 GX Simulator2', config: { host: '127.0.0.1', port: 0, protocol: 'mitsubishi' } },
+  { label: '三菱 GX Simulator2 仿真', config: { host: '127.0.0.1', port: 0, protocol: 'mitsubishi' } },
 ];
 
 /** 主令按钮：写 PLC 输入线圈（自复位），未连接时不写任何地址 */
