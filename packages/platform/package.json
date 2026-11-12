@@ -8,7 +8,7 @@
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
-  "types": "src/index.ts",
+  "types": "src/types.ts",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -24,6 +24,7 @@
     "@digital-twin/auto-dispensing": "*",
     "@digital-twin/md520-vfd": "*",
     "@digital-twin/inovance-gantry": "*",
+    "@digital-twin/liquid-mixing": "*",
     "@digital-twin/shared": "*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

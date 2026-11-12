@@ -711,6 +711,101 @@ function checkGantryPlc() {
 }
 
 /**
+ * 液体混装（第 7 设备）场景隔离：六处接线齐全、不新增内置 PLC / 端口 / 进程、
+ * 四罐 32 位 REAL 借既有 dint32 双字通道位模式透传（网关零改动）、
+ * 连接预设只指向外部 PLC 仿真软件、已定稿场景零液体混装残留。
+ */
+function checkLiquidMixingIsolation() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  let registry, startLab, vars, connection, real32, sceneIdx, gateway, panel;
+  try {
+    registry = readFile('../packages/platform/src/registry.ts');
+    startLab = readFile('../scripts/start-lab.cjs');
+    vars = readFile('../packages/liquid-mixing/src/constants/liquidVariables.ts');
+    connection = readFile('../packages/liquid-mixing/src/platform/LiquidPlcConnection.tsx');
+    real32 = readFile('../packages/liquid-mixing/src/constants/real32.ts');
+    sceneIdx = readFile('../packages/liquid-mixing/src/index.ts');
+    gateway = readFile('./server.js');
+    panel = readFile('../packages/liquid-mixing/src/platform/LiquidModePanel.tsx');
+  } catch (e) {
+    console.error(`[check][liquid-isolation] ❌ 液体混装场景文件缺失: ${e.message}`);
+    return false;
+  }
+  if (!registry.includes('liquidMixingDevice')) {
+    console.error('[check][liquid-isolation] ❌ 平台壳未注册液体混装设备');
+    return false;
+  }
+  const wiring = [
+    ['../packages/platform/package.json', '@digital-twin/liquid-mixing'],
+    ['../packages/platform/vite.config.ts', "'@digital-twin/liquid-mixing'"],
+    ['../packages/platform/tsconfig.app.json', '"@digital-twin/liquid-mixing"'],
+    ['../packages/platform/tsconfig.app.json', '"@digital-twin/liquid-mixing/*"'],
+    ['../packages/platform/src/index.css', '../../liquid-mixing/src'],
+    ['../packages/liquid-mixing/vite.config.ts', 'test:'],
+  ];
+  for (const [file, token] of wiring) {
+    if (!readFile(file).includes(token)) {
+      console.error(`[check][liquid-isolation] ❌ ${file} 缺 ${token}`);
+      return false;
+    }
+  }
+  if (/liquid[-_]mixing|LIQUID_PLC_PORT|mock-liquid/i.test(startLab)) {
+    console.error('[check][liquid-isolation] ❌ 启动编排被改动：本场景不得新增内置服务 / 端口 / 进程');
+    return false;
+  }
+  if (!startLab.includes('assertInternalPorts')) {
+    console.error('[check][liquid-isolation] ❌ 端口防漂移守卫被移除');
+    return false;
+  }
+  for (const token of ['LIQUID_LEVEL_A', 'LIQUID_LEVEL_B', 'LIQUID_LEVEL_MIX', 'LIQUID_LEVEL_PRODUCT']) {
+    if (!vars.includes(token)) {
+      console.error(`[check][liquid-isolation] ❌ 变量表缺 REAL 液位 ${token}`);
+      return false;
+    }
+  }
+  if (!/address: 300, words: 2/.test(vars) || !/address: 302, words: 2/.test(vars)
+    || !/address: 304, words: 2/.test(vars) || !/address: 306, words: 2/.test(vars)) {
+    console.error('[check][liquid-isolation] ❌ 四路 REAL 必须是 HR300/302/304/306 起的双字');
+    return false;
+  }
+  if (!vars.includes("type: 'dint32'") || !real32.includes('IEEE754') || !real32.includes('low-first')) {
+    console.error('[check][liquid-isolation] ❌ REAL 位模式透传口径缺失');
+    return false;
+  }
+  // 网关零改动：既不加 float32 白名单，也不夹带任何设备专属变量
+  if (!gateway.includes("spec.type !== 'dint32' && spec.type !== 'uint16'")) {
+    console.error('[check][liquid-isolation] ❌ 网关字变量白名单被改动，将影响既有设备');
+    return false;
+  }
+  if (/LIQUID_|float32|real32/i.test(gateway)) {
+    console.error('[check][liquid-isolation] ❌ 网关出现液体混装 / 浮点专属实现，应由设备侧编解码承担');
+    return false;
+  }
+  if (/1509|5089/.test(connection) || !connection.includes('port: 502') || !connection.includes('port: 102')) {
+    console.error('[check][liquid-isolation] ❌ 连接预设必须指向外部 PLC 仿真软件，且不列本机练习靶机');
+    return false;
+  }
+  if (!sceneIdx.includes('exportSnapshot') || !sceneIdx.includes('applyBroadcast')) {
+    console.error('[check][liquid-isolation] ❌ 液体混装场景缺观众只读镜像');
+    return false;
+  }
+  if (!panel.includes('data-dt-liquid-panel') || !sceneIdx.includes("id: 'sim'")) {
+    console.error('[check][liquid-isolation] ❌ 面板锚点或仿真模式缺失');
+    return false;
+  }
+  for (const scene of ['mock-dispensing-server.js', 'mock-conveyor-server.js', 'mock-vfd-server.js', 'mock-vfd-slave.js', 'mock-gantry-server.js']) {
+    if (readFile(`./${scene}`).includes('LIQUID_')) {
+      console.error(`[check][liquid-isolation] ❌ ${scene} 残留液体混装变量`);
+      return false;
+    }
+  }
+  console.log('[check][liquid-isolation] ✅ 六处接线齐全、零新增内置服务、REAL 双字透传、网关与定稿场景零残留');
+  return true;
+}
+
+/**
  * 三菱 MX 内存设备替身（DT_MX_MOCK=1）安全性：
  * 必须默认关闭、桥脚本路径来自 __dirname（绝不进客户端帧）、命令协议与真实 PS 桥一致，
  * 且替身本身不触碰 ActUtlType COM；真实 PS 桥仍原样保留供现场使用。
@@ -767,6 +862,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkVfd485Slave() && ok;
   ok = checkGantryIsolation() && ok;
   ok = checkGantryPlc() && ok;
+  ok = checkLiquidMixingIsolation() && ok;
   ok = checkMxMockSafety() && ok;
   process.exit(ok ? 0 : 1);
 }

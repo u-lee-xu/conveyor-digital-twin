@@ -8,6 +8,7 @@
 @source "../../auto-dispensing/src";
 @source "../../md520-vfd/src";
 @source "../../inovance-gantry/src";
+@source "../../liquid-mixing/src";
 
 /* 全局样式 */
 * {
