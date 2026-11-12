@@ -129,20 +129,23 @@ export function GantrySceneContent() {
           <Bolt key={`slide-bolt-${s}`} position={[0, TABLE_H + 0.1, s * 0.035]} r={0.004} h={0.004} />
         ))}
 
-        {/* 两端竖立支撑（滑座后侧，避免 X=0 时挡住 Z 气缸） */}
+        {/* 两端宽立板端座：实物里 X 横梁两端是坐在 Y 滑座上的白色宽板/连接座，
+            不是后侧一根细柱 + 黑色方块。整体放在滑座后缘，向 +Z 伸出法兰托住横梁，
+            与 z=0 的包梁式 X 滑块在深度上分离，X=0 时也不重叠。 */}
         {[0, RAIL_X].map((x, i) => (
-          <group key={`gantry-post-${i}`} position={[x, 0, -0.045]}>
-            <mesh position={[0, POST_MID, 0]} castShadow material={M.base}>
-              <boxGeometry args={[0.045, POST_H, 0.05]} />
+          <group key={`gantry-end-support-${i}`} position={[x, 0, -0.075]}>
+            <mesh position={[0, POST_MID, 0]} castShadow receiveShadow material={M.base}>
+              <boxGeometry args={[0.085, POST_H, 0.05]} />
             </mesh>
-            <mesh position={[0, POST_BOTTOM + 0.035, 0]} material={M.dark}>
-              <boxGeometry args={[0.07, 0.07, 0.07]} />
+            {/* 下连滑座、上托横梁的两块亮银法兰，颜色与结构件一致，不用黑块 */}
+            <mesh position={[0, POST_BOTTOM + 0.015, 0.0375]} material={M.slider}>
+              <boxGeometry args={[0.09, 0.03, 0.075]} />
             </mesh>
-            <mesh position={[0, POST_TOP, 0.045]} material={M.dark}>
-              <boxGeometry args={[0.05, 0.035, 0.09]} />
+            <mesh position={[0, POST_TOP, 0.0375]} material={M.endCap}>
+              <boxGeometry args={[0.09, 0.014, 0.075]} />
             </mesh>
             {[-1, 1].map((s) => (
-              <Bolt key={`post-bolt-${s}`} position={[s * 0.015, POST_TOP + 0.02, 0.045]} r={0.004} h={0.004} />
+              <Bolt key={`end-bolt-${s}`} position={[s * 0.028, POST_TOP + 0.008, 0.0375]} r={0.004} h={0.003} />
             ))}
           </group>
         ))}
@@ -151,17 +154,21 @@ export function GantrySceneContent() {
         <LinearModule length={RAIL_X} axis="x" position={[RAIL_X / 2, FRAME_H, 0]} />
         <ServoHousing position={[RAIL_X + 0.045, FRAME_H, 0]} axis="x" label="X轴 三菱200W 伺服" />
 
-        {/* X 滑块：气缸固定板 + 笔形气缸 + Z 运动头 */}
+        {/* X 滑块：包住横梁的单一滑座，Z 气缸 / 吸盘都在同一条 z=0 轴线上，
+            不再用「前侧大立板 + 下方水平板」两块分离件造成错位。 */}
         <group ref={xSlider} position={[0, FRAME_H, 0]}>
-          <mesh position={[0, -0.03, 0.045]} castShadow material={M.slider}>
-            <boxGeometry args={[0.088, 0.095, 0.014]} />
+          <mesh castShadow receiveShadow material={M.slider}>
+            <boxGeometry args={[0.075, 0.062, 0.09]} />
           </mesh>
-          <mesh position={[0, -0.062, 0]} material={M.endCap}>
-            <boxGeometry args={[0.078, 0.008, 0.072]} />
+          <mesh position={[0, 0.031 + GAP, 0]} material={M.decal}>
+            <boxGeometry args={[0.06, 0.0012, 0.07]} />
           </mesh>
           {[-1, 1].map((sx) => [-1, 1].map((sz) => (
-            <Bolt key={`plate-${sx}-${sz}`} position={[sx * 0.03, -0.057 + GAP, sz * 0.028]} r={0.0035} h={0.003} />
+            <Bolt key={`carriage-${sx}-${sz}`} position={[sx * 0.025, 0.032 + GAP * 2, sz * 0.03]} r={0.0035} h={0.003} />
           )))}
+          <mesh position={[0, -0.055, 0]} material={M.endCap}>
+            <boxGeometry args={[0.055, 0.012, 0.06]} />
+          </mesh>
           <PenCylinder position={[0, -0.092, 0]} />
           <group ref={zHead} position={[0, Z_HEAD_BASE, 0]}>
             <SuctionHead />

@@ -190,10 +190,22 @@ describe('观众镜像与平台壳接线', () => {
       '导轨固定板', 'X 直线模组-450', '200W 伺服', '气缸吸盘支架', '吸盘',
       'Z_HEAD_BASE', 'yBridge', 'xSlider', 'zHead',
     ]) expect(scene).toContain(t);
-    // 两端竖立支撑把横梁落到滑座上，不再是旧的「四角立柱 + 两条等粗光杆」
-    expect(scene).toContain('gantry-post-');
+    // 两端宽立板端座把横梁落到滑座上，不再是旧的「四角立柱 + 两条等粗光杆」
+    expect(scene).toContain('gantry-end-support-');
     expect(scene).toContain('POST_BOTTOM');
     expect(scene).not.toContain('四角立柱');
+  });
+
+  it('X 滑块是包梁式单一滑座，Z 气缸与吸盘同在 z=0 轴线，不再前后错位', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    expect(scene).toContain('PenCylinder position={[0, -0.092, 0]}');
+    expect(scene).toContain('position={[0, Z_HEAD_BASE, 0]}');
+    expect(scene).toContain('0.075, 0.062, 0.09');
+    // 旧的「前侧大立板 + 下方水平板」两块分离件
+    expect(scene).not.toContain('0.088, 0.095, 0.014');
+    expect(scene).not.toContain('0.078, 0.008, 0.072');
+    // 端座不再用黑色方块
+    expect(scene).not.toContain('0.07, 0.07, 0.07');
   });
 
   it('3D 外观与零件复用：铝银灰整板 + 细 T 槽线 / 深棕棋盘小桌 / 波纹吸盘 / 中性色气管', () => {
