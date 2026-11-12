@@ -226,6 +226,14 @@ describe('观众镜像与平台壳接线', () => {
     expect(wrapper).toContain('GANTRY_VISUAL.SCENE_BACKGROUND');
   });
 
+  it('HMI 触摸屏盒（白盒 + 黑屏 + 红绿按钮）已彻底移除，不回归', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    for (const t of [
+      'HmiPanel', 'planeGeometry', 'C.estop', 'C.green', 'C.screen', 'C.hmi',
+      '0.24, 0.11, 0.16',
+    ]) expect(scene).not.toContain(t);
+  });
+
   it('黑色坦克链（拖链）按用户要求移除', () => {
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     expect(scene).not.toContain('DragChain');
