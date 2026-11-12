@@ -14,8 +14,12 @@ export const GANTRY_AXIS = {
 
 /** 教学用 3x3 棋盘格（沿用旧场景 A1~C3 命名），格心坐标 = OFFSET + index*SPACING + SPACING/2 */
 export const GANTRY_BOARD = {
+  /** 教学落点仍沿用旧场景 3x3（A1~C3），与变量/面板/自检口径一致 */
   ROWS: 3,
   COLS: 3,
+  /** 实物照片里的棋盘是多格深棕棋盘，视觉上画 8x8；落点落在左上 3x3 区 */
+  VISUAL_ROWS: 8,
+  VISUAL_COLS: 8,
   CELL_SPACING: 40,
   OFFSET_X: 100,
   OFFSET_Y: 100,

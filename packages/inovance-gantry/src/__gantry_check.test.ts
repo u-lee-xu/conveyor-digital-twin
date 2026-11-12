@@ -26,11 +26,14 @@ const runFrames = (n: number) => {
 };
 
 describe('常量与变量命名（单一来源）', () => {
-  it('沿用旧龙门口径：450/600/50mm 行程、3x3 格、40mm 格距、A1~C3', () => {
+  it('沿用旧龙门口径：450/600/50mm 行程、3x3 教学落点、40mm 格距、A1~C3', () => {
     expect(GANTRY_AXIS.X_TRAVEL).toBe(450);
     expect(GANTRY_AXIS.Y_TRAVEL).toBe(600);
     expect(GANTRY_AXIS.Z_STROKE).toBe(50);
     expect(GANTRY_BOARD.CELL_SPACING).toBe(40);
+    // 实物照片是多格深棕棋盘，视觉 8x8；教学落点仍 3x3
+    expect(GANTRY_BOARD.VISUAL_ROWS).toBe(8);
+    expect(GANTRY_BOARD.VISUAL_COLS).toBe(8);
     expect(CHESS_POSITIONS).toHaveLength(9);
     expect(CHESS_POSITIONS[0].label).toBe('A1');
     expect(CHESS_POSITIONS[8].label).toBe('C3');
@@ -193,13 +196,22 @@ describe('观众镜像与平台壳接线', () => {
     expect(scene).not.toContain('四角立柱');
   });
 
+  it('3D 外观按实物照片校准：米白台面 / 浅绿支撑柱 / 深棕多格棋盘小桌 / 黑拖链 / 黑吸盘 + 青色气管 / HMI 与 PLC 接口板', () => {
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    for (const t of [
+      'DragChain', '黑色拖链', 'SupportColumn', '浅绿圆柱', 'HmiPanel', 'PlcIoBoard',
+      '深棕多格棋盘', '黑色波纹橡胶吸盘', '青色气管', '铝型材条纹台面',
+      'VISUAL_ROWS', 'VISUAL_COLS', 'boardEdge', 'C.hose', 'C.cup', 'C.column',
+    ]) expect(scene).toContain(t);
+  });
+
   it('Z 高度按真实行程标定：下降 50mm 后吸盘底面贴近棋子顶面', () => {
     const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
     const frame = 0.52;
-    const base = -0.12;
+    const base = -0.104;
     const suctionUp = frame + base - 0.091;
     const suctionDown = suctionUp - GANTRY_AXIS.Z_STROKE * GANTRY_AXIS.MM2M * 2;
-    const pieceTop = 0.16 + 0.012 + 0.037;
+    const pieceTop = 0.16 + 0.028 + 0.037;
     expect(Math.abs(suctionDown - pieceTop)).toBeLessThan(0.005);
     expect(scene).toContain('suctionBottomDown');
     expect(scene).toContain('pieceTop');
