@@ -665,6 +665,24 @@ function checkGantryPlc() {
       return false;
     }
   }
+  // 设备 → PLC：6 路接近开关必须真的写回 PLC，不能只在面板 / 观众快照里显示
+  for (const token of ['GANTRY_SENSOR_FEEDBACK', 'gantrySensorBits', 'gantryBoolVarsFor']) {
+    if (!vars.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ 变量表缺传感器反馈 ${token}`);
+      return false;
+    }
+  }
+  for (const token of ['gantrySensorBits', 'lastSensorMask', 'writeCoils(SENSOR_COIL_BASE',
+    'writeVars(SENSOR_VAR_NAMES', 'if (write.success)']) {
+    if (!effects.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ effects 缺传感器回写 ${token}`);
+      return false;
+    }
+  }
+  if (!connection.includes('boolVariables')) {
+    console.error('[check][gantry-plc] ❌ 连接面板未下发 S7/三菱传感器布尔表');
+    return false;
+  }
   for (const token of ['GANTRY_X_POS', 'GANTRY_Y_TGT', 'GANTRY_HELD_W', 'GANTRY_PICK_CELL', 'GANTRY_PLACE_CELL']) {
     if (!vars.includes(token)) {
       console.error(`[check][gantry-plc] ❌ 字变量表缺 ${token}`);

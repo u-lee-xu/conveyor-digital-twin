@@ -9,7 +9,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useGantryStore, exportGantrySnapshot } from './stores/useGantryStore';
 import { GANTRY_DEMO_SEQUENCE } from './constants/gantryConstants';
-import { GANTRY_WORD_VARIABLES, GANTRY_ADDRESS_ROWS } from './constants/gantryVariables';
+import {
+  GANTRY_WORD_VARIABLES, GANTRY_ADDRESS_ROWS, GANTRY_SENSOR_FEEDBACK,
+  gantrySensorBits, gantryBoolVarsFor,
+} from './constants/gantryVariables';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../../..');
@@ -196,7 +199,7 @@ describe('演示模式：循环搬运', () => {
   });
 });
 
-describe('仿真模式与方案 A 虚拟 PLC', () => {
+describe('仿真模式与 PLC 交互', () => {
   it('仿真面板常驻三协议变量地址表、位置寄存器与只读状态', () => {
     const sim = read(`${PANEL}GantrySimPanel.tsx`);
     expect(sim).toContain('<GantryPlcConnection');
@@ -321,5 +324,28 @@ describe('仿真模式与方案 A 虚拟 PLC', () => {
     expect(s.pieces[0].x).toBe(120);
     expect(s.pieces[0].y).toBe(200);
     expect(s.pieces[0].held).toBe(false);
+  });
+
+  it('6 路接近开关按 sensor→PLC 回写：Modbus 走 coils，S7 / 三菱走变量名', () => {
+    expect(GANTRY_SENSOR_FEEDBACK).toHaveLength(6);
+    expect(GANTRY_SENSOR_FEEDBACK[0].modbus).toBe(29);
+    expect(GANTRY_SENSOR_FEEDBACK[5].modbus).toBe(34);
+    expect(gantrySensorBits({
+      origin: true, endMinus: false, endPlus: false,
+      xOrigin: false, xEndMinus: true, xEndPlus: false,
+    })).toEqual([true, false, false, false, true, false]);
+    expect(gantryBoolVarsFor('modbus')).toBeUndefined();
+    expect(gantryBoolVarsFor('s7')?.['GANTRY_SENSOR_ORIGIN']).toBe('M140.1');
+    expect(gantryBoolVarsFor('mitsubishi')?.['GANTRY_SENSOR_X_END_PLUS']).toBe('X6');
+    // 只在状态变化时发帧；写失败不更新掩码以便下轮重试
+    const effects = read(`${PANEL}GantryDeviceEffects.tsx`);
+    for (const t of ['writeCoils(SENSOR_COIL_BASE', 'writeVars(SENSOR_VAR_NAMES',
+      'lastSensorMask', 'getProtocol()', 'gantrySensorBits', 'if (write.success)']) {
+      expect(effects).toContain(t);
+    }
+    const conn = read(`${PANEL}GantryPlcConnection.tsx`);
+    expect(conn).toContain('boolVariables');
+    expect(conn).toContain('gantryBoolVarsFor');
+    expect(GANTRY_ADDRESS_ROWS.find((r) => r.signal.includes('原点与限位'))?.direction).toBe('设备 → PLC');
   });
 });
