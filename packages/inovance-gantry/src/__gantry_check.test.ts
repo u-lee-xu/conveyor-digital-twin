@@ -12,6 +12,8 @@ import {
   GANTRY_AXIS, GANTRY_BOARD, CHESS_POSITIONS, INITIAL_PIECES, cellToMm,
   GANTRY_SENSOR, computeSensors, SENSOR_DETAIL, CYLINDER_DETAIL,
   CARRIAGE_DETAIL, END_SUPPORT_DETAIL, MODULE_DETAIL,
+  GANTRY_VIEW_PRESETS, GANTRY_PART_STAGES, GANTRY_PART_STAGE_ORIGIN,
+  isGantryPartStage, isGantryViewKey,
 } from './constants/gantryConstants';
 import {
   GANTRY_HOLDING_REGISTERS, GANTRY_COILS, ETHERCAT_PDO_MAP,
@@ -215,6 +217,65 @@ describe('部件拆分（参照配药项目：单独设计完善后再组装）'
     expect(compat).toContain('兼容层');
     expect(compat).toContain("from '../gantry/components'");
     expect(compat).not.toContain('function LimitSensor');
+  });
+});
+
+describe('机位与部件展台（与传送带 / 配药同款交互）', () => {
+  it('5 个整机机位 + 7 个部件展台，各自有专用相机与 0.1m 标尺网格', () => {
+    expect(Object.keys(GANTRY_VIEW_PRESETS)).toEqual(['overview', 'top', 'front', 'zaxis', 'board']);
+    expect(Object.keys(GANTRY_PART_STAGES)).toHaveLength(7);
+    for (const [key, stage] of Object.entries(GANTRY_PART_STAGES)) {
+      expect(GANTRY_PART_STAGE_ORIGIN).toHaveProperty(key);
+      expect(stage.camera).toHaveLength(3);
+      expect(stage.target).toHaveLength(3);
+      expect(stage.fov).toBeGreaterThan(0);
+      expect(stage.grid).toBeGreaterThan(0);
+    }
+    expect(isGantryPartStage('zaxis')).toBe(true);
+    expect(isGantryPartStage('nope')).toBe(false);
+    expect(isGantryViewKey('top')).toBe(true);
+    expect(isGantryViewKey('nope')).toBe(false);
+  });
+
+  it('SceneContent 支持 ?stage= 短路，展台复用同一批组件', () => {
+    const scene = read(SCENE);
+    for (const t of ['useGantryViewStore', 'PartStageView', 'GantryCameraRig',
+      'renderBarePart', 'gridHelper', 'AssembledScene', "from './gantry/components'"]) {
+      expect(scene).toContain(t);
+    }
+    for (const kind of ['module', 'carriage', 'zaxis', 'sensor', 'endSupport', 'board', 'piece']) {
+      expect(scene).toContain(`case '${kind}'`);
+    }
+  });
+
+  it('相机阻尼过渡 + OrbitControls makeDefault + 右上角切换器 + URL 同步', () => {
+    const rig = read(COMP + 'GantryCameraRig.tsx');
+    for (const t of ['useFrame', 'useThree', 'lerp', 'updateProjectionMatrix', 'goalRef']) expect(rig).toContain(t);
+    const wrapper = read('packages/inovance-gantry/src/platform/GantrySceneWrapper.tsx');
+    expect(wrapper).toContain('makeDefault');
+    expect(wrapper).toContain('GantryViewSwitcher');
+    expect(wrapper).toContain('minDistance={activeStage ? 0.06 : 0.3}');
+    const sw = read('packages/inovance-gantry/src/platform/GantryViewSwitcher.tsx');
+    for (const t of ['data-dt-gantry-view-switcher', 'data-dt-gantry-stage-select',
+      'data-dt-gantry-stage-back', '返回整机']) expect(sw).toContain(t);
+    const store = read('packages/inovance-gantry/src/stores/useGantryViewStore.ts');
+    expect(store).toContain('history.replaceState');
+    expect(store).toContain('不污染设备真值');
+  });
+});
+
+describe('Z 轴导杆随动（用户指出「升降气缸还是不对」）', () => {
+  it('防转导杆固定在移动板上随 Z 伸出，缸体侧只有固定导套', () => {
+    const z = read(COMP + 'ZAxisAssembly.tsx');
+    expect(z).toContain('guide-bush-');   // 固定导套
+    expect(z).toContain('guide-');        // 随动导杆在 headRef 内
+    expect(z).toContain('D.GUIDE_LEN');
+    expect(z).toContain('GUIDE_BUSH_R');
+    expect(CYLINDER_DETAIL.GUIDE_LEN).toBeGreaterThan(0.1); // 大于视觉行程，始终留在导套内
+    // 导杆必须在 headRef 之后（移动板内），不能留在固定缸体段
+    const headAt = z.indexOf('<group ref={headRef}');
+    const guideAt = z.indexOf('key={`guide-${s}`}');
+    expect(guideAt).toBeGreaterThan(headAt);
   });
 });
 

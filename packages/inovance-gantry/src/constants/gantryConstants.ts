@@ -118,7 +118,9 @@ export const SENSOR_DETAIL = {
 export const CYLINDER_DETAIL = {
   BODY_R: 0.016, BODY_LEN: 0.062,
   CAP_R: 0.018, CAP_T: 0.006,
-  GUIDE_R: 0.0045, GUIDE_LEN: 0.075, GUIDE_X: 0.026,
+  /** 防转导杆固定在移动板上、穿过缸体导套随 Z 一起伸出，长度要大于行程 */
+  GUIDE_R: 0.0045, GUIDE_LEN: 0.17, GUIDE_X: 0.026,
+  GUIDE_BUSH_R: 0.009, GUIDE_BUSH_LEN: 0.02,
   ROD_R: 0.007,
   /** 缸体底面到吸盘支架顶面的基准距离（缩回时） */
   ROD_BASE: 0.052,
@@ -193,4 +195,74 @@ export function computeSensors(yMm: number, xMm = 0): GantrySensorState {
     xEndMinus: xMm <= s.X_END_MINUS + s.END_TOLERANCE,
     xEndPlus: xMm >= s.X_END_PLUS - s.END_TOLERANCE,
   };
+}
+
+// ============================================================
+// 机位 / 部件展台（与传送带分拣、自动配药同款交互）
+// ============================================================
+
+export type Vec3 = [number, number, number];
+export type GantryViewKey = 'overview' | 'top' | 'front' | 'zaxis' | 'board';
+
+export interface GantryViewPreset {
+  label: string;
+  desc: string;
+  camera: Vec3;
+  target: Vec3;
+  fov: number;
+}
+
+export const GANTRY_SCENE_CAMERA: Vec3 = [1.9, 1.25, 2.35];
+export const GANTRY_SCENE_TARGET: Vec3 = [0.45, 0.18, 0.6];
+export const GANTRY_SCENE_FOV = 40;
+
+/** ?view=<key>：整机不同观察机位，CameraRig 做阻尼过渡，用户拖拽后不再拉回 */
+export const GANTRY_VIEW_PRESETS: Record<GantryViewKey, GantryViewPreset> = {
+  overview: { label: '整机总览', desc: '斜俯视看整机与 XY 两轴', camera: GANTRY_SCENE_CAMERA, target: GANTRY_SCENE_TARGET, fov: GANTRY_SCENE_FOV },
+  top: { label: '俯视', desc: '从上方核对棋盘格与两轴行程', camera: [0.9, 2.6, 1.2], target: [0.45, 0.1, 0.6], fov: 42 },
+  front: { label: '正视', desc: '从棋盘正面看 X 横梁与 Z 气缸', camera: [0.9, 0.9, 2.7], target: [0.45, 0.34, 0.6], fov: 40 },
+  zaxis: { label: 'Z 轴近景', desc: '贴近核对笔形气缸、导杆与波纹吸盘', camera: [0.62, 0.72, 0.62], target: [0, 0.40, 0], fov: 32 },
+  board: { label: '棋盘俯视', desc: '核对 8x8 棋盘与三颗棋子', camera: [0.52, 1.05, 0.72], target: [0.52, 0.19, 0.52], fov: 40 },
+};
+
+export type GantryPartKind = 'module' | 'carriage' | 'zaxis' | 'sensor' | 'endSupport' | 'board' | 'piece';
+
+export interface GantryPartStage {
+  label: string;
+  camera: Vec3;
+  target: Vec3;
+  fov: number;
+  /** 0.1m 标尺网格边长 */
+  grid: number;
+  gridY: number;
+}
+
+/** ?stage=<key>：单个部件居中于自身局部原点、1:1 真实尺度 + 0.1m 标尺网格 */
+export const GANTRY_PART_STAGES: Record<GantryPartKind, GantryPartStage> = {
+  module: { label: '线性模组', camera: [0.62, 0.46, 0.72], target: [0, 0.02, 0], fov: 40, grid: 0.8, gridY: -0.05 },
+  carriage: { label: 'X 包梁滑块', camera: [0.30, 0.24, 0.36], target: [0, 0, 0], fov: 36, grid: 0.3, gridY: -0.06 },
+  zaxis: { label: 'Z 升降总成', camera: [0.34, 0.16, 0.40], target: [0, -0.12, 0], fov: 34, grid: 0.4, gridY: -0.21 },
+  sensor: { label: '接近开关与挡片', camera: [0.24, 0.16, 0.28], target: [0, -0.01, 0], fov: 34, grid: 0.24, gridY: -0.05 },
+  endSupport: { label: '端部宽立板端座', camera: [0.48, 0.34, 0.56], target: [0, 0.24, 0], fov: 38, grid: 0.6, gridY: -0.02 },
+  board: { label: '棋盘小桌', camera: [0.72, 0.62, 0.86], target: [0.32, 0, 0.32], fov: 42, grid: 0.9, gridY: -0.02 },
+  piece: { label: '象棋棋子', camera: [0.16, 0.12, 0.18], target: [0, 0, 0], fov: 32, grid: 0.16, gridY: -0.012 },
+};
+
+/** 展台局部原点定义，组件实现必须遵守 */
+export const GANTRY_PART_STAGE_ORIGIN: Record<GantryPartKind, string> = {
+  module: '模组中心，长边沿 X；y=0 为模组轴线',
+  carriage: '包梁滑块几何中心',
+  zaxis: 'X 滑块原点；向下为 -Y，吸盘头随 Z 行程移动',
+  sensor: '开关支架在型材侧面的安装点；挡片在滑块一侧',
+  endSupport: '端座底部中心；立柱沿 +Y',
+  board: '棋盘小桌左上角格心；y=0 为台面',
+  piece: '棋子底面中心',
+};
+
+export function isGantryPartStage(s: string | null): s is GantryPartKind {
+  return !!s && Object.prototype.hasOwnProperty.call(GANTRY_PART_STAGES, s);
+}
+
+export function isGantryViewKey(v: string | null): v is GantryViewKey {
+  return !!v && Object.prototype.hasOwnProperty.call(GANTRY_VIEW_PRESETS, v);
 }
