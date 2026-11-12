@@ -155,7 +155,8 @@ export const MODULE_DETAIL = {
  * X / Y 两轴各 3 个接近开关（STEP 的「光遮断器固定片」「GTH8-感应片」）：
  *   两个终端限位在轴两端，原点传感器在原点方向终端限位的内侧（往行程内 25mm）。
  * Y 轴：负限位 0 / 原点 20 / 正限位 600；X 轴：负限位 0 / 原点 25 / 正限位 450。
- * 上电停在机械零点时负限位被挡片压住、原点未触发 = 「未回零」。
+ * 上电停在机械零点时负限位被挡片压住、原点未触发 = 「未回原点」；
+ * 面板「回原点」按钮把两轴送到 X_ORIGIN / Y_ORIGIN，而不是机械零点 0。
  */
 export const GANTRY_SENSOR = {
   Y_ORIGIN: 20, Y_END_MINUS: 0, Y_END_PLUS: GANTRY_AXIS.Y_TRAVEL,

@@ -165,6 +165,27 @@ describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位�
     expect(scene).toContain('<SensorFlag axis="z"');
   });
 
+  it('面板「回原点」送到原点传感器位置，不是机械零点 0', () => {
+    const panel = read('packages/inovance-gantry/src/platform/GantryModePanel.tsx');
+    expect(panel).toContain('aria-label="回原点"');
+    expect(panel).toContain('GANTRY_SENSOR.X_ORIGIN');
+    expect(panel).toContain('GANTRY_SENSOR.Y_ORIGIN');
+    expect(panel).not.toContain('回零');
+    // 行为：走到原点后两轴原点传感器触发、负限位释放
+    const st = useGantryStore.getState();
+    st.setControlSource('local');
+    st.setXTarget(GANTRY_SENSOR.X_ORIGIN);
+    st.setYTarget(GANTRY_SENSOR.Y_ORIGIN);
+    runFrames(120);
+    const s = useGantryStore.getState();
+    expect(s.x.position).toBeCloseTo(GANTRY_SENSOR.X_ORIGIN, 0);
+    expect(s.y.position).toBeCloseTo(GANTRY_SENSOR.Y_ORIGIN, 0);
+    expect(s.sensors.xOrigin).toBe(true);
+    expect(s.sensors.origin).toBe(true);
+    expect(s.sensors.xEndMinus).toBe(false);
+    expect(s.sensors.endMinus).toBe(false);
+  });
+
   it('两轴各装 3 个开关，面板 / 线圈表 / EtherCAT / 快照键齐全', () => {
     const sensor = read(COMP + 'SensorSet.tsx');
     expect(sensor).toContain('endMinus');
