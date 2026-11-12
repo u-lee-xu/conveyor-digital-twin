@@ -93,8 +93,11 @@ function AxisSensors({ sensorY }: { sensorY: number }) {
 }
 
 export function GantrySceneContent() {
-  // 惰性烘焙程序化纹理：只在首次进入龙门场景时执行，其它设备场景不付这份成本
-  useMemo(() => { applyProceduralTextures(); return true; }, []);
+  // 惰性烘焙程序化纹理：只在首次进入龙门场景时执行，其它设备场景不付这份成本。
+  // ?noProcTex=1 仅用于性能 A/B 测量（跳过纹理挂载），默认行为不变。
+  const skipProcTex = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('noProcTex');
+  useMemo(() => { if (!skipProcTex) applyProceduralTextures(); return true; }, [skipProcTex]);
   const yBridge = useRef<Group>(null);
   const xSlider = useRef<Group>(null);
   const zHead = useRef<Group>(null);
