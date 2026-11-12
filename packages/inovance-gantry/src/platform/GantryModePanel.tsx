@@ -108,7 +108,10 @@ export function GantryModePanel() {
           CYL_DOWN {cylinder.extended ? 1 : 0} VACUUM {suction.vacuum ? 1 : 0} HAS_PART {suction.hasPart ? 1 : 0}
         </div>
         <div data-dt-gantry-sensors style={{ fontFamily: 'monospace', marginTop: 4 }}>
-          原点 {sensors.origin ? 'ON' : 'OFF'} 负终端 {sensors.endMinus ? 'ON' : 'OFF'} 正终端 {sensors.endPlus ? 'ON' : 'OFF'}
+          Y 原点 {sensors.origin ? 'ON' : 'OFF'} 负终端 {sensors.endMinus ? 'ON' : 'OFF'} 正终端 {sensors.endPlus ? 'ON' : 'OFF'}
+        </div>
+        <div data-dt-gantry-sensors-x style={{ fontFamily: 'monospace', marginTop: 3 }}>
+          X 原点 {sensors.xOrigin ? 'ON' : 'OFF'} 负终端 {sensors.xEndMinus ? 'ON' : 'OFF'} 正终端 {sensors.xEndPlus ? 'ON' : 'OFF'}
         </div>
       </div>
 

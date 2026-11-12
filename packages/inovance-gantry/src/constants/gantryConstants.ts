@@ -29,6 +29,10 @@ export const GANTRY_AXIS = {
   MM2M: 0.001,
 } as const;
 
+/** 视觉放大系数：所有部件共用，mm → 3D 世界坐标（米）的换算唯一来源 */
+export const GANTRY_VIEW_SCALE = 2;
+export const toViewM = (mm: number) => mm * GANTRY_AXIS.MM2M * GANTRY_VIEW_SCALE;
+
 /** 教学用 3x3 棋盘格（沿用旧场景 A1~C3 命名），格心坐标 = OFFSET + index*SPACING + SPACING/2 */
 export const GANTRY_BOARD = {
   /** 教学落点仍沿用旧场景 3x3（A1~C3），与变量/面板/自检口径一致 */
@@ -92,41 +96,101 @@ export const INITIAL_PIECES: ChessPiece[] = [
 export const PICK_TOLERANCE = 8;
 
 /**
- * Y 驱动模组上的 3 个接近开关（参考 STEP 的「光遮断器固定片」「GTH8-感应片」）：
- *   1 个原点（ORIGIN，绿色），2 个终端限位（END_MINUS / END_PLUS，黄色）。
- * 原点在轴内侧 20mm，负终端在机械零点 0mm，正终端在行程末端 600mm；
- * 上电停在机械零点时负终端压住、原点未触发，符合「未回零」状态。
+ * ========== 部件细节尺寸（单一来源，参照配药项目 CYLINDER_DETAIL / SENSOR_DETAIL 口径） ==========
+ * 每个部件的可见尺寸、支架、螺栓、行程都在下面集中定义，组件只引用不另写数字。
+ */
+
+/** 接近开关 + 固定支架 + 随滑块移动的金属挡片（感应片） */
+export const SENSOR_DETAIL = {
+  BODY_W: 0.024, BODY_H: 0.036, BODY_D: 0.018,
+  LED_R: 0.007,
+  /** L 形固定支架：一端夹在模组型材 T 槽侧面，一端托住开关，消除「悬浮」 */
+  BRACKET_W: 0.014, BRACKET_T: 0.005,
+  BRACKET_ARM: 0.046,       // 模组侧面 → 开关中心
+  BRACKET_RISE: 0.026,      // 竖直吊板高度
+  /** 金属挡片：固定在移动滑块上，随滑块经过开关感应面 */
+  FLAG_W: 0.026, FLAG_H: 0.018, FLAG_T: 0.002,
+  FLAG_ARM: 0.030,          // 滑块 → 挡片的伸出臂
+  MOUNT_SIDE: 0.050,        // 开关中心离模组轴线
+} as const;
+
+/** 笔形升降气缸：缸体固定、活塞杆随 Z 行程伸缩，任何位置都不与缸体脱开 */
+export const CYLINDER_DETAIL = {
+  BODY_R: 0.016, BODY_LEN: 0.062,
+  CAP_R: 0.018, CAP_T: 0.006,
+  GUIDE_R: 0.0045, GUIDE_LEN: 0.075, GUIDE_X: 0.026,
+  ROD_R: 0.007,
+  /** 缸体底面到吸盘支架顶面的基准距离（缩回时） */
+  ROD_BASE: 0.052,
+  /** 活塞杆顶端必须始终埋进缸体内这一小段，靠这个重叠量保证不脱开 */
+  ROD_OVERLAP: 0.018,
+  HEAD_BRACKET_T: 0.008,
+  BRASS_R: 0.005, BRASS_LEN: 0.016,
+} as const;
+
+/** 包梁式 X 滑块 */
+export const CARRIAGE_DETAIL = {
+  W: 0.075, H: 0.062, D: 0.090,
+  BOLT_X: 0.025, BOLT_Z: 0.030,
+  PLATE_W: 0.055, PLATE_T: 0.012, PLATE_D: 0.060,
+} as const;
+
+/** 两端宽立板端座 */
+export const END_SUPPORT_DETAIL = {
+  W: 0.085, D: 0.050,
+  FLANGE_W: 0.090, FLANGE_T: 0.014, FLANGE_D: 0.075,
+  Z: -0.075,
+} as const;
+
+/** 线性模组型材 / 导轨 / 丝杆 */
+export const MODULE_DETAIL = {
+  SECTION: 0.062, HALF: 0.031,
+  RAIL_W: 0.007, RAIL_H: 0.004, RAIL_OFFSET: 0.018,
+  SCREW_R: 0.006, BEARING_R: 0.013, BEARING_LEN: 0.014,
+  BOLT_PITCH: 0.09,
+} as const;
+
+/**
+ * X / Y 两轴各 3 个接近开关（STEP 的「光遮断器固定片」「GTH8-感应片」）：
+ *   两个终端限位在轴两端，原点传感器在原点方向终端限位的内侧（往行程内 25mm）。
+ * Y 轴：负限位 0 / 原点 20 / 正限位 600；X 轴：负限位 0 / 原点 25 / 正限位 450。
+ * 上电停在机械零点时负限位被挡片压住、原点未触发 = 「未回零」。
  */
 export const GANTRY_SENSOR = {
-  ORIGIN_Y: 20,
-  END_MINUS_Y: 0,
-  END_PLUS_Y: 600,
+  Y_ORIGIN: 20, Y_END_MINUS: 0, Y_END_PLUS: GANTRY_AXIS.Y_TRAVEL,
+  Y_ORIGIN_MM: 20, Y_END_MINUS_MM: 0, Y_END_PLUS_MM: 588,
+  X_END_MINUS: 0, X_ORIGIN: 25, X_END_PLUS: GANTRY_AXIS.X_TRAVEL,
+  X_END_MINUS_MM: 0, X_ORIGIN_MM: 25, X_END_PLUS_MM: 438,
   TOLERANCE: 8,
   END_TOLERANCE: 4,
-  /** 3D 中沿 Y 模组（世界 Z 方向）的安装位置 mm */
-  ORIGIN_MM: 20,
-  END_MINUS_MM: 0,
-  END_PLUS_MM: 588,
-  /** 安装侧：原点在模组左侧，两个终端在右侧，避免同位置重叠 */
-  SIDE_X: 0.048,
-  BODY_W: 0.024,
-  BODY_H: 0.036,
-  BODY_D: 0.018,
-  LED_R: 0.007,
+  SIDE_X: SENSOR_DETAIL.MOUNT_SIDE,
+  // 兼容旧引用，统一从 SENSOR_DETAIL 取值
+  BODY_W: SENSOR_DETAIL.BODY_W,
+  BODY_H: SENSOR_DETAIL.BODY_H,
+  BODY_D: SENSOR_DETAIL.BODY_D,
+  LED_R: SENSOR_DETAIL.LED_R,
 } as const;
 
 export interface GantrySensorState {
+  /** Y 轴 3 个（保留旧键名，兼容既有快照 / 面板 / 自检） */
   origin: boolean;
   endMinus: boolean;
   endPlus: boolean;
+  /** X 轴 3 个：两端限位 + 原点在原点侧限位内侧 */
+  xOrigin: boolean;
+  xEndMinus: boolean;
+  xEndPlus: boolean;
 }
 
-/** 由 Y 轴 position 坐标变量派生的传感器触发状态（PLC 输入 / 面板 / 观众共用） */
-export function computeSensors(yMm: number): GantrySensorState {
+/** 由 X / Y 的 position 坐标变量派生 6 路 PLC 输入（面板 / 观众 / 自检同源） */
+export function computeSensors(yMm: number, xMm = 0): GantrySensorState {
   const s = GANTRY_SENSOR;
   return {
-    origin: Math.abs(yMm - s.ORIGIN_Y) <= s.TOLERANCE,
-    endMinus: yMm <= s.END_MINUS_Y + s.END_TOLERANCE,
-    endPlus: yMm >= s.END_PLUS_Y - s.END_TOLERANCE,
+    origin: Math.abs(yMm - s.Y_ORIGIN) <= s.TOLERANCE,
+    endMinus: yMm <= s.Y_END_MINUS + s.END_TOLERANCE,
+    endPlus: yMm >= s.Y_END_PLUS - s.END_TOLERANCE,
+    xOrigin: Math.abs(xMm - s.X_ORIGIN) <= s.TOLERANCE,
+    xEndMinus: xMm <= s.X_END_MINUS + s.END_TOLERANCE,
+    xEndPlus: xMm >= s.X_END_PLUS - s.END_TOLERANCE,
   };
 }

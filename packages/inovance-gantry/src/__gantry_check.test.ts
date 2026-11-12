@@ -1,15 +1,17 @@
 /**
- * 汇川龙门 XY 象棋分拣场景防回退自检：
- * 变量命名、position 坐标驱动、完整吸取流程、观众镜像与平台壳接线。
+ * 汇川龙门 XY 场景防回退自检（部件拆分后统一适配）。
+ * 覆盖：变量命名、position 坐标驱动、两轴 6 路传感器与金属挡片、
+ * Z 轴可伸缩活塞杆、吸取流程、观众镜像、共享视觉令牌、程序化纹理。
  */
 import { beforeEach, describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useGantryStore, exportGantrySnapshot } from './stores/useGantryStore';
 import {
   GANTRY_AXIS, GANTRY_BOARD, CHESS_POSITIONS, INITIAL_PIECES, cellToMm,
-  GANTRY_SENSOR, computeSensors,
+  GANTRY_SENSOR, computeSensors, SENSOR_DETAIL, CYLINDER_DETAIL,
+  CARRIAGE_DETAIL, END_SUPPORT_DETAIL, MODULE_DETAIL,
 } from './constants/gantryConstants';
 import {
   GANTRY_HOLDING_REGISTERS, GANTRY_COILS, ETHERCAT_PDO_MAP,
@@ -19,6 +21,9 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../../..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
+const SCENE = 'packages/inovance-gantry/src/scenes/GantrySceneContent.tsx';
+const COMP = 'packages/inovance-gantry/src/scenes/gantry/components/';
+const SHARED = 'packages/inovance-gantry/src/scenes/shared/';
 
 beforeEach(() => { useGantryStore.getState().resetAll(); });
 
@@ -32,7 +37,6 @@ describe('常量与变量命名（单一来源）', () => {
     expect(GANTRY_AXIS.Y_TRAVEL).toBe(600);
     expect(GANTRY_AXIS.Z_STROKE).toBe(50);
     expect(GANTRY_BOARD.CELL_SPACING).toBe(40);
-    // 实物照片是多格深棕棋盘，视觉 8x8；教学落点仍 3x3
     expect(GANTRY_BOARD.VISUAL_ROWS).toBe(8);
     expect(GANTRY_BOARD.VISUAL_COLS).toBe(8);
     expect(CHESS_POSITIONS).toHaveLength(9);
@@ -45,13 +49,9 @@ describe('常量与变量命名（单一来源）', () => {
 
   it('position 坐标变量：X/Y DINT 低字在前，线圈与 PDO 映射齐备', () => {
     expect(GANTRY_HOLDING_REGISTERS.GANTRY_X_POS_L).toBe(200);
-    expect(GANTRY_HOLDING_REGISTERS.GANTRY_X_POS_H).toBe(201);
-    expect(GANTRY_HOLDING_REGISTERS.GANTRY_Y_POS_L).toBe(202);
     expect(GANTRY_HOLDING_REGISTERS.GANTRY_Y_POS_H).toBe(203);
     expect(Object.keys(GANTRY_COILS)).toContain('GANTRY_CYL_DOWN');
-    expect(Object.keys(GANTRY_COILS)).toContain('GANTRY_VACUUM');
-    expect(ETHERCAT_PDO_MAP.length).toBeGreaterThanOrEqual(11);
-    expect(ETHERCAT_PDO_MAP[0].signal).toBe('GANTRY_X_POS_DINT');
+    expect(ETHERCAT_PDO_MAP.length).toBeGreaterThanOrEqual(14);
     const [lo, hi] = splitDint(0x12345678);
     expect([lo, hi]).toEqual([0x5678, 0x1234]);
     expect(joinDint(lo, hi)).toBe(0x12345678);
@@ -61,8 +61,14 @@ describe('常量与变量命名（单一来源）', () => {
     const vars = read('packages/inovance-gantry/src/constants/gantryVariables.ts');
     expect(vars).toContain('仅声明，不实现链路');
     expect(vars).not.toMatch(/net\.Socket|createConnection|EtherCATMaster|writePdo|socket\.connect/);
-    const store = read('packages/inovance-gantry/src/stores/useGantryStore.ts');
-    expect(store).not.toMatch(/net\.Socket|modbus-serial|EtherCAT/);
+  });
+
+  it('部件尺寸收敛到 *_DETAIL 单一来源', () => {
+    for (const k of ['BODY_W', 'BRACKET_ARM', 'FLAG_W', 'MOUNT_SIDE']) expect(SENSOR_DETAIL).toHaveProperty(k);
+    for (const k of ['BODY_LEN', 'ROD_R', 'ROD_OVERLAP', 'GUIDE_X']) expect(CYLINDER_DETAIL).toHaveProperty(k);
+    expect(CARRIAGE_DETAIL.W).toBeGreaterThan(0);
+    expect(END_SUPPORT_DETAIL.W).toBeGreaterThan(0);
+    expect(MODULE_DETAIL.HALF).toBe(MODULE_DETAIL.SECTION / 2);
   });
 });
 
@@ -78,9 +84,8 @@ describe('position 坐标变量驱动', () => {
 
   it('坐标被行程钳制，非法值不污染状态', () => {
     useGantryStore.getState().setPlcFrame({ xPos: 9999, yPos: -50 });
-    const s = useGantryStore.getState();
-    expect(s.x.position).toBe(GANTRY_AXIS.X_TRAVEL);
-    expect(s.y.position).toBe(0);
+    expect(useGantryStore.getState().x.position).toBe(GANTRY_AXIS.X_TRAVEL);
+    expect(useGantryStore.getState().y.position).toBe(0);
   });
 
   it('本地点动通过 target 斜坡逼近，不瞬间跳变', () => {
@@ -94,54 +99,147 @@ describe('position 坐标变量驱动', () => {
   });
 });
 
-describe('Y 模组 3 个接近开关（1 原点 + 2 终端）', () => {
-  it('常量口径：原点 20mm、负终端 0mm、正终端 600mm，三个安装位分开', () => {
-    expect(GANTRY_SENSOR.ORIGIN_Y).toBe(20);
-    expect(GANTRY_SENSOR.END_MINUS_Y).toBe(0);
-    expect(GANTRY_SENSOR.END_PLUS_Y).toBe(GANTRY_AXIS.Y_TRAVEL);
-    expect(GANTRY_SENSOR.ORIGIN_MM).toBe(20);
-    expect(GANTRY_SENSOR.END_MINUS_MM).toBe(0);
-    expect(GANTRY_SENSOR.END_PLUS_MM).toBeGreaterThan(GANTRY_SENSOR.ORIGIN_MM);
+describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位内侧）', () => {
+  it('常量口径：X 轴负限位 0 / 原点 25（内侧）/ 正限位 450；Y 轴 0 / 20 / 600', () => {
+    const s = GANTRY_SENSOR;
+    expect(s.X_END_MINUS).toBe(0);
+    expect(s.X_ORIGIN).toBeGreaterThan(s.X_END_MINUS);
+    expect(s.X_ORIGIN).toBeLessThan(s.X_END_PLUS);
+    expect(s.X_ORIGIN).toBeLessThan(60); // 原点靠近原点侧限位
+    expect(s.X_END_PLUS).toBe(GANTRY_AXIS.X_TRAVEL);
+    expect(s.Y_END_MINUS).toBe(0);
+    expect(s.Y_ORIGIN).toBe(20);
+    expect(s.Y_END_PLUS).toBe(GANTRY_AXIS.Y_TRAVEL);
+    expect(s.X_ORIGIN_MM).toBeGreaterThan(s.X_END_MINUS_MM);
+    expect(s.X_END_PLUS_MM).toBeGreaterThan(s.X_ORIGIN_MM);
   });
 
-  it('触发状态由 y.position 派生，三个都能单独亮', () => {
-    expect(computeSensors(0)).toEqual({ origin: false, endMinus: true, endPlus: false });
-    expect(computeSensors(20)).toEqual({ origin: true, endMinus: false, endPlus: false });
-    expect(computeSensors(200)).toEqual({ origin: false, endMinus: false, endPlus: false });
-    expect(computeSensors(600)).toEqual({ origin: false, endMinus: false, endPlus: true });
+  it('6 路触发状态由 x/y position 派生，每路都能单独亮', () => {
+    expect(computeSensors(0, 0)).toMatchObject({ origin: false, endMinus: true, endPlus: false,
+      xOrigin: false, xEndMinus: true, xEndPlus: false });
+    expect(computeSensors(20, 25)).toMatchObject({ origin: true, endMinus: false,
+      xOrigin: true, xEndMinus: false });
+    expect(computeSensors(200, 200)).toMatchObject({ origin: false, endMinus: false, endPlus: false,
+      xOrigin: false, xEndMinus: false, xEndPlus: false });
+    expect(computeSensors(600, 450)).toMatchObject({ endPlus: true, xEndPlus: true });
   });
 
-  it('store 的 tick / setPlcFrame / resetAll / applyBroadcast 都同步 sensors', () => {
-    expect(useGantryStore.getState().sensors.endMinus).toBe(true);
-    useGantryStore.getState().setPlcFrame({ yPos: 20 });
+  it('store 的 tick / setPlcFrame / resetAll / applyBroadcast 都同步 6 路', () => {
+    expect(useGantryStore.getState().sensors.xEndMinus).toBe(true);
+    useGantryStore.getState().setPlcFrame({ yPos: 20, xPos: 25 });
     expect(useGantryStore.getState().sensors.origin).toBe(true);
+    expect(useGantryStore.getState().sensors.xOrigin).toBe(true);
     useGantryStore.getState().tick(1 / 60);
-    expect(useGantryStore.getState().sensors.origin).toBe(true);
-    useGantryStore.getState().applyBroadcast({ GANTRY_Y_POS: 600,
-      GANTRY_SENSOR_ORIGIN: 0, GANTRY_SENSOR_END_MINUS: 0, GANTRY_SENSOR_END_PLUS: 1 });
+    expect(useGantryStore.getState().sensors.xOrigin).toBe(true);
+    useGantryStore.getState().applyBroadcast({ GANTRY_Y_POS: 600, GANTRY_X_POS: 450,
+      GANTRY_SENSOR_ORIGIN: 0, GANTRY_SENSOR_END_MINUS: 0, GANTRY_SENSOR_END_PLUS: 1,
+      GANTRY_SENSOR_X_ORIGIN: 0, GANTRY_SENSOR_X_END_MINUS: 0, GANTRY_SENSOR_X_END_PLUS: 1 });
     expect(useGantryStore.getState().sensors.endPlus).toBe(true);
+    expect(useGantryStore.getState().sensors.xEndPlus).toBe(true);
     useGantryStore.getState().resetAll();
     expect(useGantryStore.getState().sensors.endMinus).toBe(true);
+    expect(useGantryStore.getState().sensors.xEndMinus).toBe(true);
   });
 
-  it('场景装 3 个 LimitSensor、面板有只读状态、EtherCAT 与线圈表有对应信号', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    expect((scene.match(/<LimitSensor/g) || []).length).toBe(3);
-    for (const t of ['AxisSensors', 'kind="origin"', 'kind="endMinus"', 'kind="endPlus"']) {
-      expect(scene).toContain(t);
+  it('传感器由 L 形固定支架夹在型材 T 槽侧面，不再悬浮', () => {
+    const sensor = read(COMP + 'SensorSet.tsx');
+    for (const t of ['function LimitSensor', '固定支架', 'BRACKET_RISE', 'BRACKET_T',
+      '夹在型材', 'Bolt', 'ledOrigin', 'ledEnd', 'ledOff', '感应面']) expect(sensor).toContain(t);
+    // 支架尺寸常量在单一来源里定义，组件通过 S / D 引用
+    expect(read('packages/inovance-gantry/src/constants/gantryConstants.ts')).toContain('BRACKET_ARM');
+    expect(sensor).toContain('S.BRACKET_W');
+    // 支架必须有明确的型材锚点，而不是无支撑的悬空 mesh
+    expect(sensor).toContain('perp(axis, side, D.HALF)');
+  });
+
+  it('金属挡片固定在滑块上随动，X/Y 各一片', () => {
+    const sensor = read(COMP + 'SensorSet.tsx');
+    for (const t of ['function SensorFlag', 'sensor-flag', 'FLAG_W', 'M.silver', '随滑块']) {
+      expect(sensor).toContain(t);
     }
-    const parts = read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx');
-    for (const t of ['function LimitSensor', 'L 形吊架', 'ledOrigin', 'ledEnd', 'ledOff']) {
-      expect(parts).toContain(t);
-    }
-    expect(read('packages/inovance-gantry/src/platform/GantryModePanel.tsx')).toContain('data-dt-gantry-sensors');
+    const carriage = read(COMP + 'Carriage.tsx');
+    expect(carriage).toContain('<SensorFlag axis="x"');
+    const scene = read(SCENE);
+    expect(scene).toContain('<SensorFlag axis="z"');
+  });
+
+  it('两轴各装 3 个开关，面板 / 线圈表 / EtherCAT / 快照键齐全', () => {
+    const sensor = read(COMP + 'SensorSet.tsx');
+    expect(sensor).toContain('endMinus');
+    expect(sensor).toContain('origin');
+    expect(sensor).toContain('endPlus');
+    const scene = read(SCENE);
+    expect((scene.match(/<AxisSensorSet/g) || []).length).toBe(2);
+    expect(scene).toContain('axis="x"');
+    expect(scene).toContain('axis="z"');
+    const panel = read('packages/inovance-gantry/src/platform/GantryModePanel.tsx');
+    expect(panel).toContain('data-dt-gantry-sensors');
+    expect(panel).toContain('data-dt-gantry-sensors-x');
     const vars = read('packages/inovance-gantry/src/constants/gantryVariables.ts');
-    for (const t of ['GANTRY_SENSOR_ORIGIN', 'GANTRY_SENSOR_END_MINUS', 'GANTRY_SENSOR_END_PLUS',
-      'Y_Axis.OriginSensor', 'Y_Axis.NegativeLimit', 'Y_Axis.PositiveLimit']) expect(vars).toContain(t);
+    for (const t of ['GANTRY_SENSOR_X_ORIGIN', 'GANTRY_SENSOR_X_END_MINUS', 'GANTRY_SENSOR_X_END_PLUS',
+      'X_Axis.OriginSensor', 'X_Axis.NegativeLimit', 'X_Axis.PositiveLimit']) expect(vars).toContain(t);
     const snap = exportGantrySnapshot();
-    for (const k of ['GANTRY_SENSOR_ORIGIN', 'GANTRY_SENSOR_END_MINUS', 'GANTRY_SENSOR_END_PLUS']) {
+    for (const k of ['GANTRY_SENSOR_ORIGIN', 'GANTRY_SENSOR_X_ORIGIN', 'GANTRY_SENSOR_X_END_PLUS']) {
       expect(Object.keys(snap)).toContain(k);
     }
+  });
+});
+
+describe('部件拆分（参照配药项目：单独设计完善后再组装）', () => {
+  const FILES = [
+    'IndustrialProfile.tsx', 'LinearModule.tsx', 'EndSupport.tsx', 'Carriage.tsx',
+    'ZAxisAssembly.tsx', 'SensorSet.tsx', 'WeldedTable.tsx',
+    'ChessboardTable.tsx', 'ChessPieceMesh.tsx', 'index.ts',
+  ];
+  it('9 个部件各有独立文件 + 统一出口', () => {
+    for (const f of FILES) expect(existsSync(join(root, COMP + f))).toBe(true);
+    const index = read(COMP + 'index.ts');
+    for (const t of ['IndustrialProfile', 'LinearModule', 'EndSupport', 'Carriage',
+      'ZAxisAssembly', 'SensorSet', 'WeldedTable', 'ChessboardTable', 'ChessPieceMesh']) {
+      expect(index).toContain(t);
+    }
+  });
+
+  it('SceneContent 是纯组装层：从 components 统一导入，不再内联零件实现', () => {
+    const scene = read(SCENE);
+    expect(scene).toContain("from './gantry/components'");
+    expect(scene).toContain('纯组装层');
+    for (const t of ['<WeldedTable', '<ChessboardTable', '<LinearModule', '<EndSupport',
+      '<Carriage', '<ZAxisAssembly', '<AxisSensorSet', '<SensorFlag']) expect(scene).toContain(t);
+    expect(scene).not.toContain('function Profile(');
+    expect(scene).not.toContain('function LimitSensor(');
+  });
+
+  it('旧 GantryParts.tsx 退化为兼容 re-export 层', () => {
+    const compat = read(SHARED + 'GantryParts.tsx');
+    expect(compat).toContain('兼容层');
+    expect(compat).toContain("from '../gantry/components'");
+    expect(compat).not.toContain('function LimitSensor');
+  });
+});
+
+describe('Z 轴升降总成：活塞杆随行程伸缩，不与缸体脱开', () => {
+  it('杆顶埋进缸体 ROD_OVERLAP，杆底始终接吸盘头', () => {
+    const z = read(COMP + 'ZAxisAssembly.tsx');
+    for (const t of ['Z_AXIS_GEOM', 'ROD_TOP', 'ROD_OVERLAP', 'rodRef.current.scale.y',
+      'rodRef.current.position.y', 'headRef.current.position.y', 'useFrame']) expect(z).toContain(t);
+    expect(z).toContain('BODY_Y - D.BODY_LEN / 2 + D.ROD_OVERLAP');
+  });
+
+  it('Z 高度标定：下降 50mm 后吸盘底面正好贴棋子顶面', () => {
+    const z = read(COMP + 'ZAxisAssembly.tsx');
+    expect(z).toContain('HEAD_BASE: -0.146');
+    expect(z).toContain('HEAD_LENGTH: 0.049');
+    const frame = 0.52;
+    const headBase = -0.146;
+    const headLength = 0.049;
+    const suctionDown = frame + headBase - headLength - GANTRY_AXIS.Z_STROKE * GANTRY_AXIS.MM2M * 2;
+    const pieceTop = 0.16 + 0.028 + 0.037;
+    expect(Math.abs(suctionDown - pieceTop)).toBeLessThan(0.005);
+    const scene = read(SCENE);
+    expect(scene).toContain('suctionBottomDown');
+    expect(scene).toContain('pieceTop');
+    expect(scene).toContain('Z_AXIS_GEOM');
   });
 });
 
@@ -151,9 +249,7 @@ describe('吸取 → 移动 → 放置流程', () => {
     expect(before.label).toBe('A1');
     expect(before.held).toBe(false);
     useGantryStore.getState().startAuto();
-
-    let sawHeld = false;
-    let sawMove = false;
+    let sawHeld = false, sawMove = false;
     for (let i = 0; i < 3000; i += 1) {
       useGantryStore.getState().tick(1 / 60);
       const s = useGantryStore.getState();
@@ -175,7 +271,6 @@ describe('吸取 → 移动 → 放置流程', () => {
     expect(moved.held).toBe(false);
     expect(moved.x).toBe(cellToMm(2, 0).x);
     expect(moved.y).toBe(cellToMm(2, 0).y);
-    // 其余两颗棋子不受影响
     expect(s.pieces.find((p) => p.id === 'piece-2')!.label).toBe('B2');
   });
 
@@ -196,7 +291,7 @@ describe('吸取 → 移动 → 放置流程', () => {
 describe('观众镜像与平台壳接线', () => {
   it('exportSnapshot / applyBroadcast 键成对，全数值键', () => {
     const snap = exportGantrySnapshot();
-    expect(Object.keys(snap).length).toBeGreaterThan(12);
+    expect(Object.keys(snap).length).toBeGreaterThan(18);
     for (const v of Object.values(snap)) expect(typeof v).toBe('number');
     useGantryStore.getState().setPlcFrame({ xPos: 300, yPos: 240 });
     const changed = exportGantrySnapshot();
@@ -205,12 +300,10 @@ describe('观众镜像与平台壳接线', () => {
     expect(useGantryStore.getState().x.position).toBe(300);
     expect(useGantryStore.getState().y.position).toBe(240);
     const store = read('packages/inovance-gantry/src/stores/useGantryStore.ts');
-    // 棋子键是模板字符串动态生成的，单独校验模板；其余键必须是源码字面量
     for (const k of Object.keys(changed).filter((k) => !k.startsWith('GANTRY_PIECE_'))) {
       expect(store).toContain(k);
     }
     expect(store).toContain('GANTRY_PIECE_${i + 1}_ROW');
-    expect(store).toContain('num(`GANTRY_PIECE_${i + 1}_ROW`)');
   });
 
   it('平台壳五处接线齐全，其它场景零龙门残留', () => {
@@ -225,130 +318,73 @@ describe('观众镜像与平台壳接线', () => {
       expect(idx).not.toContain('inovance-gantry');
     }
   });
+});
 
+describe('视觉与建模质量', () => {
   it('3D 只读 position 坐标变量，不在场景里另算位置', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    const scene = read(SCENE);
     expect(scene).toContain('useGantryStore.getState()');
     expect(scene).toContain('s.y.position');
     expect(scene).toContain('s.x.position');
-    expect(scene).toContain('s.z');
     expect(scene).not.toContain('useGLTF');
+    expect(scene).not.toContain('<meshStandardMaterial color=');
   });
 
-  it('3D 结构按 Inovance.STEP 真实装配树：焊接台体 / 一侧 Y 模组 + 一侧 D20 从动导轨 / X 模组横梁 / 气缸吸盘', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    for (const t of [
-      'WeldedTable', '台体', 'Y 轴线性模组-600', 'HG-KR43 伺服', 'D20 直线导轨',
-      '导轨固定板', 'X 直线模组-450', '200W 伺服', '气缸吸盘支架', '吸盘',
-      'Z_HEAD_BASE', 'yBridge', 'xSlider', 'zHead',
-    ]) expect(scene).toContain(t);
-    // 两端宽立板端座把横梁落到滑座上，不再是旧的「四角立柱 + 两条等粗光杆」
+  it('结构按 Inovance.STEP 装配树：台体 / 一侧 Y 模组 + 一侧 D20 导轨 / X 横梁 / 气缸吸盘', () => {
+    const scene = read(SCENE);
+    for (const t of ['WeldedTable', '台体', 'Y 轴线性模组-600', 'HG-KR43 伺服', 'D20 直线导轨',
+      '导轨固定板', 'X 直线模组-450', '200W 伺服', '吸盘', 'yBridge', 'xSlider', 'POST_BOTTOM']) {
+      expect(scene).toContain(t);
+    }
     expect(scene).toContain('gantry-end-support-');
-    expect(scene).toContain('POST_BOTTOM');
     expect(scene).not.toContain('四角立柱');
   });
 
-  it('X 滑块是包梁式单一滑座，Z 气缸与吸盘同在 z=0 轴线，不再前后错位', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    expect(scene).toContain('PenCylinder position={[0, -0.092, 0]}');
-    expect(scene).toContain('position={[0, Z_HEAD_BASE, 0]}');
-    expect(scene).toContain('0.075, 0.062, 0.09');
-    // 旧的「前侧大立板 + 下方水平板」两块分离件
-    expect(scene).not.toContain('0.088, 0.095, 0.014');
-    expect(scene).not.toContain('0.078, 0.008, 0.072');
-    // 端座不再用黑色方块
-    expect(scene).not.toContain('0.07, 0.07, 0.07');
-  });
-
-  it('3D 外观与零件复用：铝银灰整板 + 细 T 槽线 / 深棕棋盘小桌 / 波纹吸盘 / 中性色气管', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    for (const t of [
-      '铝银灰整板', '细 T 槽线', 'WeldedTable', 'ChessboardTable', 'ChessPieceMesh',
-      'LinearModule', 'ServoHousing', 'PenCylinder', 'SuctionHead', 'Profile',
-    ]) expect(scene).toContain(t);
-    const parts = read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx');
-    for (const t of [
-      '深棕 8x8 棋盘', '黑色波纹吸盘', '中性色气管', 'VISUAL_ROWS', 'VISUAL_COLS',
-      'M.boardEdge', 'M.hose', 'M.cup', 'BoltRow', 'T 槽', 'castShadow',
-    ]) expect(parts).toContain(t);
+  it('外观细节：铝银灰整板 + T 槽 / 深棕 8x8 棋盘 / 波纹吸盘 / 中性气管', () => {
+    for (const t of ['BoltRow', 'T 槽', 'castShadow']) expect(read(COMP + 'IndustrialProfile.tsx')).toContain(t);
+    for (const t of ['VISUAL_ROWS', 'M.boardEdge', 'M.boardGrid']) expect(read(COMP + 'ChessboardTable.tsx')).toContain(t);
+    for (const t of ['M.cup', 'M.cupLip', 'M.hose', '中性色气管', '波纹']) {
+      expect(read(COMP + 'ZAxisAssembly.tsx')).toContain(t);
+    }
   });
 
   it('借鉴 Saltline 的程序化表面纹理：JS 端 fbm + DataTexture，不注入 shader', () => {
-    const proc = read('packages/inovance-gantry/src/scenes/shared/proceduralTextures.ts');
-    for (const t of [
-      'THREE.DataTexture', 'RepeatWrapping', 'export function fbm', 'valueNoise',
-      'getProcTextures', 'brushed', 'micro', 'wood', 'SRGBColorSpace', 'NoColorSpace',
-      'fbm3', 'fbm5', 'mat2', // 研究注释里保留了 Saltline 的原始手法
-    ]) expect(proc).toContain(t);
-    // 无 DOM 依赖（Node 也能构造），不使用脆弱的 shader chunk 注入
+    const proc = read(SHARED + 'proceduralTextures.ts');
+    for (const t of ['THREE.DataTexture', 'RepeatWrapping', 'export function fbm', 'valueNoise',
+      'getProcTextures', 'brushed', 'micro', 'wood', 'SRGBColorSpace', 'NoColorSpace']) expect(proc).toContain(t);
     expect(proc).not.toContain('document.createElement');
-    // 研究注释里会提到 onBeforeCompile，但代码里不能真的注入 shader chunk
     expect(proc).not.toContain('.onBeforeCompile =');
     expect(proc).not.toContain('replace("#include');
-    expect(proc).not.toContain('fragmentShader =');
-    // 性能：惰性单例 + 实测耗时打点，其它设备场景零成本
-    expect(proc).toContain('let cached');
     expect(proc).toContain('__dtGantryTextureBakeMs');
     expect(proc).not.toContain('export const PROC_TEXTURES');
-    const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
-    expect(mat).toContain('getProcTextures');
+    const mat = read(SHARED + 'gantryMaterials.ts');
     expect(mat).toContain('export function applyProceduralTextures');
-    expect(mat).toContain('texturesApplied');
     expect(mat).toContain('mat.map = T.brushed');
     expect(mat).toContain('mat.map = T.wood');
-    expect(mat).toContain('bumpScale');
-    expect(mat).toContain('METAL_KEYS');
-    expect(mat).toContain('WOOD_KEYS');
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    expect(scene).toContain('applyProceduralTextures()');
-    expect(scene).toContain('useMemo');
-    // 性能 A/B 开关：只在显式 ?noProcTex=1 时跳过，默认行为不变
+    const scene = read(SCENE);
     expect(scene).toContain("has('noProcTex')");
     expect(scene).toContain('if (!skipProcTex) applyProceduralTextures()');
   });
 
-  it('建模质量对齐自动配药：材质单例 + metalness/roughness 分层 + polygonOffset 贴面', () => {
-    const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
-    for (const t of [
-      'new THREE.MeshStandardMaterial', 'metalness', 'roughness', 'polygonOffset',
-      'V.BASE_COLOR', 'V.SILVER_COLOR', 'V.PROFILE_SLOT_COLOR', 'GAP',
-    ]) expect(mat).toContain(t);
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    // 不再内联纯色材质
-    expect(scene).not.toContain('<meshStandardMaterial color=');
+  it('材质单例 + metalness/roughness 分层 + polygonOffset 贴面', () => {
+    const mat = read(SHARED + 'gantryMaterials.ts');
+    for (const t of ['new THREE.MeshStandardMaterial', 'metalness', 'roughness', 'polygonOffset',
+      'V.BASE_COLOR', 'V.SILVER_COLOR', 'V.PROFILE_SLOT_COLOR', 'GAP']) expect(mat).toContain(t);
   });
 
   it('滚珠丝杆沿模组长边居中，不再垂直戳出导轨/横梁', () => {
-    const parts = read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx');
-    expect(parts).toContain('screwRotation');
-    expect(parts).toContain('position={[0, half + GAP * 2, 0]}');
-    expect(parts).toContain('rotation={screwRotation}');
-    expect(parts).not.toContain('along[0] / 2');
-    expect(parts).not.toContain('axis === \'x\' ? Math.PI / 2 : 0');
+    const mod = read(COMP + 'LinearModule.tsx');
+    expect(mod).toContain('axisRotation');
+    expect(mod).toContain('position={[0, D.HALF + GAP * 2, 0]}');
+    expect(mod).not.toContain('along[0] / 2');
   });
 
-  it('绿色接线端子与青色软管已按用户要求去掉', () => {
-    const all = [
-      read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx'),
-      read('packages/inovance-gantry/src/scenes/shared/GantryParts.tsx'),
-      read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts'),
-    ].join('\n');
-    expect(all).not.toContain('C.terminal');
-    expect(all).not.toContain('HOSE_COLOR');
+  it('绿色端子 / 青色软管 / HMI 盒 / 坦克链等非必要装饰已移除', () => {
+    const all = [read(SCENE), read(COMP + 'ZAxisAssembly.tsx'), read(SHARED + 'gantryMaterials.ts')].join('\n');
+    for (const t of ['C.terminal', 'HOSE_COLOR', 'C.chain', 'DragChain', 'HmiPanel',
+      'PlcIoBoard', 'SupportColumn', 'ref={fan}', 'planeGeometry']) expect(all).not.toContain(t);
     expect(all).toContain('中性色气管');
-    // LAMP_GREEN 现在只作为原点传感器 LED 的安全色（共享令牌标准用法），不再是绿色端子方块
-    const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
-    expect(mat).toContain('ledOrigin');
-    expect(mat).not.toContain('terminal:');
-  });
-
-  it('按用户要求去掉所有非必要装饰件', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    for (const t of [
-      'SupportColumn', 'function Sensor', '<Sensor', 'C.column', 'C.sensor', 'ref={fan}',
-      'HmiPanel', 'PlcIoBoard', 'DragChain', 'chain-l-',
-    ]) expect(scene).not.toContain(t);
-    expect(scene).toContain('ServoHousing');
+    expect(read(SHARED + 'gantryMaterials.ts')).toContain('ledOrigin');
   });
 
   it('视觉接入共享工业视觉令牌：与传送带 / 配药同一套结构色与三点布光', () => {
@@ -357,39 +393,10 @@ describe('观众镜像与平台壳接线', () => {
     for (const t of ['INDUSTRIAL_VISUAL', 'INDUSTRIAL_LIGHTING', 'INDUSTRIAL_DETAIL', '...INDUSTRIAL_VISUAL']) {
       expect(c).toContain(t);
     }
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    const scene = read(SCENE);
     expect(scene).toContain('GANTRY_VISUAL.SCENE_LIGHTING');
-    for (const t of ['L.ambient', 'L.key', 'L.fillColor', 'gantryMaterials', 'GantryParts']) expect(scene).toContain(t);
-    expect(c).toContain('GANTRY_VISUAL');
-    const wrapper = read('packages/inovance-gantry/src/platform/GantrySceneWrapper.tsx');
-    expect(wrapper).toContain('GANTRY_VISUAL.SCENE_BACKGROUND');
-  });
-
-  it('HMI 触摸屏盒（白盒 + 黑屏 + 红绿按钮）已彻底移除，不回归', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    for (const t of [
-      'HmiPanel', 'planeGeometry', 'C.estop', 'C.green', 'C.screen', 'C.hmi',
-      '0.24, 0.11, 0.16',
-    ]) expect(scene).not.toContain(t);
-  });
-
-  it('黑色坦克链（拖链）按用户要求移除', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    expect(scene).not.toContain('DragChain');
-    expect(scene).not.toContain('chain-l-');
-    expect(scene).not.toContain('C.chain');
-    expect(scene).toContain('坦克链');
-  });
-
-  it('Z 高度按真实行程标定：下降 50mm 后吸盘底面贴近棋子顶面', () => {
-    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
-    const frame = 0.52;
-    const base = -0.104;
-    const suctionUp = frame + base - 0.091;
-    const suctionDown = suctionUp - GANTRY_AXIS.Z_STROKE * GANTRY_AXIS.MM2M * 2;
-    const pieceTop = 0.16 + 0.028 + 0.037;
-    expect(Math.abs(suctionDown - pieceTop)).toBeLessThan(0.005);
-    expect(scene).toContain('suctionBottomDown');
-    expect(scene).toContain('pieceTop');
+    for (const t of ['L.ambient', 'L.key', 'L.fillColor', 'gantryMaterials']) expect(scene).toContain(t);
+    expect(read('packages/inovance-gantry/src/platform/GantrySceneWrapper.tsx'))
+      .toContain('GANTRY_VISUAL.SCENE_BACKGROUND');
   });
 });

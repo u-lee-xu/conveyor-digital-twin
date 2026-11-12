@@ -163,7 +163,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     if (typeof frame.vacuum === 'boolean') patch.suction = { vacuum: frame.vacuum, hasPart: frame.vacuum };
     if (typeof frame.enableX === 'boolean') patch.x = { ...(patch.x ?? s.x), enabled: frame.enableX };
     if (typeof frame.enableY === 'boolean') patch.y = { ...(patch.y ?? s.y), enabled: frame.enableY };
-    patch.sensors = computeSensors(patch.y?.position ?? s.y.position);
+    patch.sensors = computeSensors(patch.y?.position ?? s.y.position, patch.x?.position ?? s.x.position);
     return patch;
   }),
 
@@ -209,7 +209,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
         : p));
     }
 
-    const patch: Partial<GantryStore> = { x, y, z, pieces, sensors: computeSensors(y.position) };
+    const patch: Partial<GantryStore> = { x, y, z, pieces, sensors: computeSensors(y.position, x.position) };
 
     // 4) 自动吸取 → 移动 → 放置状态机（只写 position 坐标变量与信号）
     if (s.autoRunning && s.controlSource === 'local') {
@@ -302,21 +302,25 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     const zPos = num('GANTRY_Z_POS');
     const phase = num('GANTRY_PHASE');
     if (xPos !== undefined) patch.x = { ...s.x, position: xPos };
-    if (yPos !== undefined) {
-      patch.y = { ...s.y, position: yPos };
-      patch.sensors = computeSensors(yPos);
-    }
+    if (yPos !== undefined) patch.y = { ...s.y, position: yPos };
+    // 两轴 6 路传感器统一按 position 坐标派生，保证不依赖快照字段是否齐全
+    patch.sensors = computeSensors(yPos ?? s.y.position, xPos ?? s.x.position);
     if (zPos !== undefined) patch.z = zPos;
     if (phase !== undefined) patch.phase = clamp(Math.trunc(phase), 0, 9) as GantryPhase;
-    // 传感器状态优先用主控快照，缺字段时保留按 y 坐标派生的结果
-    const sensorOrigin = num('GANTRY_SENSOR_ORIGIN');
-    const sensorEndMinus = num('GANTRY_SENSOR_END_MINUS');
-    const sensorEndPlus = num('GANTRY_SENSOR_END_PLUS');
-    if (sensorOrigin !== undefined && sensorEndMinus !== undefined && sensorEndPlus !== undefined) {
+    // 主控快照优先（键名成对），缺字段时保留派生结果
+    const sensorKeys = [
+      'GANTRY_SENSOR_ORIGIN', 'GANTRY_SENSOR_END_MINUS', 'GANTRY_SENSOR_END_PLUS',
+      'GANTRY_SENSOR_X_ORIGIN', 'GANTRY_SENSOR_X_END_MINUS', 'GANTRY_SENSOR_X_END_PLUS',
+    ] as const;
+    const sensorVals = sensorKeys.map((k) => num(k));
+    if (sensorVals.every((v2) => v2 !== undefined) && patch.sensors) {
       patch.sensors = {
-        origin: sensorOrigin === 1,
-        endMinus: sensorEndMinus === 1,
-        endPlus: sensorEndPlus === 1,
+        origin: sensorVals[0] === 1,
+        endMinus: sensorVals[1] === 1,
+        endPlus: sensorVals[2] === 1,
+        xOrigin: sensorVals[3] === 1,
+        xEndMinus: sensorVals[4] === 1,
+        xEndPlus: sensorVals[5] === 1,
       };
     }
     if (num('GANTRY_CYL_DOWN') !== undefined) patch.cylinder = { extended: num('GANTRY_CYL_DOWN') === 1 };
@@ -351,6 +355,9 @@ export function exportGantrySnapshot(): Record<string, number> {
     GANTRY_SENSOR_ORIGIN: s.sensors.origin ? 1 : 0,
     GANTRY_SENSOR_END_MINUS: s.sensors.endMinus ? 1 : 0,
     GANTRY_SENSOR_END_PLUS: s.sensors.endPlus ? 1 : 0,
+    GANTRY_SENSOR_X_ORIGIN: s.sensors.xOrigin ? 1 : 0,
+    GANTRY_SENSOR_X_END_MINUS: s.sensors.xEndMinus ? 1 : 0,
+    GANTRY_SENSOR_X_END_PLUS: s.sensors.xEndPlus ? 1 : 0,
   };
   s.pieces.forEach((p, i) => {
     out[`GANTRY_PIECE_${i + 1}_ROW`] = p.row;
