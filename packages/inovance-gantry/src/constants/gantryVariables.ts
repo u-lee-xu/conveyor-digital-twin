@@ -38,6 +38,10 @@ export const GANTRY_COILS = {
   GANTRY_SENSOR_ORIGIN: 29,
   GANTRY_SENSOR_END_MINUS: 30,
   GANTRY_SENSOR_END_PLUS: 31,
+  /** 只读输入：X 模组 1 原点 + 2 终端限位 */
+  GANTRY_SENSOR_X_ORIGIN: 32,
+  GANTRY_SENSOR_X_END_MINUS: 33,
+  GANTRY_SENSOR_X_END_PLUS: 34,
 } as const;
 
 /** 状态机步号，写进 GANTRY_PHASE 供 PLC / 面板读取 */
@@ -76,6 +80,9 @@ export const ETHERCAT_PDO_MAP = [
   { pdo: 'Y_Axis.OriginSensor', signal: 'GANTRY_SENSOR_ORIGIN', direction: 'sensor → PLC' },
   { pdo: 'Y_Axis.NegativeLimit', signal: 'GANTRY_SENSOR_END_MINUS', direction: 'sensor → PLC' },
   { pdo: 'Y_Axis.PositiveLimit', signal: 'GANTRY_SENSOR_END_PLUS', direction: 'sensor → PLC' },
+  { pdo: 'X_Axis.OriginSensor', signal: 'GANTRY_SENSOR_X_ORIGIN', direction: 'sensor → PLC' },
+  { pdo: 'X_Axis.NegativeLimit', signal: 'GANTRY_SENSOR_X_END_MINUS', direction: 'sensor → PLC' },
+  { pdo: 'X_Axis.PositiveLimit', signal: 'GANTRY_SENSOR_X_END_PLUS', direction: 'sensor → PLC' },
 ] as const;
 
 /** DINT 拆字 / 合字（低字在前），与配药场景 encoderDint.ts 同口径 */
