@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import { GANTRY_VISUAL as V } from '../../constants/gantryConstants';
+import { getProcTextures } from './proceduralTextures';
 
 /** 贴面薄片通用参数：作为 SURFACE_GAP 几何错开之外的深度测试兜底，防 z-fighting */
 const decal = {
@@ -88,3 +89,33 @@ export const M = {
 
 /** 相邻可见面最小贴面错开量，与配药 / 传送带场景共用同一口径 */
 export const GAP = V.SURFACE_GAP;
+
+/**
+ * 把程序化表面细节挂到金属 / 木质材质上。
+ * map 近白、bumpScale 极小，只提供拉丝与木纹质感，不改变 INDUSTRIAL_VISUAL 的结构色；
+ * 贴面材质（slot / decal / decalDark / boardGrid）与橡胶、塑料、棋子不挂，避免加剧 z-fighting。
+ */
+const METAL_KEYS = ['base', 'module', 'endCap', 'silver', 'sleeve', 'cylinder', 'rod', 'slider'] as const;
+const WOOD_KEYS = ['boardLight', 'boardDark', 'boardEdge'] as const;
+let texturesApplied = false;
+
+/** 幂等：只在首次渲染龙门场景时烘焙并挂载，其它设备场景零成本 */
+export function applyProceduralTextures(): void {
+  if (texturesApplied) return;
+  const T = getProcTextures();
+  for (const key of METAL_KEYS) {
+    const mat: THREE.MeshStandardMaterial = M[key];
+    mat.map = T.brushed;
+    mat.bumpMap = T.micro;
+    mat.bumpScale = 0.0012;
+    mat.needsUpdate = true;
+  }
+  for (const key of WOOD_KEYS) {
+    const mat: THREE.MeshStandardMaterial = M[key];
+    mat.map = T.wood;
+    mat.bumpMap = T.micro;
+    mat.bumpScale = 0.0018;
+    mat.needsUpdate = true;
+  }
+  texturesApplied = true;
+}

@@ -26,13 +26,13 @@
  * 动画只读取 store 的 position 坐标变量，PLC / 面板 / 三维读数同源。
  * 教学落点仍是 3x3（A1~C3），视觉棋盘 8x8，落点落在左上 3x3 区。
  */
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Grid } from '@react-three/drei';
 import type { Group } from 'three';
 import { useGantryStore } from '../stores/useGantryStore';
 import { GANTRY_AXIS, GANTRY_BOARD, GANTRY_VISUAL, GANTRY_SENSOR } from '../constants/gantryConstants';
-import { M, GAP } from './shared/gantryMaterials';
+import { M, GAP, applyProceduralTextures } from './shared/gantryMaterials';
 import {
   Profile, LinearModule, ServoHousing, PenCylinder, SuctionHead,
   ChessPieceMesh, WeldedTable, ChessboardTable, Bolt, LimitSensor,
@@ -93,6 +93,8 @@ function AxisSensors({ sensorY }: { sensorY: number }) {
 }
 
 export function GantrySceneContent() {
+  // 惰性烘焙程序化纹理：只在首次进入龙门场景时执行，其它设备场景不付这份成本
+  useMemo(() => { applyProceduralTextures(); return true; }, []);
   const yBridge = useRef<Group>(null);
   const xSlider = useRef<Group>(null);
   const zHead = useRef<Group>(null);

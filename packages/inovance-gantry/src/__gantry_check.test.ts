@@ -273,6 +273,37 @@ describe('观众镜像与平台壳接线', () => {
     ]) expect(parts).toContain(t);
   });
 
+  it('借鉴 Saltline 的程序化表面纹理：JS 端 fbm + DataTexture，不注入 shader', () => {
+    const proc = read('packages/inovance-gantry/src/scenes/shared/proceduralTextures.ts');
+    for (const t of [
+      'THREE.DataTexture', 'RepeatWrapping', 'export function fbm', 'valueNoise',
+      'getProcTextures', 'brushed', 'micro', 'wood', 'SRGBColorSpace', 'NoColorSpace',
+      'fbm3', 'fbm5', 'mat2', // 研究注释里保留了 Saltline 的原始手法
+    ]) expect(proc).toContain(t);
+    // 无 DOM 依赖（Node 也能构造），不使用脆弱的 shader chunk 注入
+    expect(proc).not.toContain('document.createElement');
+    // 研究注释里会提到 onBeforeCompile，但代码里不能真的注入 shader chunk
+    expect(proc).not.toContain('.onBeforeCompile =');
+    expect(proc).not.toContain('replace("#include');
+    expect(proc).not.toContain('fragmentShader =');
+    // 性能：惰性单例 + 实测耗时打点，其它设备场景零成本
+    expect(proc).toContain('let cached');
+    expect(proc).toContain('__dtGantryTextureBakeMs');
+    expect(proc).not.toContain('export const PROC_TEXTURES');
+    const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
+    expect(mat).toContain('getProcTextures');
+    expect(mat).toContain('export function applyProceduralTextures');
+    expect(mat).toContain('texturesApplied');
+    expect(mat).toContain('mat.map = T.brushed');
+    expect(mat).toContain('mat.map = T.wood');
+    expect(mat).toContain('bumpScale');
+    expect(mat).toContain('METAL_KEYS');
+    expect(mat).toContain('WOOD_KEYS');
+    const scene = read('packages/inovance-gantry/src/scenes/GantrySceneContent.tsx');
+    expect(scene).toContain('applyProceduralTextures()');
+    expect(scene).toContain('useMemo');
+  });
+
   it('建模质量对齐自动配药：材质单例 + metalness/roughness 分层 + polygonOffset 贴面', () => {
     const mat = read('packages/inovance-gantry/src/scenes/shared/gantryMaterials.ts');
     for (const t of [
