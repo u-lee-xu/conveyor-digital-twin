@@ -19,8 +19,10 @@ const checkScript = rootSrc('websocket-server/mock-addresses.js');
 const names = Object.keys(MD520_HOLDING_REGISTERS) as (keyof typeof MD520_HOLDING_REGISTERS)[];
 
 describe('三协议 connect 都下发单字变量表', () => {
-  it('modbus / s7 / mitsubishi 三个分支各有 wordVariables: CONNECT_WORDS', () => {
-    expect((shared.match(/wordVariables: CONNECT_WORDS/g) || []).length).toBe(3);
+  it('modbus / s7 / mitsubishi 三个分支都下发 wordVariables（默认 CONNECT_WORDS）', () => {
+    // 设备可用 config.wordVariables 覆盖默认表，但三个分支的下发点与兜底缺一不可
+    expect((shared.match(/wordVariables: (?:config\.wordVariables \?\? )?CONNECT_WORDS/g) || []).length).toBe(3);
+    expect(shared).toContain('wordVariables?: Record<string, WordVariableSpec>');
   });
 
   it('15 个寄存器逐键带 modbus + s7 + mitsubishi 三套地址', () => {

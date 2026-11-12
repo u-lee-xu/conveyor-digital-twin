@@ -135,6 +135,19 @@ export interface ModbusConfig {
    * Modbus TCP 按 coils 数字地址读写，不使用这张表。
    */
   boolVariables?: Record<string, string>;
+  /**
+   * 设备自带的 uint16 单字变量表，随 connect 帧下发给网关。
+   * 不传时仍用 CONNECT_WORDS，既有设备行为逐字不变。
+   */
+  wordVariables?: Record<string, WordVariableSpec>;
+}
+
+/** connect 帧可下发的单字变量规格（不同设备可有自己的键集合） */
+export interface WordVariableSpec {
+  type: string;
+  modbus: { address: number; words: number };
+  s7: { address: string; words: number };
+  mitsubishi: { address: string; words: number };
 }
 
 export interface ModbusStatus {
@@ -407,7 +420,7 @@ export class ModbusService {
           rack: config.rack || 0,
           slot: config.slot || 1,
           variables: config.boolVariables ?? S7_VARIABLES,
-          wordVariables: CONNECT_WORDS,
+          wordVariables: config.wordVariables ?? CONNECT_WORDS,
         });
         if (result.success) {
           this.consecutiveErrors = 0;
@@ -421,7 +434,7 @@ export class ModbusService {
           host: config.host,
           port: config.port || 0,
           variables: config.boolVariables,
-          wordVariables: CONNECT_WORDS,
+          wordVariables: config.wordVariables ?? CONNECT_WORDS,
         });
         if (result.success) {
           this.consecutiveErrors = 0;
@@ -433,7 +446,7 @@ export class ModbusService {
           type: 'connect',
           host: config.host,
           port: config.port || 502,
-          wordVariables: CONNECT_WORDS,
+          wordVariables: config.wordVariables ?? CONNECT_WORDS,
         });
         if (result.success) {
           this.consecutiveErrors = 0;

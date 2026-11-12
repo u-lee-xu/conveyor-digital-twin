@@ -453,9 +453,14 @@ function checkWordProtocolChain() {
   const shared = readFile('../packages/shared/src/services/modbus-websocket.ts');
   const spec = readFile('../packages/md520-vfd/src/constants/md520-addresses.ts');
   const server = readFile('./server.js');
-  const frames = (shared.match(/wordVariables: CONNECT_WORDS/g) || []).length;
+  // 设备可用 config.wordVariables 覆盖默认表，但三个协议分支都必须下发（默认兜底不可省）
+  const frames = (shared.match(/wordVariables: (?:config\.wordVariables \?\? )?CONNECT_WORDS/g) || []).length;
   if (frames !== 3) {
     console.error(`[check][word-protocol] ❌ connect 三个协议分支都须下发 wordVariables，实际 ${frames}`);
+    return false;
+  }
+  if (!shared.includes('wordVariables?: Record<string, WordVariableSpec>')) {
+    console.error('[check][word-protocol] ❌ 缺设备自定义单字变量表口子');
     return false;
   }
   for (const [name, address] of Object.entries(VFD_REGISTERS)) {
@@ -599,6 +604,87 @@ function checkGantryIsolation() {
   return true;
 }
 
+/**
+ * 汇川龙门仿真模式方案 A：独立虚拟 PLC :1509 / 状态口 :5089。
+ * 锁死「启动编排 + 端口隔离 + 100ms 参考程序 + 前端 300ms 轮询 + 三协议地址表」五处同源，
+ * 且已定稿的配药 / 分拣 / MD520 PLC 零龙门残留。
+ */
+function checkGantryPlc() {
+  const fs = require('fs');
+  const path = require('path');
+  const readFile = (rel) => fs.readFileSync(path.resolve(__dirname, rel), 'utf8');
+  let plc, startLab, connection, effects, vars, panel;
+  try {
+    plc = readFile('./mock-gantry-server.js');
+    startLab = readFile('../scripts/start-lab.cjs');
+    connection = readFile('../packages/inovance-gantry/src/platform/GantryPlcConnection.tsx');
+    effects = readFile('../packages/inovance-gantry/src/platform/GantryDeviceEffects.tsx');
+    vars = readFile('../packages/inovance-gantry/src/constants/gantryVariables.ts');
+    panel = readFile('../packages/inovance-gantry/src/platform/GantryPanelParts.tsx');
+  } catch (e) {
+    console.error(`[check][gantry-plc] ❌ 龙门仿真 PLC 文件缺失: ${e.message}`);
+    return false;
+  }
+  const plcNeed = ["host: '127.0.0.1'", 'GANTRY_X_POS', 'gantryPlcScan',
+    'setInterval(gantryPlcScan, 100)', 'setRegisterArray', 'virtual-plc', '/status',
+    'externalPosUntil', 'MAIN_COMMANDS'];
+  for (const token of plcNeed) {
+    if (!plc.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ 虚拟 PLC 缺 ${token}`);
+      return false;
+    }
+  }
+  if (/EtherCATMaster|writePdo|net\.Socket/.test(plc)) {
+    console.error('[check][gantry-plc] ❌ 虚拟 PLC 混入 EtherCAT 底层链路实现');
+    return false;
+  }
+  const labNeed = ['GANTRY_PLC_PORT = 1509', 'GANTRY_HTTP_PORT = 5089',
+    'mock-gantry-server.js', 'portBusy(GANTRY_PLC_PORT)', 'portBusy(GANTRY_HTTP_PORT)'];
+  for (const token of labNeed) {
+    if (!startLab.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ start-lab.cjs 缺 ${token}`);
+      return false;
+    }
+  }
+  for (const token of ['1509', 'GANTRY_WORD_VARIABLES', 'wordVariables']) {
+    if (!connection.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ 连接面板缺 ${token}`);
+      return false;
+    }
+  }
+  for (const token of ['readWords(WORD_NAMES)', 'setPlcFrame', 'GANTRY_PHASE_W']) {
+    if (!effects.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ effects 缺 ${token}`);
+      return false;
+    }
+  }
+  for (const token of ['GANTRY_X_POS', 'GANTRY_Y_TGT', 'GANTRY_HELD_W']) {
+    if (!vars.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ 字变量表缺 ${token}`);
+      return false;
+    }
+  }
+  if (!panel.includes('GANTRY_ADDRESS_ROWS')) {
+    console.error('[check][gantry-plc] ❌ 变量地址表未引用 GANTRY_ADDRESS_ROWS');
+    return false;
+  }
+  for (const token of ['信号', '三菱 FX', 'Modbus TCP', 'Siemens S7']) {
+    if (!panel.includes(`<th`) || !panel.includes(token)) {
+      console.error(`[check][gantry-plc] ❌ 变量地址表表头缺 ${token}`);
+      return false;
+    }
+  }
+  for (const scene of ['mock-dispensing-server.js', 'mock-conveyor-server.js',
+    'mock-vfd-server.js', 'mock-vfd-slave.js']) {
+    if (readFile(`./${scene}`).includes('GANTRY_')) {
+      console.error(`[check][gantry-plc] ❌ ${scene} 残留龙门变量`);
+      return false;
+    }
+  }
+  console.log('[check][gantry-plc] ✅ 龙门虚拟 PLC :1509+5089 独立、启动接线齐、仿真面板与轮询同源');
+  return true;
+}
+
 if (require.main === module && process.argv.includes('--check')) {
   const path = '../packages/auto-dispensing/src/scenes/auto-dispensing/constants.ts';
   let ok = true;
@@ -616,6 +702,7 @@ if (require.main === module && process.argv.includes('--check')) {
   ok = checkWordProtocolChain() && ok;
   ok = checkVfd485Slave() && ok;
   ok = checkGantryIsolation() && ok;
+  ok = checkGantryPlc() && ok;
   process.exit(ok ? 0 : 1);
 }
 

@@ -8,6 +8,20 @@
  *  - 32 位 DINT 位置低字在前（与配药场景 ENCODER_DINT 口径一致）。
  */
 
+/**
+ * 网关 connect 帧下发的 uint16 单字变量表（仿真模式读写 :1509 用）。
+ * 教学映射：位置用 0~500mm 的数值，单字即可，与 CONNECT_WORDS 结构兼容。
+ */
+export const GANTRY_WORD_VARIABLES = {
+  GANTRY_X_POS: { type: 'uint16', modbus: { address: 200, words: 1 }, s7: { address: 'MW1000', words: 1 }, mitsubishi: { address: 'D1000', words: 1 } },
+  GANTRY_Y_POS: { type: 'uint16', modbus: { address: 202, words: 1 }, s7: { address: 'MW1004', words: 1 }, mitsubishi: { address: 'D1002', words: 1 } },
+  GANTRY_X_TGT: { type: 'uint16', modbus: { address: 204, words: 1 }, s7: { address: 'MW1008', words: 1 }, mitsubishi: { address: 'D1004', words: 1 } },
+  GANTRY_Y_TGT: { type: 'uint16', modbus: { address: 206, words: 1 }, s7: { address: 'MW1012', words: 1 }, mitsubishi: { address: 'D1006', words: 1 } },
+  GANTRY_Z_POS: { type: 'uint16', modbus: { address: 208, words: 1 }, s7: { address: 'MW1016', words: 1 }, mitsubishi: { address: 'D1008', words: 1 } },
+  GANTRY_PHASE_W: { type: 'uint16', modbus: { address: 209, words: 1 }, s7: { address: 'MW1018', words: 1 }, mitsubishi: { address: 'D1009', words: 1 } },
+  GANTRY_HELD_W: { type: 'uint16', modbus: { address: 210, words: 1 }, s7: { address: 'MW1020', words: 1 }, mitsubishi: { address: 'D1010', words: 1 } },
+} as const;
+
 /** Modbus TCP 保持寄存器：X/Y 实际位置与目标位置（DINT 各占两字，低字在前） */
 export const GANTRY_HOLDING_REGISTERS = {
   GANTRY_X_POS_L: 200,
@@ -42,6 +56,10 @@ export const GANTRY_COILS = {
   GANTRY_SENSOR_X_ORIGIN: 32,
   GANTRY_SENSOR_X_END_MINUS: 33,
   GANTRY_SENSOR_X_END_PLUS: 34,
+  /** 仿真模式主令（自复位输入） */
+  GANTRY_STOP: 35,
+  GANTRY_RESET: 36,
+  GANTRY_CONFIRM: 37,
 } as const;
 
 /** 状态机步号，写进 GANTRY_PHASE 供 PLC / 面板读取 */
@@ -94,3 +112,31 @@ export function joinDint(low: number, high: number): number {
   const v = ((high & 0xffff) << 16) | (low & 0xffff);
   return v > 0x7fffffff ? v - 0x100000000 : v;
 }
+
+/**
+ * 三协议变量地址对照（仿真模式 UI 常驻显示，表头与自动配药场景一致：信号 / 三菱 FX / Modbus TCP / Siemens S7）。
+ * 三菱列为仿真档地址；实体 FX3U/FX5U 走 M 区（同点位表口径），教学映射，现场地址待确认。
+ */
+export interface GantryAddressRow {
+  signal: string;
+  mitsubishi: string;
+  modbus: string;
+  s7: string;
+  direction: string;
+  pdo: string;
+}
+
+export const GANTRY_ADDRESS_ROWS: readonly GantryAddressRow[] = [
+  { signal: 'X 实际位置', mitsubishi: 'D1000', modbus: 'HR200', s7: 'MW1000', direction: '设备 → PLC', pdo: 'X_Axis.ActualPosition' },
+  { signal: 'Y 实际位置', mitsubishi: 'D1002', modbus: 'HR202', s7: 'MW1004', direction: '设备 → PLC', pdo: 'Y_Axis.ActualPosition' },
+  { signal: 'X 目标位置', mitsubishi: 'D1004', modbus: 'HR204', s7: 'MW1008', direction: 'PLC → 设备', pdo: 'X_Axis.TargetPosition' },
+  { signal: 'Y 目标位置', mitsubishi: 'D1006', modbus: 'HR206', s7: 'MW1012', direction: 'PLC → 设备', pdo: 'Y_Axis.TargetPosition' },
+  { signal: 'Z 位置', mitsubishi: 'D1008', modbus: 'HR208', s7: 'MW1016', direction: '设备 → PLC', pdo: 'Z_Cylinder.Position' },
+  { signal: '流程阶段', mitsubishi: 'D1009', modbus: 'HR209', s7: 'MW1018', direction: '设备 → PLC', pdo: 'Gantry.Phase' },
+  { signal: 'X 伺服使能', mitsubishi: 'Y0', modbus: 'C20', s7: 'M130.0', direction: 'PLC → 设备', pdo: 'X_Axis.ServoEnable' },
+  { signal: 'Y 伺服使能', mitsubishi: 'Y1', modbus: 'C21', s7: 'M130.1', direction: 'PLC → 设备', pdo: 'Y_Axis.ServoEnable' },
+  { signal: '气缸下降', mitsubishi: 'Y4', modbus: 'C24', s7: 'M134.0', direction: 'PLC → 设备', pdo: 'Z_Cylinder.Down' },
+  { signal: '真空吸盘', mitsubishi: 'Y5', modbus: 'C25', s7: 'M135.0', direction: 'PLC → 设备', pdo: 'Vacuum.On' },
+  { signal: '有料检测', mitsubishi: 'X0', modbus: 'C26', s7: 'M140.0', direction: '设备 → PLC', pdo: 'Vacuum.HasPart' },
+  { signal: 'X/Y 原点与限位', mitsubishi: 'X1~X6', modbus: 'C29~C34', s7: 'M140.1~M140.6', direction: '设备 → PLC', pdo: '*_Axis.OriginSensor / *Limit' },
+] as const;

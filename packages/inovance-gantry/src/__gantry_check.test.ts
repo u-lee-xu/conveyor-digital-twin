@@ -167,7 +167,8 @@ describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位�
   });
 
   it('面板「回原点」送到原点传感器位置，不是机械零点 0', () => {
-    const panel = read('packages/inovance-gantry/src/platform/GantryModePanel.tsx');
+    // 三模式拆分后，回原点按钮落在手动面板（GantryModePanel 只做分发）
+    const panel = read('packages/inovance-gantry/src/platform/GantryManualPanel.tsx');
     expect(panel).toContain('aria-label="回原点"');
     expect(panel).toContain('GANTRY_SENSOR.X_ORIGIN');
     expect(panel).toContain('GANTRY_SENSOR.Y_ORIGIN');
@@ -196,7 +197,8 @@ describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位�
     expect((scene.match(/<AxisSensorSet/g) || []).length).toBe(2);
     expect(scene).toContain('axis="x"');
     expect(scene).toContain('axis="z"');
-    const panel = read('packages/inovance-gantry/src/platform/GantryModePanel.tsx');
+    // 三模式拆分后，只读传感器状态区由 GantryPanelParts 统一提供
+    const panel = read('packages/inovance-gantry/src/platform/GantryPanelParts.tsx');
     expect(panel).toContain('data-dt-gantry-sensors');
     expect(panel).toContain('data-dt-gantry-sensors-x');
     const vars = read('packages/inovance-gantry/src/constants/gantryVariables.ts');

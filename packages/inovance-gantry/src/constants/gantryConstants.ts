@@ -95,6 +95,13 @@ export const INITIAL_PIECES: ChessPiece[] = [
 /** 吸盘吸取判定半径（mm）：吸盘中心与格心距离小于此值才认为对准棋子 */
 export const PICK_TOLERANCE = 8;
 
+/** 演示模式循环搬运序列：一轮 3 次搬运，按索引循环；轮次由面板设定 */
+export const GANTRY_DEMO_SEQUENCE = [
+  { pick: { row: 0, col: 0 }, place: { row: 2, col: 0 }, label: 'A1 → C1' },
+  { pick: { row: 1, col: 1 }, place: { row: 0, col: 2 }, label: 'B2 → A3' },
+  { pick: { row: 2, col: 2 }, place: { row: 1, col: 0 }, label: 'C3 → B1' },
+] as const;
+
 /**
  * ========== 部件细节尺寸（单一来源，参照配药项目 CYLINDER_DETAIL / SENSOR_DETAIL 口径） ==========
  * 每个部件的可见尺寸、支架、螺栓、行程都在下面集中定义，组件只引用不另写数字。

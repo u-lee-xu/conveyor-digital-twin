@@ -10,7 +10,8 @@
 import { create } from 'zustand';
 import {
   GANTRY_AXIS, GANTRY_BOARD, CHESS_POSITIONS, INITIAL_PIECES,
-  cellToMm, computeSensors, type ChessPiece, type ChessLabel, type GantrySensorState,
+  cellToMm, computeSensors, GANTRY_DEMO_SEQUENCE,
+  type ChessPiece, type ChessLabel, type GantrySensorState,
 } from '../constants/gantryConstants';
 import { GANTRY_PHASE, type GantryPhase } from '../constants/gantryVariables';
 
@@ -58,7 +59,15 @@ interface GantryStore {
   controlSource: 'local' | 'plc';
   connected: boolean;
   estop: boolean;
+  /** 演示模式：循环搬运状态（与设备状态机分离，切模式时统一清理） */
+  demoRunning: boolean;
+  demoPaused: boolean;
+  demoRounds: number;
+  demoRound: number;
+  demoIndex: number;
+  demoCompleted: number;
 
+  setManualPosition: (x: number, y: number) => void;
   setXTarget: (v: number) => void;
   setYTarget: (v: number) => void;
   setPosition: (axis: 'x' | 'y', v: number) => void;
@@ -74,6 +83,11 @@ interface GantryStore {
   setConnected: (on: boolean) => void;
   setControlSource: (s: 'local' | 'plc') => void;
   setPlcFrame: (frame: GantryPlcFrame) => void;
+  setDemoRounds: (n: number) => void;
+  startDemo: () => void;
+  stopDemo: () => void;
+  toggleDemoPause: () => void;
+  advanceDemo: () => void;
   resetAll: () => void;
   /** 每帧推进：坐标斜坡 + 自动流程状态机 */
   tick: (delta: number) => void;
@@ -114,7 +128,20 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
   controlSource: 'local',
   connected: false,
   estop: false,
+  demoRunning: false,
+  demoPaused: false,
+  demoRounds: 1,
+  demoRound: 0,
+  demoIndex: 0,
+  demoCompleted: 0,
 
+  /** 手动给 position 坐标变量赋值：position 与 target 同步，避免下一帧斜坡把值拉回去 */
+  setManualPosition: (x, y) => set((s) => ({
+    x: { ...s.x, position: clamp(x, 0, GANTRY_AXIS.X_TRAVEL), target: clamp(x, 0, GANTRY_AXIS.X_TRAVEL) },
+    y: { ...s.y, position: clamp(y, 0, GANTRY_AXIS.Y_TRAVEL), target: clamp(y, 0, GANTRY_AXIS.Y_TRAVEL) },
+    controlSource: 'local',
+    demoRunning: false,
+  })),
   setXTarget: (v) => set((s) => ({ x: { ...s.x, target: clamp(v, 0, GANTRY_AXIS.X_TRAVEL) } })),
   setYTarget: (v) => set((s) => ({ y: { ...s.y, target: clamp(v, 0, GANTRY_AXIS.Y_TRAVEL) } })),
   setPosition: (axis, v) => set((s) => {
@@ -144,6 +171,33 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
   setEstop: (on) => set({ estop: on, autoRunning: on ? false : get().autoRunning }),
   setConnected: (on) => set({ connected: on }),
   setControlSource: (controlSource) => set({ controlSource }),
+
+  /** 演示模式：循环搬运（不连 PLC，只驱动 position 坐标变量） */
+  setDemoRounds: (n) => set({ demoRounds: clamp(Math.round(n), 1, 20) }),
+  startDemo: () => set((s) => ({
+    pieces: initialPieces(), heldPieceId: null,
+    phase: GANTRY_PHASE.IDLE, autoRunning: false,
+    x: defaultAxis(), y: defaultAxis(), z: 0,
+    cylinder: { extended: false }, suction: { vacuum: false, hasPart: false },
+    controlSource: 'local', estop: false, demoRounds: s.demoRounds,
+    demoRunning: true, demoPaused: false, demoRound: 0, demoIndex: 0, demoCompleted: 0,
+  })),
+  stopDemo: () => set({ demoRunning: false, demoPaused: false, autoRunning: false, phase: GANTRY_PHASE.IDLE }),
+  toggleDemoPause: () => set((s) => ({ demoPaused: !s.demoPaused })),
+  advanceDemo: () => {
+    const s = get();
+    if (!s.demoRunning || s.demoPaused || s.autoRunning || s.phase !== GANTRY_PHASE.IDLE) return;
+    if (s.demoRound >= s.demoRounds) { set({ demoRunning: false }); return; }
+    const step = GANTRY_DEMO_SEQUENCE[s.demoIndex % GANTRY_DEMO_SEQUENCE.length];
+    const finishedRound = s.demoIndex === GANTRY_DEMO_SEQUENCE.length - 1;
+    set({
+      pickCell: { ...step.pick }, placeCell: { ...step.place },
+      demoIndex: (s.demoIndex + 1) % GANTRY_DEMO_SEQUENCE.length,
+      demoRound: s.demoRound + (finishedRound ? 1 : 0),
+      demoCompleted: s.demoCompleted + 1,
+    });
+    get().startAuto();
+  },
 
   /** 外部 PLC position 坐标变量写入：只改变量，不碰 3D */
   setPlcFrame: (frame) => set((s) => {
@@ -175,6 +229,7 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     sensors: computeSensors(0),
     pickCell: { row: 0, col: 0 }, placeCell: { row: 2, col: 0 },
     estop: false, controlSource: 'local',
+    demoRunning: false, demoPaused: false, demoRound: 0, demoIndex: 0, demoCompleted: 0,
   }),
 
   tick: (delta) => {
@@ -195,11 +250,15 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
       y = move(s.y);
     }
 
-    // 2) Z 气缸跟随 extended 平滑
-    const zTarget = s.cylinder.extended ? GANTRY_AXIS.Z_STROKE : 0;
-    const zDiff = zTarget - s.z;
-    const zStep = Math.min(Math.abs(zDiff), 150 * dt);
-    const z = s.z + Math.sign(zDiff) * zStep;
+    // 2) Z 位置：本地按气缸 extended 平滑；PLC 给定由 setPlcFrame 外部帧直接驱动，
+    //    否则本地斜坡会与 300ms 轮询来回拉扯造成抖动（与「仿真只受 PLC 控制」同口径）
+    let z = s.z;
+    if (s.controlSource === 'local') {
+      const zTarget = s.cylinder.extended ? GANTRY_AXIS.Z_STROKE : 0;
+      const zDiff = zTarget - s.z;
+      const zStep = Math.min(Math.abs(zDiff), 150 * dt);
+      z = s.z + Math.sign(zDiff) * zStep;
+    }
 
     // 3) 被吸起的棋子跟随吸盘坐标与 Z 高度
     let pieces = s.pieces;
@@ -325,6 +384,12 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     }
     if (num('GANTRY_CYL_DOWN') !== undefined) patch.cylinder = { extended: num('GANTRY_CYL_DOWN') === 1 };
     if (num('GANTRY_VACUUM') !== undefined) patch.suction = { vacuum: num('GANTRY_VACUUM') === 1, hasPart: num('GANTRY_VACUUM') === 1 };
+    const demoRunning = num('GANTRY_DEMO_RUNNING');
+    const demoRound = num('GANTRY_DEMO_ROUND');
+    const demoCompleted = num('GANTRY_DEMO_COMPLETED');
+    if (demoRunning !== undefined) patch.demoRunning = demoRunning === 1;
+    if (demoRound !== undefined) patch.demoRound = demoRound;
+    if (demoCompleted !== undefined) patch.demoCompleted = demoCompleted;
     const pieces = s.pieces.map((p, i) => {
       const row = num(`GANTRY_PIECE_${i + 1}_ROW`);
       const col = num(`GANTRY_PIECE_${i + 1}_COL`);
@@ -358,6 +423,9 @@ export function exportGantrySnapshot(): Record<string, number> {
     GANTRY_SENSOR_X_ORIGIN: s.sensors.xOrigin ? 1 : 0,
     GANTRY_SENSOR_X_END_MINUS: s.sensors.xEndMinus ? 1 : 0,
     GANTRY_SENSOR_X_END_PLUS: s.sensors.xEndPlus ? 1 : 0,
+    GANTRY_DEMO_RUNNING: s.demoRunning ? 1 : 0,
+    GANTRY_DEMO_ROUND: s.demoRound,
+    GANTRY_DEMO_COMPLETED: s.demoCompleted,
   };
   s.pieces.forEach((p, i) => {
     out[`GANTRY_PIECE_${i + 1}_ROW`] = p.row;
