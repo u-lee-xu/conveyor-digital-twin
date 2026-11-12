@@ -22,8 +22,9 @@ export const GANTRY_VISUAL = {
 
 /** 两轴行程与 Z 气缸行程，单位 mm；MM2M 把 mm 换算成 3D 世界坐标（米） */
 export const GANTRY_AXIS = {
-  X_TRAVEL: 450,
-  Y_TRAVEL: 600,
+  /** 两轴等长：整机台面做成 1.0 × 1.0 m 正方形，X/Y 行程与棋盘格心保持同一比例 */
+  X_TRAVEL: 500,
+  Y_TRAVEL: 500,
   Z_STROKE: 50,
   MM2M: 0.001,
 } as const;
@@ -154,15 +155,15 @@ export const MODULE_DETAIL = {
 /**
  * X / Y 两轴各 3 个接近开关（STEP 的「光遮断器固定片」「GTH8-感应片」）：
  *   两个终端限位在轴两端，原点传感器在原点方向终端限位的内侧（往行程内 25mm）。
- * Y 轴：负限位 0 / 原点 20 / 正限位 600；X 轴：负限位 0 / 原点 25 / 正限位 450。
+ * Y 轴：负限位 0 / 原点 20 / 正限位 500；X 轴：负限位 0 / 原点 25 / 正限位 500。
  * 上电停在机械零点时负限位被挡片压住、原点未触发 = 「未回原点」；
  * 面板「回原点」按钮把两轴送到 X_ORIGIN / Y_ORIGIN，而不是机械零点 0。
  */
 export const GANTRY_SENSOR = {
   Y_ORIGIN: 20, Y_END_MINUS: 0, Y_END_PLUS: GANTRY_AXIS.Y_TRAVEL,
-  Y_ORIGIN_MM: 20, Y_END_MINUS_MM: 0, Y_END_PLUS_MM: 588,
+  Y_ORIGIN_MM: 20, Y_END_MINUS_MM: 0, Y_END_PLUS_MM: 488,
   X_END_MINUS: 0, X_ORIGIN: 25, X_END_PLUS: GANTRY_AXIS.X_TRAVEL,
-  X_END_MINUS_MM: 0, X_ORIGIN_MM: 25, X_END_PLUS_MM: 438,
+  X_END_MINUS_MM: 0, X_ORIGIN_MM: 25, X_END_PLUS_MM: 488,
   TOLERANCE: 8,
   END_TOLERANCE: 4,
   SIDE_X: SENSOR_DETAIL.MOUNT_SIDE,
@@ -212,15 +213,15 @@ export interface GantryViewPreset {
   fov: number;
 }
 
-export const GANTRY_SCENE_CAMERA: Vec3 = [1.9, 1.25, 2.35];
-export const GANTRY_SCENE_TARGET: Vec3 = [0.45, 0.18, 0.6];
+export const GANTRY_SCENE_CAMERA: Vec3 = [1.8, 1.2, 2.1];
+export const GANTRY_SCENE_TARGET: Vec3 = [0.5, 0.18, 0.5];
 export const GANTRY_SCENE_FOV = 40;
 
 /** ?view=<key>：整机不同观察机位，CameraRig 做阻尼过渡，用户拖拽后不再拉回 */
 export const GANTRY_VIEW_PRESETS: Record<GantryViewKey, GantryViewPreset> = {
   overview: { label: '整机总览', desc: '斜俯视看整机与 XY 两轴', camera: GANTRY_SCENE_CAMERA, target: GANTRY_SCENE_TARGET, fov: GANTRY_SCENE_FOV },
-  top: { label: '俯视', desc: '从上方核对棋盘格与两轴行程', camera: [0.9, 2.6, 1.2], target: [0.45, 0.1, 0.6], fov: 42 },
-  front: { label: '正视', desc: '从棋盘正面看 X 横梁与 Z 气缸', camera: [0.9, 0.9, 2.7], target: [0.45, 0.34, 0.6], fov: 40 },
+  top: { label: '俯视', desc: '从上方核对棋盘格与两轴行程', camera: [0.9, 2.4, 1.0], target: [0.5, 0.1, 0.5], fov: 42 },
+  front: { label: '正视', desc: '从棋盘正面看 X 横梁与 Z 气缸', camera: [0.9, 0.9, 2.4], target: [0.5, 0.34, 0.5], fov: 40 },
   zaxis: { label: 'Z 轴近景', desc: '贴近核对笔形气缸、导杆与波纹吸盘', camera: [0.62, 0.72, 0.62], target: [0, 0.40, 0], fov: 32 },
   board: { label: '棋盘俯视', desc: '核对 8x8 棋盘与三颗棋子', camera: [0.52, 1.05, 0.72], target: [0.52, 0.19, 0.52], fov: 40 },
 };

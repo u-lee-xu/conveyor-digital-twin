@@ -2,13 +2,13 @@
 import type { ComponentType } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { GANTRY_VISUAL } from '../constants/gantryConstants';
+import { GANTRY_VISUAL, GANTRY_SCENE_CAMERA, GANTRY_SCENE_TARGET } from '../constants/gantryConstants';
 import { useGantryViewStore } from '../stores/useGantryViewStore';
 import { GantryViewSwitcher } from './GantryViewSwitcher';
 
 export function GantrySceneWrapper({
   SceneContent,
-  cameraPosition = [1.9, 1.25, 2.35],
+  cameraPosition = GANTRY_SCENE_CAMERA,
 }: {
   SceneContent: ComponentType;
   cameraPosition?: [number, number, number];
@@ -25,7 +25,7 @@ export function GantrySceneWrapper({
       >
         <color attach="background" args={[GANTRY_VISUAL.SCENE_BACKGROUND]} />
         {/* makeDefault：CameraRig 从 useThree().controls 拿到实例做机位阻尼过渡 */}
-        <OrbitControls makeDefault target={[0.45, 0.18, 0.6]} enableDamping dampingFactor={0.1}
+        <OrbitControls makeDefault target={GANTRY_SCENE_TARGET} enableDamping dampingFactor={0.1}
           minDistance={activeStage ? 0.06 : 0.3} maxDistance={6} maxPolarAngle={Math.PI / 2.05} />
         <SceneContent />
       </Canvas>
