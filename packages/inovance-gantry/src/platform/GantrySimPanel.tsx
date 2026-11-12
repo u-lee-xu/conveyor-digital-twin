@@ -39,7 +39,7 @@ export function GantrySimPanel() {
       </div>
 
       <div style={box}>
-        <b>位置数据寄存器</b>
+        <b>位置数据寄存器 · 机床坐标</b>
         <div data-dt-gantry-registers style={{ fontFamily: 'monospace', marginTop: 5, lineHeight: 1.7 }}>
           HR200 X {Math.round(x.position)} · MW1000 · D1000
           HR202 Y {Math.round(y.position)} · MW1004 · D1002

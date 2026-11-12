@@ -59,6 +59,13 @@ interface GantryStore {
   controlSource: 'local' | 'plc';
   connected: boolean;
   estop: boolean;
+  /**
+   * 工件坐标系零点偏置（机床坐标 mm）。
+   * 面板上的 position 读数 = x.position - zeroX（Y 同理），**可以为负**。
+   * x/y.position 仍是驱动 3D / 状态机 / PLC 的机床坐标唯一真值，置零不改变它。
+   */
+  zeroX: number;
+  zeroY: number;
   /** 演示模式：循环搬运状态（与设备状态机分离，切模式时统一清理） */
   demoRunning: boolean;
   demoPaused: boolean;
@@ -67,7 +74,8 @@ interface GantryStore {
   demoIndex: number;
   demoCompleted: number;
 
-  setManualPosition: (x: number, y: number) => void;
+  /** 把「当前机构位置」定义为指定的 position 读数（默认 0.0），机构不动 */
+  setPositionZero: (displayX: number, displayY: number) => void;
   setXTarget: (v: number) => void;
   setYTarget: (v: number) => void;
   setPosition: (axis: 'x' | 'y', v: number) => void;
@@ -128,6 +136,8 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
   controlSource: 'local',
   connected: false,
   estop: false,
+  zeroX: 0,
+  zeroY: 0,
   demoRunning: false,
   demoPaused: false,
   demoRounds: 1,
@@ -135,11 +145,17 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
   demoIndex: 0,
   demoCompleted: 0,
 
-  /** 手动给 position 坐标变量赋值：position 与 target 同步，避免下一帧斜坡把值拉回去 */
-  setManualPosition: (x, y) => set((s) => ({
-    x: { ...s.x, position: clamp(x, 0, GANTRY_AXIS.X_TRAVEL), target: clamp(x, 0, GANTRY_AXIS.X_TRAVEL) },
-    y: { ...s.y, position: clamp(y, 0, GANTRY_AXIS.Y_TRAVEL), target: clamp(y, 0, GANTRY_AXIS.Y_TRAVEL) },
-    controlSource: 'local',
+  /**
+   * 手工定义 position 的 0.0 点（工件坐标系置零）。
+   * 语义：**把当前位置设置成 0.0**，不是把机构移到机床零点。
+   * 因此只写 zeroX/zeroY 两个偏置，绝不改 x/y.position 与 target —— 机构零位移；
+   * 之后 XY 点动 / 定位 / PLC 给定使机床坐标变化时，面板读数按
+   * 「机床坐标 - 零点偏置」自然增减，越过零点即为负值。
+   * 传入非零值可把当前点定义为任意 position 读数（偏置 = 机床坐标 - 目标读数）。
+   */
+  setPositionZero: (displayX, displayY) => set((s) => ({
+    zeroX: s.x.position - (Number.isFinite(displayX) ? displayX : 0),
+    zeroY: s.y.position - (Number.isFinite(displayY) ? displayY : 0),
     demoRunning: false,
   })),
   setXTarget: (v) => set((s) => ({ x: { ...s.x, target: clamp(v, 0, GANTRY_AXIS.X_TRAVEL) } })),
@@ -229,6 +245,8 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     sensors: computeSensors(0),
     pickCell: { row: 0, col: 0 }, placeCell: { row: 2, col: 0 },
     estop: false, controlSource: 'local',
+    /** 全部复位回到机床坐标系，工件零点偏置一并清除 */
+    zeroX: 0, zeroY: 0,
     demoRunning: false, demoPaused: false, demoRound: 0, demoIndex: 0, demoCompleted: 0,
   }),
 
@@ -384,6 +402,11 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     }
     if (num('GANTRY_CYL_DOWN') !== undefined) patch.cylinder = { extended: num('GANTRY_CYL_DOWN') === 1 };
     if (num('GANTRY_VACUUM') !== undefined) patch.suction = { vacuum: num('GANTRY_VACUUM') === 1, hasPart: num('GANTRY_VACUUM') === 1 };
+    // 工件坐标系零点偏置也随快照镜像，观众端 position 读数与主控一致
+    const zeroX = num('GANTRY_ZERO_X');
+    const zeroY = num('GANTRY_ZERO_Y');
+    if (zeroX !== undefined) patch.zeroX = zeroX;
+    if (zeroY !== undefined) patch.zeroY = zeroY;
     const demoRunning = num('GANTRY_DEMO_RUNNING');
     const demoRound = num('GANTRY_DEMO_ROUND');
     const demoCompleted = num('GANTRY_DEMO_COMPLETED');
@@ -411,6 +434,8 @@ export function exportGantrySnapshot(): Record<string, number> {
     GANTRY_X_POS: Math.round(s.x.position * 100) / 100,
     GANTRY_Y_POS: Math.round(s.y.position * 100) / 100,
     GANTRY_Z_POS: Math.round(s.z * 100) / 100,
+    GANTRY_ZERO_X: Math.round(s.zeroX * 100) / 100,
+    GANTRY_ZERO_Y: Math.round(s.zeroY * 100) / 100,
     GANTRY_PHASE: s.phase,
     GANTRY_CYL_DOWN: s.cylinder.extended ? 1 : 0,
     GANTRY_VACUUM: s.suction.vacuum ? 1 : 0,
