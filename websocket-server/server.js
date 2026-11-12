@@ -1312,23 +1312,36 @@ class MitsubishiMX {
       }
 
       this._station = station;
-      this._psExe = process.env.SystemRoot
-        ? path.join(process.env.SystemRoot, 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-        : 'powershell.exe';
-
-      console.log(`[三菱MX] 正在启动持久化PS进程，站号=${this._station}`);
-
-      const script = this._buildPSScript();
       const tmpFile = path.join(__dirname, '_mx_bridge.ps1');
-      fs.writeFileSync(tmpFile, script, 'utf-8');
+      /**
+       * 测试替身：DT_MX_MOCK=1 时用 Node 内存设备桥替代 PowerShell + ActUtlType COM，
+       * 复用完全相同的行式 JSON 协议；默认关闭，真实链路逐字不变。
+       * 没有 MX Component 逻辑站配置 / GX Simulator2 时，也能验证
+       * 「数字孪生软件 ↔ 三菱 PLC」的 connect / read-vars / write-vars 全链路。
+       */
+      const mxMock = process.env.DT_MX_MOCK === '1';
+      const bridgeFile = mxMock ? path.join(__dirname, 'mx-mock-bridge.cjs') : null;
+
+      if (mxMock) {
+        this._psExe = process.execPath;
+        console.log(`[三菱MX] 测试替身模式 DT_MX_MOCK=1，站号=${this._station}（内存设备，不连真实 PLC）`);
+      } else {
+        this._psExe = process.env.SystemRoot
+          ? path.join(process.env.SystemRoot, 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+          : 'powershell.exe';
+        console.log(`[三菱MX] 正在启动持久化PS进程，站号=${this._station}`);
+        const script = this._buildPSScript();
+        fs.writeFileSync(tmpFile, script, 'utf-8');
+      }
 
       return new Promise((resolveConnect) => {
         this._ready = false;
         this._lineBuffer = '';
 
-        this._ps = spawn(this._psExe, [
-          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpFile,
-        ], {
+        const spawnArgs = mxMock
+          ? [bridgeFile]
+          : ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpFile];
+        this._ps = spawn(this._psExe, spawnArgs, {
           stdio: ['pipe', 'pipe', 'pipe'],
           windowsHide: true,
           // 站号只走环境量，脚本正文不含任何客户端数据
