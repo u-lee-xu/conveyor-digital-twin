@@ -18,6 +18,8 @@ export const GANTRY_VISUAL = {
   BOARD_GRID: '#3c2618',
   PIECE_RED: '#c62828',
   PIECE_BLACK: '#22262b',
+  /** 棋子顶面暗色刻字环：深木棕，不随视角反光变成亮白 */
+  PIECE_RING: '#4a3826',
 } as const;
 
 /** 两轴行程与 Z 气缸行程，单位 mm；MM2M 把 mm 换算成 3D 世界坐标（米） */

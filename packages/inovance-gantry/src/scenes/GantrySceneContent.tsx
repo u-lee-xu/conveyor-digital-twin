@@ -58,7 +58,7 @@ function ChessPieces() {
     <>
       {pieces.map((p) => (
         <group key={p.id} position={[toViewM(p.x), BOARD_Y + toViewM(p.z) + 0.012, toViewM(p.y)]}>
-          <ChessPieceMesh side={p.side} held={p.held} cell={CELL} />
+          <ChessPieceMesh side={p.side} cell={CELL} />
         </group>
       ))}
     </>
@@ -107,8 +107,9 @@ function AssembledScene() {
         <mesh position={[RAIL_X, TABLE_H + 0.075, 0]} castShadow material={M.slider}>
           <boxGeometry args={[0.06, 0.035, 0.08]} />
         </mesh>
+        {/* 滑座顶面 = TABLE_H + 0.078 + 0.02，螺栓底面略埋进去，避免与顶面精确共面 */}
         {[-1, 1].map((s) => (
-          <Bolt key={`slide-bolt-${s}`} position={[0, TABLE_H + 0.1, s * 0.035]} r={0.004} h={0.004} />
+          <Bolt key={`slide-bolt-${s}`} position={[0, TABLE_H + 0.0995, s * 0.035]} r={0.004} h={0.004} />
         ))}
         <SensorFlag axis="z" side={1} mountY={Y_MODULE_Y} />
 
@@ -165,7 +166,7 @@ function renderBarePart(kind: GantryPartKind): ReactNode {
     case 'board':
       return <ChessboardTable boardX={-0.32} boardZ={-0.32} cell={CELL} boardY={0} tableH={-0.06} />;
     case 'piece':
-      return <ChessPieceMesh side="red" held={false} cell={CELL} />;
+      return <ChessPieceMesh side="red" cell={CELL} />;
     default:
       return null;
   }

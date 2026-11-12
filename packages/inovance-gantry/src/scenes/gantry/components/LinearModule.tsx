@@ -46,11 +46,10 @@ export function LinearModule({ length, axis = 'z', position = [0, 0, 0] }: {
           ? [s * D.RAIL_OFFSET, D.HALF + GAP, 0] : [0, D.HALF + GAP, s * D.RAIL_OFFSET];
         return (
           <group key={`rail-${i}`}>
+            {/* 导轨顶面只保留一个亮银面：旧版又叠了一条带深度偏移的高光细条，
+                其底面埋进导轨本体 0.0001m，随视角露出一截截梳齿状亮线（z-fighting）。 */}
             <mesh position={p} material={M.silver}>
               <boxGeometry args={axis === 'z' ? [D.RAIL_W, D.RAIL_H, along] : [along, D.RAIL_H, D.RAIL_W]} />
-            </mesh>
-            <mesh position={[p[0], p[1] + GAP, p[2]]} material={M.decal}>
-              <boxGeometry args={axis === 'z' ? [0.002, 0.0012, along * 0.92] : [along * 0.92, 0.0012, 0.002]} />
             </mesh>
           </group>
         );

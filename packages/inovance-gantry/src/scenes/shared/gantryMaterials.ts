@@ -67,8 +67,14 @@ export const M = {
   pieceRed: new THREE.MeshStandardMaterial({ color: V.PIECE_RED, metalness: 0.15, roughness: 0.58 }),
   /** 黑方棋子 */
   pieceBlack: new THREE.MeshStandardMaterial({ color: V.PIECE_BLACK, metalness: 0.15, roughness: 0.6 }),
-  /** 棋子顶面刻字环（亮银贴面） */
-  pieceFace: new THREE.MeshStandardMaterial({ color: V.ENDCAP_COLOR, metalness: 0.45, roughness: 0.5, ...decal }),
+  /**
+   * 棋子顶面刻字环：单面环带，只靠 SURFACE_GAP 与本体顶面错开。
+   * **禁 polygonOffset** —— 与无 offset 的本体顶面混用会让深度排序随视角翻转，
+   * 出现「同一颗棋子顶部有时红/黑、有时亮银白」。
+   */
+  pieceRing: new THREE.MeshStandardMaterial({
+    color: V.PIECE_RING, metalness: 0.1, roughness: 0.85, side: THREE.DoubleSide,
+  }),
   /** 柜体 / 控制箱 */
   cabinet: new THREE.MeshStandardMaterial({ color: V.CABINET_COLOR, metalness: 0.4, roughness: 0.55 }),
   /** 原点传感器 LED（触发亮绿） */

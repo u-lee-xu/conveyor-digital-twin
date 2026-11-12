@@ -29,7 +29,8 @@ export function ChessboardTable({ boardX, boardZ, cell, boardY, tableH }: {
   ];
   return (
     <group>
-      <mesh position={[cx, boardY - 0.012, cz]} castShadow receiveShadow material={M.boardEdge}>
+      {/* 底板顶面略高于木格底面 0.0005，避免两块大面积共面 */}
+      <mesh position={[cx, boardY - 0.0115, cz]} castShadow receiveShadow material={M.boardEdge}>
         <boxGeometry args={[vc * cell + 0.02, 0.016, vr * cell + 0.02]} />
       </mesh>
       {tiles}
@@ -38,8 +39,10 @@ export function ChessboardTable({ boardX, boardZ, cell, boardY, tableH }: {
           <boxGeometry args={[vc * cell, 0.0012, 0.002]} />
         </mesh>
       ))}
+      {/* 纵向格线比横向格线高一个 SURFACE_GAP：两者原本同 y 且处处交叉，
+          交叉点是典型的共面 z-fighting（深色格线上出现亮点 / 断线）。 */}
       {Array.from({ length: vc + 1 }, (_, i) => (
-        <mesh key={`grid-x-${i}`} position={[boardX + i * cell, boardY + 0.004 + GAP, cz]} material={M.boardGrid}>
+        <mesh key={`grid-x-${i}`} position={[boardX + i * cell, boardY + 0.004 + GAP * 2, cz]} material={M.boardGrid}>
           <boxGeometry args={[0.002, 0.0012, vr * cell]} />
         </mesh>
       ))}

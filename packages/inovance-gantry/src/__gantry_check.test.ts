@@ -13,7 +13,7 @@ import {
   GANTRY_SENSOR, computeSensors, SENSOR_DETAIL, CYLINDER_DETAIL,
   CARRIAGE_DETAIL, END_SUPPORT_DETAIL, MODULE_DETAIL,
   GANTRY_VIEW_PRESETS, GANTRY_PART_STAGES, GANTRY_PART_STAGE_ORIGIN,
-  isGantryPartStage, isGantryViewKey,
+  isGantryPartStage, isGantryViewKey, GANTRY_VISUAL,
 } from './constants/gantryConstants';
 import {
   GANTRY_HOLDING_REGISTERS, GANTRY_COILS, ETHERCAT_PDO_MAP,
@@ -488,5 +488,104 @@ describe('视觉与建模质量', () => {
     for (const t of ['L.ambient', 'L.key', 'L.fillColor', 'gantryMaterials']) expect(scene).toContain(t);
     expect(read('packages/inovance-gantry/src/platform/GantrySceneWrapper.tsx'))
       .toContain('GANTRY_VISUAL.SCENE_BACKGROUND');
+  });
+});
+
+describe('棋子顶面颜色恒定（用户反馈：换角度显示红/白、黑/白）', () => {
+  const PIECE = read(COMP + 'ChessPieceMesh.tsx');
+  const MATS = read(SHARED + 'gantryMaterials.ts');
+  const CONST = read('packages/inovance-gantry/src/constants/gantryConstants.ts');
+
+  it('顶面只有本体一个圆柱 + 一圈几何不重叠的单面环带，不叠薄圆柱贴片', () => {
+    expect((PIECE.match(/<cylinderGeometry/g) || [])).toHaveLength(1);
+    expect(PIECE).toContain('<ringGeometry');
+    expect(PIECE).toContain('rotation={[-Math.PI / 2, 0, 0]}');
+    expect(PIECE).toContain('0.011 + GAP');
+    // 混用 / 不混用深度偏移的薄片会让深度排序随视角翻转
+    expect(PIECE).not.toContain('polygonOffset:');
+    expect(PIECE).not.toContain('M.decal');
+    expect(PIECE).not.toContain('M.pieceFace');
+  });
+
+  it('主色恒为红 / 黑本体色，不随 held 或视角切换材质', () => {
+    expect(PIECE).toContain('material={body}');
+    expect(PIECE).toContain("side === 'red' ? M.pieceRed : M.pieceBlack");
+    expect(PIECE).not.toContain('held');
+    expect(read(SCENE)).toContain('<ChessPieceMesh side={p.side} cell={CELL} />');
+  });
+
+  it('刻字环是暗木棕、不带 polygonOffset，颜色来自 GANTRY_VISUAL 单一来源', () => {
+    expect(MATS).toContain('pieceRing');
+    expect(MATS).not.toContain('pieceFace');
+    expect(MATS).toContain('V.PIECE_RING');
+    expect(MATS).toContain('side: THREE.DoubleSide');
+    expect(CONST).toContain('PIECE_RING');
+  });
+});
+
+describe('贴面共面排查（用户反馈：Y 轴顶部滑块连接处同类变色）', () => {
+  const MOD = read(COMP + 'LinearModule.tsx');
+  const CAR = read(COMP + 'Carriage.tsx');
+  const SCENE_SRC = read(SCENE);
+
+  it('导轨顶面只保留一个亮银面，删掉埋进导轨本体的高光细条', () => {
+    // 旧细条底面 HALF+2GAP-0.0006 低于导轨顶面 HALF+GAP+RAIL_H/2，形成梳齿状 z-fighting
+    expect(MOD).not.toContain('M.decal');
+    expect(MOD).not.toContain('along * 0.92');
+    expect(MOD).toContain('D.HALF + GAP');
+  });
+
+  it('X 滑块顶面不盖亮银薄板，螺栓底面埋进顶面而非精确共面', () => {
+    expect(CAR).not.toContain('M.decal');
+    expect(CAR).not.toContain('GAP');
+    expect(CAR).toContain('D.H / 2 + 0.0012');
+    expect(CAR).toContain('<SensorFlag axis="x"');
+  });
+
+  it('Y 滑座螺栓不与滑座顶面精确共面', () => {
+    // 滑座顶面 TABLE_H+0.078+0.02 = TABLE_H+0.098，旧螺栓底面正好等于它
+    expect(SCENE_SRC).toContain('TABLE_H + 0.0995');
+    expect(SCENE_SRC).not.toContain('TABLE_H + 0.1, s * 0.035');
+  });
+
+  it('SURFACE_GAP 大于贴面薄片厚度，剩余贴面不会埋进本体', () => {
+    expect(GANTRY_VISUAL.SURFACE_GAP).toBeGreaterThan(0.0012);
+    for (const f of ['IndustrialProfile.tsx', 'WeldedTable.tsx', 'SensorSet.tsx']) {
+      expect(read(COMP + f)).toContain('GAP');
+    }
+  });
+});
+
+describe('整机部件连接处共面审计（用户要求全图排查）', () => {
+  const Z = read(COMP + 'ZAxisAssembly.tsx');
+  const SENSOR = read(COMP + 'SensorSet.tsx');
+  const BOARD = read(COMP + 'ChessboardTable.tsx');
+  const TABLE = read(COMP + 'WeldedTable.tsx');
+  const PROFILE = read(COMP + 'IndustrialProfile.tsx');
+
+  it('气缸端盖外移 SURFACE_GAP，顶面不再与缸体端面精确共面', () => {
+    expect(Z).toContain('D.BODY_LEN / 2 - D.CAP_T / 2 + GAP');
+    expect(Z).not.toContain('D.BODY_LEN / 2 - D.CAP_T / 2), 0');
+  });
+
+  it('吸盘头螺栓与挡片螺栓都埋进对应板面，不悬空也不精确共面', () => {
+    expect(Z).toContain('-0.0053');
+    expect(SENSOR).toContain('0.0042');
+  });
+
+  it('棋盘横纵格线分层，木格底面埋进底板而非共面', () => {
+    expect(BOARD).toContain('boardY + 0.004 + GAP * 2');
+    expect(BOARD).toContain('boardY - 0.0115');
+  });
+
+  it('台面 T 槽贴面收进包边内，不横穿 edge-x 边框', () => {
+    expect(TABLE).toContain('railX - 0.03');
+    expect(TABLE).toContain('railX - 0.04');
+    expect(TABLE).not.toContain('railX + 0.09');
+  });
+
+  it('型材端盖内侧面埋进型材端面，不再精确共面', () => {
+    expect(PROFILE).toContain('length / 2 + 0.003');
+    expect(PROFILE).not.toContain('length / 2 + 0.004');
   });
 });
