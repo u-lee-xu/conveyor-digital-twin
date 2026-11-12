@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 /**
  * ================================================
- * mock-gantry-server.js — 汇川龙门 XY 象棋分拣「独立虚拟 PLC」(Modbus TCP Slave)
+ * mock-gantry-server.js — 汇川龙门 XY 象棋分拣「可选本机练习靶机」(Modbus TCP Slave)
  * ================================================
+ * 【产品默认不启用】龙门仿真模式对接外部 PLC 仿真软件（Modbus TCP :502），
+ * 学生在 InoProShop / AutoShop / PLCSIM / GX Simulator2 里写自己的 PLC 程序，
+ * 本场景经网关读回寄存器跟着动。内置参考程序只是「无仿真软件时的联调靶子」，
+ * 不是教学主路径，前端连接预设也不列出（需手填 127.0.0.1:1509）。
+ * 手动启动：node mock-gantry-server.js [端口]，或 start-lab 设 DT_ENABLE_GANTRY_MOCK=1。
+ *
  * 只服务 packages/inovance-gantry 这个独立设备包。端口 1509 / 状态口 5089，
  * 全部显式绑 127.0.0.1，与已定稿的配药 :1505、分拣 :1503、MD520 :1507 / :1508
  * 完全分离：独立端口、独立线圈表、独立寄存器区、独立参考程序、独立状态口。
