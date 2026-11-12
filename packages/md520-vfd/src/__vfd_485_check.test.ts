@@ -72,9 +72,11 @@ describe('真实 Modbus 主站轮询', () => {
 });
 
 describe('启动、检查与前端接线', () => {
-  it('8 进程 / 10 口，端口互不相同', () => {
-    expect(startLab).toContain('起 8 个进程');
+  it('9 进程 / 12 口，端口互不相同', () => {
+    // 汇川龙门 XY 接入后 start-lab 多起一个独立虚拟 PLC :1509 + 状态口 :5089
+    expect(startLab).toContain('起 9 个进程');
     expect(startLab).toContain('1508 / 5088');
+    expect(startLab).toContain('1509 / 5089');
     expect(startLab).toContain('B 档 485 从站端口不能与');
     expect(startLab).toContain("launch('MD520 B 档 485 从站 :1508'");
     expect(startLab).toContain("launch('MD520 485 主站轮询'");
