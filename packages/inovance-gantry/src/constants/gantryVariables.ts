@@ -20,6 +20,13 @@ export const GANTRY_WORD_VARIABLES = {
   GANTRY_Z_POS: { type: 'uint16', modbus: { address: 208, words: 1 }, s7: { address: 'MW1016', words: 1 }, mitsubishi: { address: 'D1008', words: 1 } },
   GANTRY_PHASE_W: { type: 'uint16', modbus: { address: 209, words: 1 }, s7: { address: 'MW1018', words: 1 }, mitsubishi: { address: 'D1009', words: 1 } },
   GANTRY_HELD_W: { type: 'uint16', modbus: { address: 210, words: 1 }, s7: { address: 'MW1020', words: 1 }, mitsubishi: { address: 'D1010', words: 1 } },
+  /**
+   * 吸取 / 放置目标格，编码 row*3+col（0~8）。
+   * PLC 程序本来就清楚自己要去哪个格；显式下发后浏览器不必靠「真空变高那一瞬的
+   * 吸盘坐标」去猜棋子，即使 300ms 轮询滞后于 100ms PLC 扫描也能吸对、放对。
+   */
+  GANTRY_PICK_CELL: { type: 'uint16', modbus: { address: 211, words: 1 }, s7: { address: 'MW1022', words: 1 }, mitsubishi: { address: 'D1011', words: 1 } },
+  GANTRY_PLACE_CELL: { type: 'uint16', modbus: { address: 212, words: 1 }, s7: { address: 'MW1024', words: 1 }, mitsubishi: { address: 'D1012', words: 1 } },
 } as const;
 
 /** Modbus TCP 保持寄存器：X/Y 实际位置与目标位置（DINT 各占两字，低字在前） */
@@ -133,6 +140,9 @@ export const GANTRY_ADDRESS_ROWS: readonly GantryAddressRow[] = [
   { signal: 'Y 目标位置', mitsubishi: 'D1006', modbus: 'HR206', s7: 'MW1012', direction: 'PLC → 设备', pdo: 'Y_Axis.TargetPosition' },
   { signal: 'Z 位置', mitsubishi: 'D1008', modbus: 'HR208', s7: 'MW1016', direction: '设备 → PLC', pdo: 'Z_Cylinder.Position' },
   { signal: '流程阶段', mitsubishi: 'D1009', modbus: 'HR209', s7: 'MW1018', direction: '设备 → PLC', pdo: 'Gantry.Phase' },
+  { signal: '吸持状态', mitsubishi: 'D1010', modbus: 'HR210', s7: 'MW1020', direction: '设备 → PLC', pdo: 'Vacuum.HasPart' },
+  { signal: '吸取目标格', mitsubishi: 'D1011', modbus: 'HR211', s7: 'MW1022', direction: 'PLC → 设备', pdo: 'Gantry.PickCell' },
+  { signal: '放置目标格', mitsubishi: 'D1012', modbus: 'HR212', s7: 'MW1024', direction: 'PLC → 设备', pdo: 'Gantry.PlaceCell' },
   { signal: 'X 伺服使能', mitsubishi: 'Y0', modbus: 'C20', s7: 'M130.0', direction: 'PLC → 设备', pdo: 'X_Axis.ServoEnable' },
   { signal: 'Y 伺服使能', mitsubishi: 'Y1', modbus: 'C21', s7: 'M130.1', direction: 'PLC → 设备', pdo: 'Y_Axis.ServoEnable' },
   { signal: '气缸下降', mitsubishi: 'Y4', modbus: 'C24', s7: 'M134.0', direction: 'PLC → 设备', pdo: 'Z_Cylinder.Down' },

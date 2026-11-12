@@ -38,6 +38,9 @@ export interface GantryPlcFrame {
   vacuum?: boolean;
   enableX?: boolean;
   enableY?: boolean;
+  /** PLC 下发的吸取 / 放置目标格编码 row*3+col（0~8），用于棋子吸放联动 */
+  pickCell?: number;
+  placeCell?: number;
 }
 
 interface GantryStore {
@@ -233,6 +236,16 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     if (typeof frame.vacuum === 'boolean') patch.suction = { vacuum: frame.vacuum, hasPart: frame.vacuum };
     if (typeof frame.enableX === 'boolean') patch.x = { ...(patch.x ?? s.x), enabled: frame.enableX };
     if (typeof frame.enableY === 'boolean') patch.y = { ...(patch.y ?? s.y), enabled: frame.enableY };
+    // PLC 显式下发目标格（row*3+col），解成格子供真空边沿吸放棋子时使用
+    const decodeCell = (v?: number): CellRef | undefined => {
+      if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+      const code = clamp(Math.trunc(v), 0, GANTRY_BOARD.ROWS * GANTRY_BOARD.COLS - 1);
+      return { row: Math.floor(code / GANTRY_BOARD.COLS), col: code % GANTRY_BOARD.COLS };
+    };
+    const pick = decodeCell(frame.pickCell);
+    const place = decodeCell(frame.placeCell);
+    if (pick) patch.pickCell = pick;
+    if (place) patch.placeCell = place;
     patch.sensors = computeSensors(patch.y?.position ?? s.y.position, patch.x?.position ?? s.x.position);
     return patch;
   }),
@@ -361,6 +374,30 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
       patch.x = x; patch.y = y; patch.cylinder = cylinder; patch.suction = suction;
       patch.heldPieceId = heldPieceId; patch.pieces = nextPieces; patch.phase = phase;
       if (phase === GANTRY_PHASE.IDLE) patch.autoRunning = false;
+    }
+
+    // 5) 仿真模式：PLC 只给 position / Z / 真空 / 目标格，不跑本地十步状态机。
+    //    棋子的吸取与放置由真空信号边沿派生 —— heldPieceId 本身就是边沿记忆，
+    //    无需另存「上一帧真空」。目标格由 PLC 显式下发，避免 300ms 轮询滞后于
+    //    100ms PLC 扫描时拿「吸盘当前坐标」去猜棋子而吸空 / 放错格。
+    if (s.controlSource === 'plc') {
+      if (s.suction.vacuum && !s.heldPieceId) {
+        const c = cellToMm(s.pickCell.row, s.pickCell.col);
+        const found = pieceAt(pieces, c.x, c.y);
+        if (found) {
+          patch.heldPieceId = found.id;
+          patch.pieces = pieces.map((p) => (p.id === found.id
+            ? { ...p, x: x.position, y: y.position, z: GANTRY_AXIS.Z_STROKE - z, held: true }
+            : p));
+        }
+      } else if (!s.suction.vacuum && s.heldPieceId) {
+        const c = cellToMm(s.placeCell.row, s.placeCell.col);
+        patch.pieces = pieces.map((p) => (p.id === s.heldPieceId
+          ? { ...p, row: s.placeCell.row, col: s.placeCell.col, label: labelOf(s.placeCell.row, s.placeCell.col),
+            x: c.x, y: c.y, z: 0, held: false }
+          : p));
+        patch.heldPieceId = null;
+      }
     }
 
     set(patch);
