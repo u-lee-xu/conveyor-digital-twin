@@ -639,20 +639,25 @@ function checkGantryPlc() {
     return false;
   }
   const labNeed = ['GANTRY_PLC_PORT = 1509', 'GANTRY_HTTP_PORT = 5089',
-    'mock-gantry-server.js', 'portBusy(GANTRY_PLC_PORT)', 'portBusy(GANTRY_HTTP_PORT)'];
+    'mock-gantry-server.js', 'portBusy(GANTRY_PLC_PORT)', 'portBusy(GANTRY_HTTP_PORT)',
+    'DT_ENABLE_GANTRY_MOCK', 'if (GANTRY_MOCK_ENABLED)'];
   for (const token of labNeed) {
     if (!startLab.includes(token)) {
       console.error(`[check][gantry-plc] ❌ start-lab.cjs 缺 ${token}`);
       return false;
     }
   }
-  // 本机教学虚拟 PLC :1509（默认）与汇川真实 PLC :502 两个入口都要在面板里
-  for (const token of ['1509', '汇川H5U (Modbus :502)', '汇川EASY (Modbus :502)',
-    'port: 502', 'GANTRY_WORD_VARIABLES', 'wordVariables']) {
+  // 仿真模式只对接外部 PLC 仿真软件 :502，面板不再列出本机靶机 :1509 预设
+  for (const token of ['PLC 仿真软件 (Modbus TCP :502)', '汇川H5U (Modbus :502)',
+    '汇川EASY (Modbus :502)', 'port: 502', 'GANTRY_WORD_VARIABLES', 'wordVariables']) {
     if (!connection.includes(token)) {
       console.error(`[check][gantry-plc] ❌ 连接面板缺 ${token}`);
       return false;
     }
+  }
+  if (connection.includes('port: 1509')) {
+    console.error('[check][gantry-plc] ❌ 面板仍把本机靶机列为预设，仿真模式应只连 PLC 仿真软件');
+    return false;
   }
   for (const token of ['readWords(WORD_NAMES)', 'setPlcFrame', 'GANTRY_PHASE_W', 'GANTRY_PICK_CELL']) {
     if (!effects.includes(token)) {
@@ -683,7 +688,7 @@ function checkGantryPlc() {
       return false;
     }
   }
-  console.log('[check][gantry-plc] ✅ 龙门虚拟 PLC :1509+5089 独立、启动接线齐、仿真面板与轮询同源');
+  console.log('[check][gantry-plc] ✅ 龙门仿真对接 PLC 仿真软件 :502、本机靶机默认关闭、面板与轮询同源');
   return true;
 }
 

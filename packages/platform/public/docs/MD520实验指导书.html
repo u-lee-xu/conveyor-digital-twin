@@ -290,9 +290,9 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 </article>
 <article id="lab29" style="background:#fff;border:1px solid var(--line);border-left:4px solid #5F5E5A;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 29　拓扑与 P0 安全认知 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 平台 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　理解 9 进程 / 12 口、回环绑定与出站白名单。</p>
+<p style="margin:6px 0"><b>目的</b>　理解 8 进程 / 10 口、回环绑定与出站白名单。</p>
 <p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>看 start:lab 启动日志，列出全部内部端口。</li><li>确认只有 :5201 对外，其余绑 127.0.0.1。</li><li>查 DT_PLC_HOSTS 默认值与每次重签的内部 token。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　8081 网关 / 8082 中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 教学 / 1508+5088 B 档 / 1509+5089 龙门，全部回环；接实体 PLC 需显式放行。</p>
+<p style="margin:6px 0"><b>预期现象</b>　8081 网关 / 8082 中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 教学 / 1508+5088 B 档，全部回环；汇川龙门仿真走外部 PLC 仿真软件 :502，接实体 PLC 需显式放行。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　启动日志、lab-info.json、security-check 34 项</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　不要为图方便把内部口改成 0.0.0.0；端口漂移会触发 assertInternalPorts 拒绝启动。</p>
 </article>

@@ -212,18 +212,27 @@ describe('仿真模式与方案 A 虚拟 PLC', () => {
     expect(Object.keys(GANTRY_WORD_VARIABLES)).toHaveLength(9);
   });
 
-  it('连接预设同时给本机虚拟 PLC :1509 与汇川真实 PLC :502，并下发设备自己的单字变量表', () => {
+  it('仿真模式只对接 PLC 仿真软件 :502，不再列内置虚拟 PLC :1509 预设', () => {
     const conn = read(`${PANEL}GantryPlcConnection.tsx`);
-    expect(conn).toContain('1509');
-    expect(conn).toContain('本机 :1509');
-    // 与传送带 / MD520 同口径：真实汇川走 Modbus TCP 标准端口 502
+    expect(conn).toContain('PLC 仿真软件 (Modbus TCP :502)');
     expect(conn).toContain('汇川H5U (Modbus :502)');
     expect(conn).toContain('汇川EASY (Modbus :502)');
+    expect(conn).toContain('S7-PLCSIM');
+    expect(conn).toContain('GX Simulator2');
     expect(conn).toContain('port: 502');
+    expect(conn).not.toContain('port: 1509');
+    // 默认第一项就是 502，仿真模式开箱指向 PLC 仿真软件
+    expect(conn).toContain('initialConfig={PRESETS[0].config}');
     expect(conn).toContain('wordVariables: GANTRY_WORD_VARIABLES');
     expect(conn).toContain("protocol: 'modbus'");
-    // 默认仍指向虚拟 PLC，保证不接真机也能开箱跑仿真
-    expect(conn).toContain('initialConfig={PRESETS[0].config}');
+  });
+
+  it('start-lab 默认不启龙门内置靶机，只在显式开关下起', () => {
+    const lab = read('scripts/start-lab.cjs');
+    expect(lab).toContain('默认起 8 个进程');
+    expect(lab).toContain('DT_ENABLE_GANTRY_MOCK');
+    expect(lab).toContain('GANTRY_MOCK_ENABLED');
+    expect(lab).toContain('if (GANTRY_MOCK_ENABLED)');
   });
 
   it('虚拟 PLC :1509 绑回环、跑 100ms 参考程序、不实现 EtherCAT 链路', () => {

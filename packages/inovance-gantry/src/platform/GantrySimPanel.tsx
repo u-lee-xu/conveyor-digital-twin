@@ -34,7 +34,7 @@ export function GantrySimPanel() {
           <button aria-label="复位" style={btn} onClick={() => s.resetAll()}>全部复位</button>
         </div>
         <div data-dt-gantry-sim-hint style={{ fontFamily: 'monospace', marginTop: 6, color: connected ? '#86efac' : '#fcd34d' }}>
-          {connected ? 'PLC 已连接 · 主令写入输入线圈' : '未连接 PLC：按键不会写入任何地址，请先在上方连接仿真 PLC'}
+          {connected ? 'PLC 已连接 · 主令写入输入线圈' : '未连接 PLC 仿真软件：按键不会写入任何地址，请先在上方连接'}
         </div>
       </div>
 

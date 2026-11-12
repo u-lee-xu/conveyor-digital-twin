@@ -4,13 +4,15 @@
  *
  *   npm run start:lab
  *
- * 起 9 个进程，但浏览器（含智能电视）只需要访问一个地址：
+ * 默认起 8 个进程，但浏览器（含智能电视）只需要访问一个地址：
  *   http://<教师机当前任一可达 IP>:5201/
- * 内部链路 8081 / 8082 / 1505 / 5085 / 1503 / 5083 / 1507 / 5087 / 1508 / 5088 / 1509 / 5089
+ * 内部链路 8081 / 8082 / 1505 / 5085 / 1503 / 5083 / 1507 / 5087 / 1508 / 5088
  * 已显式绑定 127.0.0.1，只有 Vite preview 的 /ws/plc 与 /ws/relay 同源代理能触达，
  * CSP 的 'self' 直接放行。
- * 四个场景各自一个虚拟 PLC，不共用线圈表 / 数值段 / 参考程序：
- *   1505 自动配药、1503 传送带分拣、1507 MD520 变频器、1509 汇川龙门 XY（独立设备包）。
+ * 三个场景各自一个虚拟 PLC：1505 自动配药、1503 传送带分拣、1507 MD520 变频器。
+ * **汇川龙门 XY 的仿真模式对接外部 PLC 仿真软件（Modbus TCP :502），产品默认不启内置靶机**；
+ * 没有仿真软件、只想临时联调时设 DT_ENABLE_GANTRY_MOCK=1，额外起 :1509 + :5089
+ * （第 9 个进程，仅联调用，不参与正常教学，前端预设也不列出）。
  * 另有 B 档独立 485 从站 1508（纯从站，无参考程序）与真实 Modbus 主站轮询进程；
  * 外部 PLC 要独占从站时设 DT_VFD_485_MASTER=0。
  *
@@ -21,7 +23,8 @@
  *  - 界面默认显示默认路由网卡的「本地 IP」，其余网卡候选可切换复制；
  *    本机自己始终用 127.0.0.1，网络变化后刷新即更新。
  *
- * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC。
+ * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC；
+ * DT_ENABLE_GANTRY_MOCK=1 额外启用龙门本机练习靶机 :1509（默认关）。
  * 内部端口 8081 / 8082 与同源代理目标硬绑定，检测到不一致会拒绝启动。
  *
  * 安全边界（P0-2）：本脚本每次启动签发一次性 DT_INTERNAL_TOKEN，仅 Vite 代理与
@@ -56,9 +59,10 @@ const CONVEYOR_PLC_PORT = 1503;
 const VFD_PLC_PORT = 1507;
 /** B 档：独立的 485 从站端口（纯从站，与 :1507 的寄存器区完全分离） */
 const VFD_SLAVE_PORT = 1508;
-/** 汇川龙门 XY 独立虚拟 PLC 端口与状态口（与四个既有场景 PLC 完全分离） */
+/** 龙门本机练习靶机端口与状态口（默认不启用，仿真模式对接外部 PLC 仿真软件 :502） */
 const GANTRY_PLC_PORT = 1509;
 const GANTRY_HTTP_PORT = 5089;
+const GANTRY_MOCK_ENABLED = process.env.DT_ENABLE_GANTRY_MOCK === '1';
 
 /**
  * 取默认路由所在网卡的 IPv4，即「本机 IP」：不发包，只让内核按路由表选源地址。
@@ -275,7 +279,9 @@ async function main() {
   const [busy8081, busy8082, busy1505, busy1503, busy1507, busy1508, busy1509, busy5089] = await Promise.all([
     portBusy(8081), portBusy(8082), portBusy(1505),
     portBusy(CONVEYOR_PLC_PORT), portBusy(VFD_PLC_PORT), portBusy(VFD_SLAVE_PORT),
-    portBusy(GANTRY_PLC_PORT), portBusy(GANTRY_HTTP_PORT),
+    // 靶机默认不启：不预检这两个端口，避免无谓占用（Promise.all 允许非 Promise 值）
+    GANTRY_MOCK_ENABLED && portBusy(GANTRY_PLC_PORT),
+    GANTRY_MOCK_ENABLED && portBusy(GANTRY_HTTP_PORT),
   ]);
 
   launch('PLC 网关 :8081', process.execPath, [path.join(WSS, 'server.js')], WSS, !busy8081);
@@ -286,9 +292,11 @@ async function main() {
       [path.join(WSS, 'mock-conveyor-server.js'), String(CONVEYOR_PLC_PORT)], WSS, !busy1503);
     launch('MD520 虚拟 PLC :1507', process.execPath,
       [path.join(WSS, 'mock-vfd-server.js'), String(VFD_PLC_PORT)], WSS, !busy1507);
-    // 汇川龙门 XY：独立虚拟 PLC + 教学参考程序（自带 100ms 扫描）
-    launch('汇川龙门虚拟 PLC :1509', process.execPath,
-      [path.join(WSS, 'mock-gantry-server.js'), String(GANTRY_PLC_PORT)], WSS, !busy1509 && !busy5089);
+    // 汇川龙门 XY：仿真模式默认连外部 PLC 仿真软件 :502，本机练习靶机按需启用
+    if (GANTRY_MOCK_ENABLED) {
+      launch('龙门本机练习靶机 :1509', process.execPath,
+        [path.join(WSS, 'mock-gantry-server.js'), String(GANTRY_PLC_PORT)], WSS, !busy1509 && !busy5089);
+    }
     // B 档：独立 485 从站（纯从站）+ 真实 Modbus 主站轮询进程
     launch('MD520 B 档 485 从站 :1508', process.execPath,
       [path.join(WSS, 'mock-vfd-slave.js'), String(VFD_SLAVE_PORT)], WSS, !busy1508);
@@ -313,7 +321,8 @@ async function main() {
   lines.forEach((l) => console.log(l));
   console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
   console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可');
-  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 MD520 / 1508+5088 B档485从站 / 1509+5089 龙门，均绑定 127.0.0.1，外部访问不到');
+  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 MD520 / 1508+5088 B档485从站，均绑定 127.0.0.1，外部访问不到');
+  console.log(`  汇川龙门仿真：对接外部 PLC 仿真软件 :502；本机练习靶机 ${GANTRY_MOCK_ENABLED ? '已启用 :1509+5089' : '默认关闭，DT_ENABLE_GANTRY_MOCK=1 可开启'}`);
   console.log('  WS 升级鉴权：LAN 只能订阅中继，PLC 写入通道只对主控回环开放；内部链路 token 每次启动重新签发');
   console.log(`  PLC 主机白名单：${process.env.DT_PLC_HOSTS ? process.env.DT_PLC_HOSTS : '默认仅回环；接实体 PLC 请设 DT_PLC_HOSTS'}`);
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
