@@ -57,16 +57,26 @@ describe('三模式注册与切换收口', () => {
 });
 
 describe('手动模式', () => {
-  it('点动 / 回原点 / position 赋值 / 一键定位 / 传感器状态齐备', () => {
+  it('点动 / 回原点 / position 置零 / 一键定位 / 传感器状态齐备', () => {
     const manual = read(`${PANEL}GantryManualPanel.tsx`);
     expect(manual).toContain('aria-label="回原点"');
     expect(manual).toContain('aria-label="position赋值"');
-    expect(manual).toContain('setManualPosition');
+    expect(manual).toContain('aria-label="设0.0点"');
+    expect(manual).toContain('setPositionZero(0, 0)');
     expect(manual).toContain('<CellGrid');
     expect(manual).toContain('<GantryStatusPanel');
     expect(manual).toContain('aria-label="X轴左移"');
     expect(manual).toContain('aria-label="气缸下降"');
     expect(manual).toContain('aria-label="真空吸盘"');
+    expect(manual).toContain('x.position - zeroX');
+    expect(manual).not.toContain('setManualPosition');
+  });
+
+  it('只读状态区的 position 也是相对读数，另有隐藏机床坐标供验收', () => {
+    const parts = read(`${PANEL}GantryPanelParts.tsx`);
+    expect(parts).toContain('(x.position - zeroX).toFixed(1)');
+    expect(parts).toContain('(y.position - zeroY).toFixed(1)');
+    expect(parts).toContain('data-dt-gantry-machine');
   });
 
   it('不做伺服使能，也不做「选择吸取放置格 + 一次性吸取放置」', () => {
@@ -85,17 +95,69 @@ describe('手动模式', () => {
     }
   });
 
-  it('position 赋值同步 position 与 target，下一帧斜坡不把值拉回', () => {
-    useGantryStore.getState().setManualPosition(120, 160);
+  /** 用户口径：手工定义 0.0 点 = 把当前位置设成 0.0，机构不动；之后 XY 移动读数相对增减 */
+  it('设 0.0 点只写零点偏置，机构零位移，之后读数随移动增减且可为负', () => {
+    const store = useGantryStore.getState();
+    store.setXTarget(160);
+    store.setYTarget(160);
+    for (let i = 0; i < 200; i += 1) useGantryStore.getState().tick(1 / 60);
     let s = useGantryStore.getState();
-    expect(s.x.position).toBe(120);
-    expect(s.x.target).toBe(120);
-    expect(s.y.position).toBe(160);
-    expect(s.y.target).toBe(160);
-    s.tick(1 / 60);
+    expect(s.x.position).toBeCloseTo(160, 1);
+    expect(s.y.position).toBeCloseTo(160, 1);
+
+    s.setPositionZero(0, 0);
     s = useGantryStore.getState();
-    expect(s.x.position).toBe(120);
-    expect(s.y.position).toBe(160);
+    // 关键：机械真值与 target 一个都不改，3D 不会跳回机床零点
+    expect(s.x.position).toBeCloseTo(160, 1);
+    expect(s.x.target).toBe(160);
+    expect(s.y.position).toBeCloseTo(160, 1);
+    expect(s.zeroX).toBeCloseTo(160, 1);
+    expect(s.zeroY).toBeCloseTo(160, 1);
+    const readX = () => {
+      const st = useGantryStore.getState();
+      return st.x.position - st.zeroX;
+    };
+    expect(readX()).toBeCloseTo(0, 1);
+
+    // 向零点负方向点动 10mm → 读数 -10
+    s.setXTarget(s.x.position - 10);
+    for (let i = 0; i < 30; i += 1) useGantryStore.getState().tick(1 / 60);
+    expect(readX()).toBeCloseTo(-10, 1);
+    expect(useGantryStore.getState().x.position).toBeCloseTo(150, 1);
+
+    // 反向两次 +10 → 读数 +10
+    for (let n = 0; n < 2; n += 1) {
+      const cur = useGantryStore.getState();
+      cur.setXTarget(cur.x.position + 10);
+      for (let i = 0; i < 30; i += 1) useGantryStore.getState().tick(1 / 60);
+    }
+    expect(readX()).toBeCloseTo(10, 1);
+    expect(useGantryStore.getState().x.position).toBeCloseTo(170, 1);
+  });
+
+  it('设当前点为任意读数同样是写偏置，不把机构挪到该坐标', () => {
+    const store = useGantryStore.getState();
+    store.setXTarget(100);
+    for (let i = 0; i < 120; i += 1) useGantryStore.getState().tick(1 / 60);
+    store.setPositionZero(50, 25);
+    const s = useGantryStore.getState();
+    expect(s.x.position).toBeCloseTo(100, 1);
+    expect(s.zeroX).toBeCloseTo(50, 1);
+    expect(s.zeroY).toBeCloseTo(-25, 1);
+    expect(s.x.position - s.zeroX).toBeCloseTo(50, 1);
+  });
+
+  it('零点偏置进观众快照 / 广播，键名成对；全部复位清除偏置', () => {
+    useGantryStore.getState().setPositionZero(0, 0);
+    const snap = exportGantrySnapshot();
+    expect(snap).toHaveProperty('GANTRY_ZERO_X');
+    expect(snap).toHaveProperty('GANTRY_ZERO_Y');
+    useGantryStore.getState().applyBroadcast({ GANTRY_ZERO_X: 12, GANTRY_ZERO_Y: -8 });
+    expect(useGantryStore.getState().zeroX).toBe(12);
+    expect(useGantryStore.getState().zeroY).toBe(-8);
+    useGantryStore.getState().resetAll();
+    expect(useGantryStore.getState().zeroX).toBe(0);
+    expect(useGantryStore.getState().zeroY).toBe(0);
   });
 });
 

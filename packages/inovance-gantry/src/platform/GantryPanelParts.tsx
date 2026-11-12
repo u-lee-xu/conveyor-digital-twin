@@ -22,6 +22,8 @@ export function GantryStatusPanel() {
   const x = useGantryStore((s) => s.x);
   const y = useGantryStore((s) => s.y);
   const z = useGantryStore((s) => s.z);
+  const zeroX = useGantryStore((s) => s.zeroX);
+  const zeroY = useGantryStore((s) => s.zeroY);
   const cylinder = useGantryStore((s) => s.cylinder);
   const suction = useGantryStore((s) => s.suction);
   const sensors = useGantryStore((s) => s.sensors);
@@ -34,9 +36,14 @@ export function GantryStatusPanel() {
     <>
       <div style={box}>
         <b>状态读数</b>
+        {/* position 是工件坐标相对读数：机床坐标 - 零点偏置，越过零点即为负值 */}
         <div data-dt-gantry-pos style={{ fontFamily: 'monospace', lineHeight: 1.7, marginTop: 5, whiteSpace: 'nowrap' }}>
-          X {x.position.toFixed(1)} / {GANTRY_AXIS.X_TRAVEL} mm Y {y.position.toFixed(1)} / {GANTRY_AXIS.Y_TRAVEL} mm Z {z.toFixed(1)} mm
+          X {(x.position - zeroX).toFixed(1)} / {GANTRY_AXIS.X_TRAVEL} mm Y {(y.position - zeroY).toFixed(1)} / {GANTRY_AXIS.Y_TRAVEL} mm Z {z.toFixed(1)} mm
         </div>
+        {/* 机床坐标真值：供 CDP 断言「置零不产生机构位移」，不参与可见 UI */}
+        <span data-dt-gantry-machine style={{ display: 'none' }}>
+          {x.position.toFixed(1)},{y.position.toFixed(1)}
+        </span>
         <div data-dt-gantry-io style={{ fontFamily: 'monospace', marginTop: 4 }}>
           CYL_DOWN {cylinder.extended ? 1 : 0} VACUUM {suction.vacuum ? 1 : 0} HAS_PART {suction.hasPart ? 1 : 0}
         </div>
