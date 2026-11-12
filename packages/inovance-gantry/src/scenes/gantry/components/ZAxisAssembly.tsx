@@ -52,10 +52,10 @@ export function ZAxisAssembly() {
           <cylinderGeometry args={[D.CAP_R, D.CAP_R, D.CAP_T, 20]} />
         </mesh>
       ))}
-      {/* 双导杆：真实笔形气缸两侧的防转导杆 */}
+      {/* 固定导套：导杆从这里滑过，保证伸出时仍有导向段留在缸体内 */}
       {[-1, 1].map((s) => (
-        <mesh key={`guide-${s}`} position={[s * D.GUIDE_X, Z_AXIS_GEOM.BODY_Y - 0.01, 0]} material={M.rod}>
-          <cylinderGeometry args={[D.GUIDE_R, D.GUIDE_R, D.GUIDE_LEN, 12]} />
+        <mesh key={`guide-bush-${s}`} position={[s * D.GUIDE_X, Z_AXIS_GEOM.BODY_Y - 0.01, 0]} material={M.sleeve}>
+          <cylinderGeometry args={[D.GUIDE_BUSH_R, D.GUIDE_BUSH_R, D.GUIDE_BUSH_LEN, 12]} />
         </mesh>
       ))}
       {/* 黄铜气接头 */}
@@ -71,8 +71,14 @@ export function ZAxisAssembly() {
         <cylinderGeometry args={[D.ROD_R, D.ROD_R, 1, 14]} />
       </mesh>
 
-      {/* 吸盘头：顶面接活塞杆，向下依次是支架板、三层波纹、唇边 */}
+      {/* 吸盘头：顶面接活塞杆；两根防转导杆固定在这块移动板上，随 Z 一起伸出，
+          长度大于行程，顶端始终留在缸体导套内，不会像固定导杆那样留在原地。 */}
       <group ref={headRef} position={[0, Z_AXIS_GEOM.HEAD_BASE, 0]}>
+        {[-1, 1].map((s) => (
+          <mesh key={`guide-${s}`} position={[s * D.GUIDE_X, D.GUIDE_LEN / 2 - 0.02, 0]} material={M.rod}>
+            <cylinderGeometry args={[D.GUIDE_R, D.GUIDE_R, D.GUIDE_LEN, 12]} />
+          </mesh>
+        ))}
         <mesh position={[0, -0.01, 0]} material={M.slider}>
           <boxGeometry args={[0.05, D.HEAD_BRACKET_T, 0.04]} />
         </mesh>

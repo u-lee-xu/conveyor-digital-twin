@@ -9,3 +9,4 @@ export type { SensorKind, RailAxis } from './SensorSet';
 export { WeldedTable } from './WeldedTable';
 export { ChessboardTable } from './ChessboardTable';
 export { ChessPieceMesh } from './ChessPieceMesh';
+export { GantryCameraRig } from './GantryCameraRig';
