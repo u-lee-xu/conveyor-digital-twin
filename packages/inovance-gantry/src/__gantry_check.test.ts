@@ -34,9 +34,10 @@ const runFrames = (n: number) => {
 };
 
 describe('常量与变量命名（单一来源）', () => {
-  it('沿用旧龙门口径：450/600/50mm 行程、3x3 教学落点、40mm 格距、A1~C3', () => {
-    expect(GANTRY_AXIS.X_TRAVEL).toBe(450);
-    expect(GANTRY_AXIS.Y_TRAVEL).toBe(600);
+  it('两轴等长 500/500/50mm 行程、3x3 教学落点、40mm 格距、A1~C3', () => {
+    expect(GANTRY_AXIS.X_TRAVEL).toBe(500);
+    expect(GANTRY_AXIS.Y_TRAVEL).toBe(500);
+    expect(GANTRY_AXIS.X_TRAVEL).toBe(GANTRY_AXIS.Y_TRAVEL);
     expect(GANTRY_AXIS.Z_STROKE).toBe(50);
     expect(GANTRY_BOARD.CELL_SPACING).toBe(40);
     expect(GANTRY_BOARD.VISUAL_ROWS).toBe(8);
@@ -102,7 +103,7 @@ describe('position 坐标变量驱动', () => {
 });
 
 describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位内侧）', () => {
-  it('常量口径：X 轴负限位 0 / 原点 25（内侧）/ 正限位 450；Y 轴 0 / 20 / 600', () => {
+  it('常量口径：X 轴负限位 0 / 原点 25（内侧）/ 正限位 500；Y 轴 0 / 20 / 500', () => {
     const s = GANTRY_SENSOR;
     expect(s.X_END_MINUS).toBe(0);
     expect(s.X_ORIGIN).toBeGreaterThan(s.X_END_MINUS);
@@ -123,7 +124,7 @@ describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位�
       xOrigin: true, xEndMinus: false });
     expect(computeSensors(200, 200)).toMatchObject({ origin: false, endMinus: false, endPlus: false,
       xOrigin: false, xEndMinus: false, xEndPlus: false });
-    expect(computeSensors(600, 450)).toMatchObject({ endPlus: true, xEndPlus: true });
+    expect(computeSensors(500, 500)).toMatchObject({ endPlus: true, xEndPlus: true });
   });
 
   it('store 的 tick / setPlcFrame / resetAll / applyBroadcast 都同步 6 路', () => {
@@ -133,7 +134,7 @@ describe('两轴各 3 个接近开关（端点限位 + 原点在原点侧限位�
     expect(useGantryStore.getState().sensors.xOrigin).toBe(true);
     useGantryStore.getState().tick(1 / 60);
     expect(useGantryStore.getState().sensors.xOrigin).toBe(true);
-    useGantryStore.getState().applyBroadcast({ GANTRY_Y_POS: 600, GANTRY_X_POS: 450,
+    useGantryStore.getState().applyBroadcast({ GANTRY_Y_POS: 500, GANTRY_X_POS: 500,
       GANTRY_SENSOR_ORIGIN: 0, GANTRY_SENSOR_END_MINUS: 0, GANTRY_SENSOR_END_PLUS: 1,
       GANTRY_SENSOR_X_ORIGIN: 0, GANTRY_SENSOR_X_END_MINUS: 0, GANTRY_SENSOR_X_END_PLUS: 1 });
     expect(useGantryStore.getState().sensors.endPlus).toBe(true);
@@ -414,8 +415,8 @@ describe('视觉与建模质量', () => {
 
   it('结构按 Inovance.STEP 装配树：台体 / 一侧 Y 模组 + 一侧 D20 导轨 / X 横梁 / 气缸吸盘', () => {
     const scene = read(SCENE);
-    for (const t of ['WeldedTable', '台体', 'Y 轴线性模组-600', 'HG-KR43 伺服', 'D20 直线导轨',
-      '导轨固定板', 'X 直线模组-450', '200W 伺服', '吸盘', 'yBridge', 'xSlider', 'POST_BOTTOM']) {
+    for (const t of ['WeldedTable', '台体', 'Y 轴线性模组', 'HG-KR43 伺服', 'D20 直线导轨',
+      '导轨固定板', 'X 直线模组', '200W 伺服', '吸盘', 'yBridge', 'xSlider', 'POST_BOTTOM']) {
       expect(scene).toContain(t);
     }
     expect(scene).toContain('gantry-end-support-');
