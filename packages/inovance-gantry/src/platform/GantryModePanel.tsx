@@ -5,7 +5,7 @@
 import { useState, type CSSProperties } from 'react';
 import { useGantryStore } from '../stores/useGantryStore';
 import { useGantryAppStore } from '../stores/useGantryAppStore';
-import { GANTRY_AXIS, CHESS_POSITIONS, cellToMm } from '../constants/gantryConstants';
+import { GANTRY_AXIS, GANTRY_SENSOR, CHESS_POSITIONS, cellToMm } from '../constants/gantryConstants';
 import { ETHERCAT_PDO_MAP, GANTRY_PHASE } from '../constants/gantryVariables';
 
 const PHASE_LABEL: Record<number, string> = {
@@ -76,7 +76,8 @@ export function GantryModePanel() {
           <button aria-label="X轴右移" style={btn} onClick={() => s.setXTarget(x.position + 10)}>X +10</button>
           <button aria-label="Y轴后退" style={btn} onClick={() => s.setYTarget(y.position - 10)}>Y −10</button>
           <button aria-label="Y轴前进" style={btn} onClick={() => s.setYTarget(y.position + 10)}>Y +10</button>
-          <button aria-label="两轴回零" style={btn} onClick={() => { s.setXTarget(0); s.setYTarget(0); }}>回零</button>
+          <button aria-label="回原点" style={btn}
+            onClick={() => { s.setXTarget(GANTRY_SENSOR.X_ORIGIN); s.setYTarget(GANTRY_SENSOR.Y_ORIGIN); }}>回原点</button>
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 5 }}>
           <button aria-label="X轴伺服使能" style={{ ...btn, background: x.enabled ? '#15803d' : undefined }}
