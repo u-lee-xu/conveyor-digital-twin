@@ -506,26 +506,35 @@ export function Agitator() {
 }
 
 /* --------------------------------------------------------------------------
- * 球阀：阀体球 + 两侧短接 + 阀杆 + 手柄；开 / 关由 open 旋转手柄
+ * 球阀：阀体球 + 两侧短接 + 阀杆 + 手柄 + 赤道状态环。
+ * 开 / 关同时表达在「手柄 90° 旋转」与「整阀状态色」两处：
+ * 整机机位下阀门只有十几像素，单靠旋转根本看不出来，必须靠绿 / 红色块。
+ * 材质按 open 二选一（成组单例），不改写共享的 LM.pipe / LM.valve。
  * ------------------------------------------------------------------------ */
 export function BallValve({ open }: { open: boolean }) {
+  const body = open ? LM.valveOpen : LM.valveClosed;
+  const lamp = open ? LM.valveLampOpen : LM.valveLampClosed;
   return (
     <group>
-      <mesh material={LM.valve} castShadow>
+      <mesh material={body} castShadow>
         <sphereGeometry args={[VALVE_R, 20, 14]} />
+      </mesh>
+      {/* 赤道状态环：环最内侧与球面错开 ≥ GAP，避免共面闪烁；高自发光便于远距辨认 */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} material={lamp}>
+        <torusGeometry args={[VALVE_R + GAP * 4, GAP * 2.4, 8, 28]} />
       </mesh>
       {[-1, 1].map((s) => (
         <mesh key={s} position={[s * (VALVE_R + PIPE_INSET), 0, 0]}
-          rotation={[0, 0, Math.PI / 2]} material={LM.pipe}>
+          rotation={[0, 0, Math.PI / 2]} material={body}>
           <cylinderGeometry args={[PIPE_R, PIPE_R, PIPE_R * 2, 12]} />
         </mesh>
       ))}
       <mesh position={[0, VALVE_R + PIPE_R, 0]} material={LM.cap}>
         <cylinderGeometry args={[PIPE_R * 0.6, PIPE_R * 0.6, PIPE_R * 2, 12]} />
       </mesh>
-      {/* 开 → 手柄与管轴平行；关 → 旋转 90° */}
+      {/* 开 → 手柄与管轴平行；关 → 旋转 90°；手柄同步状态色 */}
       <group position={[0, VALVE_R + PIPE_R * 2, 0]} rotation={[0, open ? 0 : Math.PI / 2, 0]}>
-        <mesh material={LM.handle} castShadow>
+        <mesh material={lamp} castShadow>
           <boxGeometry args={[VALVE_R * 2.4, GAP * 4, PIPE_R * 0.8]} />
         </mesh>
       </group>

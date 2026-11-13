@@ -15,6 +15,7 @@ import {
 } from './constants/liquidVariables';
 import {
   liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
+  LIQUID_VISUAL, liquidValveStateColor,
 } from './constants/liquidConstants';
 import { LIQUID_REAL32_WORD_ORDER } from './constants/real32';
 
@@ -338,5 +339,64 @@ describe('成品罐颜色与混合后的液体同源', () => {
     // LIQUID_LEVEL_PRODUCT 是既有 REAL 液位字，与颜色无关；这里只排除颜色 / 组分新键
     expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /PRODUCT_A|PRODUCT_B|COLOR/i.test(k))).toBe(false);
     expect(LIQUID_ADDRESS_ROWS.length).toBe(23);
+  });
+});
+
+describe('阀门开关状态色：3D / 面板 / 展台同源', () => {
+  const constants = read('packages/liquid-mixing/src/constants/liquidConstants.ts');
+  const materials = read('packages/liquid-mixing/src/scenes/shared/liquidMaterials.ts');
+  const parts = read('packages/liquid-mixing/src/scenes/components/LiquidParts.tsx');
+  const manual = read('packages/liquid-mixing/src/platform/LiquidManualPanel.tsx');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const scene = read('packages/liquid-mixing/src/scenes/LiquidSceneContent.tsx');
+  const vars = read('packages/liquid-mixing/src/constants/liquidVariables.ts');
+  const effects = read('packages/liquid-mixing/src/platform/LiquidDeviceEffects.tsx');
+
+  it('状态色只有一处定义，直接复用共享工业灯色令牌', () => {
+    expect(constants).toContain('export const LIQUID_VALVE_STATE');
+    expect(constants).toContain('open: LIQUID_VISUAL.LAMP_GREEN');
+    expect(constants).toContain('closed: LIQUID_VISUAL.LAMP_RED');
+    expect(liquidValveStateColor(true)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+    expect(liquidValveStateColor(false)).toBe(LIQUID_VISUAL.LAMP_RED);
+    expect(liquidValveStateColor(true)).not.toBe(liquidValveStateColor(false));
+  });
+
+  it('3D 按 open 二选一成组单例材质，不改写共享的管路 / 泵材质', () => {
+    expect(materials).toContain('valveOpen: new THREE.MeshStandardMaterial');
+    expect(materials).toContain('valveClosed: new THREE.MeshStandardMaterial');
+    expect(materials).toContain('valveLampOpen:');
+    expect(materials).toContain('valveLampClosed:');
+    // 旧「恒红手柄」材质必须删掉，否则开阀仍是红的
+    expect(materials).not.toContain('handle: new THREE.MeshStandardMaterial');
+    expect(parts).toContain('const body = open ? LM.valveOpen : LM.valveClosed;');
+    expect(parts).toContain('const lamp = open ? LM.valveLampOpen : LM.valveLampClosed;');
+    expect(parts).not.toContain('LM.pipe.color.set');
+    expect(parts).not.toContain('LM.valve.color.set');
+    // 机械语义保留：开平行于管轴、关旋转 90°
+    expect(parts).toContain('rotation={[0, open ? 0 : Math.PI / 2, 0]}');
+    // 状态环与球面错开 ≥ GAP，避免共面闪烁
+    expect(parts).toContain('torusGeometry args={[VALVE_R + GAP * 4, GAP * 2.4, 8, 28]}');
+  });
+
+  it('面板按钮 / 状态读数 / 隐藏锚点都与 3D 用同一个纯函数', () => {
+    expect(manual).toContain('liquidValveStateColor(on)');
+    expect(manual).toContain('valveKeys.includes(t.key)');
+    expect(panel).toContain('data-dt-liquid-valve');
+    expect(panel).toContain('liquidValveStateColor(outputs.valveA)');
+    expect(panel).toContain('liquidValveStateColor(outputs.valveB)');
+    expect(panel).toContain('liquidValveStateColor(outputs.discharge)');
+  });
+
+  it('部件展台阀门跟随 A 阀真值，不再恒开', () => {
+    expect(scene).toContain('renderBarePart(kind, valveOpen)');
+    expect(scene).toContain('<BallValve open={valveOpen} />');
+    expect(scene).not.toContain('<BallValve open />');
+  });
+
+  it('状态色是纯本地派生量，PLC 变量表 / 地址表 / 回写链路零改动', () => {
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(23);
+    expect(vars).not.toMatch(/VALVE_STATE|VALVE_COLOR/i);
+    expect(effects).not.toMatch(/valveStateColor|LIQUID_VALVE_STATE/);
+    expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /VALVE_STATE|COLOR/i.test(k))).toBe(false);
   });
 });

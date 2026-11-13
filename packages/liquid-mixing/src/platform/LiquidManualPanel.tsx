@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useLiquidStore } from '../stores/useLiquidStore';
 import {
-  TANK_IDS, LIQUID_INITIAL_VOLUMES, LIQUID_TANKS, type TankId, type Outputs,
+  TANK_IDS, LIQUID_INITIAL_VOLUMES, LIQUID_TANKS,
+  liquidValveStateColor, type TankId, type Outputs,
 } from '../constants/liquidConstants';
 import {
   box, btn, inputStyle,
@@ -29,19 +30,35 @@ export function LiquidManualPanel() {
     { key: 'stirReverse', label: '搅拌反转点动' },
     { key: 'discharge', label: '出料阀' },
   ];
+  /** 三个阀门用与 3D 同源的状态色；两个搅拌点动仍用原蓝色，避免视觉语义混淆 */
+  const valveKeys: (keyof Outputs)[] = ['valveA', 'valveB', 'discharge'];
 
   return (
     <div data-dt-liquid-manual>
       <div style={box}>
         <b>执行器</b>
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          {toggles.map((t) => (
-            <button key={t.key} type="button" aria-label={t.label}
-              style={{ ...btn, background: outputs[t.key] ? '#1d4ed8' : undefined }}
-              onClick={() => setOutput(t.key, !outputs[t.key])}>
-              {t.label} {outputs[t.key] ? 'ON' : 'OFF'}
-            </button>
-          ))}
+          {toggles.map((t) => {
+            const on = outputs[t.key];
+            const isValve = valveKeys.includes(t.key);
+            const stateColor = liquidValveStateColor(on);
+            return (
+              <button key={t.key} type="button" aria-label={t.label}
+                style={{
+                  ...btn,
+                  background: isValve ? (on ? '#14382a' : '#3b1d1d') : (on ? '#1d4ed8' : undefined),
+                  borderColor: isValve ? stateColor : undefined,
+                  color: isValve ? stateColor : undefined,
+                }}
+                onClick={() => setOutput(t.key, !on)}>
+                {isValve && <span style={{
+                  display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                  background: stateColor, boxShadow: `0 0 5px ${stateColor}`, marginRight: 4,
+                }} />}
+                {t.label} {on ? 'ON' : 'OFF'}
+              </button>
+            );
+          })}
         </div>
       </div>
 

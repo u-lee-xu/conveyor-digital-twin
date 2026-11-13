@@ -110,7 +110,7 @@ function AssembledScene() {
 }
 
 /** 部件展台裸视图：与整机复用同一批组件，不套装配位姿 */
-function renderBarePart(kind: LiquidPartKind): ReactNode {
+function renderBarePart(kind: LiquidPartKind, valveOpen: boolean): ReactNode {
   switch (kind) {
     case 'tank':
       return <TankAssembly tank="a" />;
@@ -127,7 +127,8 @@ function renderBarePart(kind: LiquidPartKind): ReactNode {
     case 'agitator':
       return <Agitator />;
     case 'valve':
-      return <BallValve open />;
+      // 展台跟随 A 进料阀真值：手动模式点阀即可在放大视图里直观看开关色与手柄角度
+      return <BallValve open={valveOpen} />;
     case 'pump':
       return <PumpUnit />;
     case 'pipe':
@@ -140,13 +141,14 @@ function renderBarePart(kind: LiquidPartKind): ReactNode {
 /** 部件展台：1:1 真实尺度 + 标尺网格，居中于自身局部原点 */
 function PartStageView({ kind }: { kind: LiquidPartKind }) {
   const stage = LIQUID_PART_STAGES[kind];
+  const valveOpen = useLiquidStore((s) => s.outputs.valveA);
   return (
     <group userData={{ part: kind, origin: LIQUID_PART_STAGE_ORIGIN[kind], scale: 1 }}>
       <gridHelper
         args={[stage.grid, Math.round(stage.grid / 0.1), '#94a3b8', '#475569']}
         position={[0, stage.gridY, 0]}
       />
-      {renderBarePart(kind)}
+      {renderBarePart(kind, valveOpen)}
     </group>
   );
 }
