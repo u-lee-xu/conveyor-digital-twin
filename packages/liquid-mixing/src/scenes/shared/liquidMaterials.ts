@@ -94,10 +94,28 @@ export const LM = {
   tick: new THREE.MeshStandardMaterial({ color: V.STRUCT_COLOR, metalness: 0.3, roughness: 0.75 }),
   /** 管路 */
   pipe: new THREE.MeshStandardMaterial({ color: V.PIPE, metalness: 0.75, roughness: 0.32 }),
-  /** 球阀 / 泵蜗壳 */
+  /** 球阀 / 泵蜗壳（管路与泵共用，不随阀门状态改写） */
   valve: new THREE.MeshStandardMaterial({ color: V.CYL_BODY_COLOR, metalness: 0.7, roughness: 0.35 }),
-  /** 阀手柄 */
-  handle: new THREE.MeshStandardMaterial({ color: V.LAMP_RED, metalness: 0.35, roughness: 0.55 }),
+  /**
+   * 球阀状态色：成组单例，BallValve 按 open 二选一。
+   * 绝不改写 LM.pipe / LM.valve，否则管路与泵蜗壳会被连带染色；
+   * 三个阀门状态可各不相同，因此也不能用「逐帧改同一个材质」的写法。
+   */
+  valveOpen: new THREE.MeshStandardMaterial({
+    color: V.LAMP_GREEN, emissive: V.LAMP_GREEN, emissiveIntensity: 0.55,
+    metalness: 0.55, roughness: 0.35,
+  }),
+  valveClosed: new THREE.MeshStandardMaterial({
+    color: V.LAMP_RED, emissive: V.LAMP_RED, emissiveIntensity: 0.35,
+    metalness: 0.55, roughness: 0.35,
+  }),
+  /** 阀位指示：手柄与赤道状态环，高自发光让整机机位也能一眼看出开关 */
+  valveLampOpen: new THREE.MeshStandardMaterial({
+    color: V.LAMP_GREEN, emissive: V.LAMP_GREEN, emissiveIntensity: 2.0, roughness: 0.3,
+  }),
+  valveLampClosed: new THREE.MeshStandardMaterial({
+    color: V.LAMP_RED, emissive: V.LAMP_RED, emissiveIntensity: 1.0, roughness: 0.3,
+  }),
   /** 电机本体 */
   motor: new THREE.MeshStandardMaterial({ color: V.CABINET_COLOR, metalness: 0.5, roughness: 0.5 }),
   /** 电机散热筋 */

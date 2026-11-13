@@ -172,6 +172,20 @@ export const LIQUID_VISUAL = {
   SCENE_TARGET: [0, 0.42, 0] as [number, number, number],
 } as const;
 
+/**
+ * 球阀开关状态色：开＝通行绿、关＝截止红，直接复用共享工业灯色令牌。
+ * 3D 阀体 / 手柄 / 状态环与面板按钮、状态读数共用 liquidValveStateColor()，
+ * 不另开第二套色值；状态真值始终是 store 的 outputs，快照与观众镜像天然同源。
+ */
+export const LIQUID_VALVE_STATE = {
+  open: LIQUID_VISUAL.LAMP_GREEN,
+  closed: LIQUID_VISUAL.LAMP_RED,
+} as const;
+
+export function liquidValveStateColor(open: boolean): string {
+  return open ? LIQUID_VALVE_STATE.open : LIQUID_VALVE_STATE.closed;
+}
+
 /** 几何单一来源：米。罐底 y 即支腿台面高度，液面从罐底沿 +Y 上升 */
 export interface TankGeometry {
   label: string;

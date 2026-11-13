@@ -5,7 +5,7 @@ import { useLiquidStore, liquidRatioA } from '../stores/useLiquidStore';
 import {
   TANK_IDS, LIQUID_CAPACITY, LIQUID_TANKS, LIQUID_PHASE_LABEL,
   liquidDisplay, liquidLevelRatio, liquidAlarmText,
-  liquidBlendColor, liquidProductColor,
+  liquidBlendColor, liquidProductColor, liquidValveStateColor,
   type TankId, type LiquidSensors,
 } from '../constants/liquidConstants';
 import {
@@ -93,11 +93,17 @@ export function LiquidStatusPanel() {
     <>
       <div style={box}>
         <b>状态读数</b>
+        <span data-dt-liquid-valve style={{ display: 'none' }}>
+          {`valveA=${outputs.valveA ? 1 : 0}:${liquidValveStateColor(outputs.valveA)}|valveB=${outputs.valveB ? 1 : 0}:${liquidValveStateColor(outputs.valveB)}|discharge=${outputs.discharge ? 1 : 0}:${liquidValveStateColor(outputs.discharge)}`}
+        </span>
         <div data-dt-liquid-status style={{ fontFamily: 'monospace', marginTop: 5, lineHeight: 1.7 }}>
           <div>阶段 {phase} {LIQUID_PHASE_LABEL[phase]} 轮次 {round}</div>
           <div>配比 A {(liquidRatioA(mixA, mixB) * 100).toFixed(0)} % 搅拌方向 {stirDirection === 1 ? '正转' : stirDirection === -1 ? '反转' : '停止'}</div>
           <div>
-            A 阀 {outputs.valveA ? 'ON' : 'OFF'} B 阀 {outputs.valveB ? 'ON' : 'OFF'} 正转 {outputs.stirForward ? 'ON' : 'OFF'} 反转 {outputs.stirReverse ? 'ON' : 'OFF'} 出料 {outputs.discharge ? 'ON' : 'OFF'}
+            <span style={{ color: liquidValveStateColor(outputs.valveA) }}>A 阀 {outputs.valveA ? 'ON' : 'OFF'}</span>
+            {' '}<span style={{ color: liquidValveStateColor(outputs.valveB) }}>B 阀 {outputs.valveB ? 'ON' : 'OFF'}</span>
+            {' '}正转 {outputs.stirForward ? 'ON' : 'OFF'} 反转 {outputs.stirReverse ? 'ON' : 'OFF'}
+            {' '}<span style={{ color: liquidValveStateColor(outputs.discharge) }}>出料 {outputs.discharge ? 'ON' : 'OFF'}</span>
           </div>
           <div data-dt-liquid-uniformity data-value={mixUniformity.toFixed(3)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>

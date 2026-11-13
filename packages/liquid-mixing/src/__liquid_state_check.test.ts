@@ -11,7 +11,7 @@ import {
   liquidDisplay, LIQUID_EMPTY_OUTPUTS, liquidAlarmFlags, LIQUID_VISUAL, LIQUID_VIEW_PRESETS,
   liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
   liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
-  clampUniformity, mixHexColor,
+  liquidValveStateColor, clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
 import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION } from './constants/liquidVariables';
 
@@ -446,5 +446,43 @@ describe('快照 / 观众只读镜像', () => {
     }
     expect(snap.LIQUID_SENSOR_MASK).toBeGreaterThanOrEqual(0);
     expect(snap.LIQUID_SENSOR_MASK).toBeLessThan(1 << LIQUID_SENSOR_FEEDBACK.length);
+  });
+});
+
+describe('阀门开关状态色与真值同源', () => {
+  it('开绿关红，且与共享工业灯色令牌完全一致', () => {
+    expect(liquidValveStateColor(true)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+    expect(liquidValveStateColor(false)).toBe(LIQUID_VISUAL.LAMP_RED);
+    expect(liquidValveStateColor(true)).not.toBe(liquidValveStateColor(false));
+  });
+
+  it('颜色只由 outputs 派生：快照与观众镜像天然同源，无需新增快照键', () => {
+    S().resetAll();
+    expect(exportLiquidSnapshot().LIQUID_VALVE_A).toBe(0);
+    expect(liquidValveStateColor(S().outputs.valveA)).toBe(LIQUID_VISUAL.LAMP_RED);
+
+    S().setOutput('valveA', true);
+    expect(exportLiquidSnapshot().LIQUID_VALVE_A).toBe(1);
+    expect(liquidValveStateColor(S().outputs.valveA)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+
+    // 观众端还原 0 后立刻回到关态红，颜色不会与真值脱节
+    S().applyBroadcast({ LIQUID_VALVE_A: 0 });
+    expect(S().outputs.valveA).toBe(false);
+    expect(liquidValveStateColor(S().outputs.valveA)).toBe(LIQUID_VISUAL.LAMP_RED);
+
+    S().applyBroadcast({ LIQUID_VALVE_A: 1 });
+    expect(S().outputs.valveA).toBe(true);
+    expect(liquidValveStateColor(S().outputs.valveA)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+  });
+
+  it('三个阀门状态互不影响，可分别开 / 关', () => {
+    S().resetAll();
+    S().setOutput('valveA', true);
+    S().setOutput('discharge', true);
+    expect(liquidValveStateColor(S().outputs.valveA)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+    expect(liquidValveStateColor(S().outputs.valveB)).toBe(LIQUID_VISUAL.LAMP_RED);
+    expect(liquidValveStateColor(S().outputs.discharge)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+    const snap = exportLiquidSnapshot();
+    expect([snap.LIQUID_VALVE_A, snap.LIQUID_VALVE_B, snap.LIQUID_DISCHARGE]).toEqual([1, 0, 1]);
   });
 });
