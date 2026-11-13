@@ -5,6 +5,7 @@ import { useLiquidStore, liquidRatioA } from '../stores/useLiquidStore';
 import {
   TANK_IDS, LIQUID_CAPACITY, LIQUID_TANKS, LIQUID_PHASE_LABEL,
   liquidDisplay, liquidLevelRatio, liquidAlarmText,
+  liquidBlendColor, liquidProductColor,
   type TankId, type LiquidSensors,
 } from '../constants/liquidConstants';
 import {
@@ -32,8 +33,21 @@ export function LiquidLevelReadout() {
   const volumes = useLiquidStore((s) => s.volumes);
   const tare = useLiquidStore((s) => s.tare);
   const sensors = useLiquidStore((s) => s.sensors);
+  const mixA = useLiquidStore((s) => s.mixA);
+  const mixB = useLiquidStore((s) => s.mixB);
+  const productA = useLiquidStore((s) => s.productA);
+  const productB = useLiquidStore((s) => s.productB);
+  /** 混合罐 / 成品罐读数条颜色与 3D 液柱同源：成品 = 混合后的液体，同一个纯函数 */
+  const tankColor = (tank: TankId) => {
+    if (tank === 'mix') return liquidBlendColor(mixA, mixB);
+    if (tank === 'product') return liquidProductColor(productA, productB);
+    return LIQUID_TANKS[tank].color;
+  };
   return (
     <div style={box}>
+      <span data-dt-liquid-color style={{ display: 'none' }}>
+        {`mix=${liquidBlendColor(mixA, mixB)}|product=${liquidProductColor(productA, productB)}`}
+      </span>
       <div data-dt-liquid-levels style={{ marginTop: 2 }}>
         <b>液位读数 REAL 32</b>
         {TANK_IDS.map((tank) => {
@@ -48,7 +62,7 @@ export function LiquidLevelReadout() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
                 <div style={{ flex: 1, height: 6, background: '#0f172a', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: `${(ratio * 100).toFixed(1)}%`, height: '100%', background: LIQUID_TANKS[tank].color }} />
+                  <div style={{ width: `${(ratio * 100).toFixed(1)}%`, height: '100%', background: tankColor(tank) }} />
                 </div>
                 <span style={{ width: 32, textAlign: 'right', color: '#94a3b8' }}>{(ratio * 100).toFixed(0)}%</span>
                 <span style={{ marginLeft: 4, fontSize: 10, color: '#94a3b8' }}>
