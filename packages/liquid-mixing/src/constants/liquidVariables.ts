@@ -229,3 +229,76 @@ export const LIQUID_IO_MAP = [
   { signal: 'LIQUID_STIR_FWD / REV', direction: 'PLC → actuator', source: '搅拌电机正反转' },
   { signal: 'LIQUID_DISCHARGE', direction: 'PLC → actuator', source: '底部出料阀' },
 ] as const;
+
+/* ---------------------- 面板变量地址浮框（与自动配药 AddressHint 同一范式） ---------------------- */
+
+/** 浮框一行：一个信号在三种协议下的地址，值一律来自 LIQUID_ADDRESS_ROWS / LIQUID_SENSOR_FEEDBACK */
+export interface LiquidHintRow {
+  label: string;
+  mitsubishi: string;
+  modbus: string;
+  s7: string;
+  /** 方向 / 量纲说明：浮框底部去重后统一显示，不占三协议列 */
+  note?: string;
+}
+
+/**
+ * 面板语义键 → 仿真地址表里的 signal 名。
+ * 这里只声明「哪个面板变量查哪一行」，绝不回填 C40 / HR300 / M160.0 之类的地址字面量；
+ * 与配药 manualIo.ioAddressRows() 同源范式，改地址只需改 LIQUID_ADDRESS_ROWS 一处。
+ * 纯本地教学量（混合均匀度、成品组分、阀门状态色）与本地演示主令**不在此表**，
+ * 它们不在 PLC 链路上，标地址会误导学生。
+ */
+export const LIQUID_PANEL_HINT_SIGNALS = {
+  levelA: ['A 罐液位 REAL'],
+  levelB: ['B 罐液位 REAL'],
+  levelMix: ['混合罐液位 REAL'],
+  levelProduct: ['成品罐液位 REAL'],
+  phase: ['工艺阶段'],
+  alarm: ['报警字'],
+  round: ['循环轮次'],
+  ratioA: ['A 液配比'],
+  sensorMask: ['开关量掩码'],
+  actionWord: ['显式动作字'],
+  recipeA: ['A 目标量'],
+  recipeB: ['B 目标量'],
+  stirForwardSec: ['正转时长'],
+  stirReverseSec: ['反转时长'],
+  valveA: ['A 进料阀 / 泵'],
+  valveB: ['B 进料阀 / 泵'],
+  stirForward: ['搅拌正转'],
+  stirReverse: ['搅拌反转'],
+  discharge: ['出料阀'],
+  /** 搅拌方向是正 / 反转两个线圈，浮框里各占一行 */
+  stirDirection: ['搅拌正转', '搅拌反转'],
+} as const;
+
+export type LiquidPanelHintKey = keyof typeof LIQUID_PANEL_HINT_SIGNALS;
+
+/** 面板语义键 → 地址浮框行；查不到立即报错，避免 UI 出现「有标注却没地址」的死链 */
+export function liquidAddressRowsFor(key: LiquidPanelHintKey): LiquidHintRow[] {
+  return LIQUID_PANEL_HINT_SIGNALS[key].map((signal) => {
+    const row = LIQUID_ADDRESS_ROWS.find((r) => r.signal === signal);
+    if (!row) throw new Error(`液体混装地址表缺少信号：${signal}`);
+    return {
+      label: row.signal,
+      mitsubishi: row.mitsubishi,
+      modbus: row.modbus,
+      s7: row.s7,
+      note: `${row.direction} · ${row.note}`,
+    };
+  });
+}
+
+/** 14 路开关量逐路浮框行：直接取回写表，保证「面板信号名 / 三协议地址 / 回写线圈」同源 */
+export function liquidSensorHintRow(key: string): LiquidHintRow[] {
+  const row = LIQUID_SENSOR_FEEDBACK.find((r) => r.key === key);
+  if (!row) throw new Error(`液体混装开关量表缺少信号：${key}`);
+  return [{
+    label: row.signal,
+    mitsubishi: row.mitsubishi,
+    modbus: `C${row.modbus}`,
+    s7: row.s7,
+    note: '设备 → PLC · 开关量反馈',
+  }];
+}

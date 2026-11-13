@@ -5,6 +5,7 @@ import {
   box, btn,
   LiquidRecipeEditor, LiquidLevelReadout, LiquidStatusPanel, LiquidAlarmPanel,
 } from './LiquidPanelParts';
+import { LiquidHint, LiquidSensorHint } from './LiquidAddressHint';
 
 export function LiquidDemoPanel() {
   const demoRunning = useLiquidStore((s) => s.demoRunning);
@@ -33,11 +34,11 @@ export function LiquidDemoPanel() {
             onClick={() => stopDemo()}>紧急停</button>
         </div>
         <div style={{ fontFamily: 'monospace', marginTop: 6, lineHeight: 1.7 }}>
-          <div data-dt-liquid-phase>阶段 {phase} {LIQUID_PHASE_LABEL[phase]}</div>
-          <div>轮次 {round} 停止请求 {stopRequested ? 'ON' : 'OFF'}</div>
+          <div data-dt-liquid-phase><LiquidHint hintKey="phase" title="工艺阶段">阶段</LiquidHint> {phase} {LIQUID_PHASE_LABEL[phase]}</div>
+          <div><LiquidHint hintKey="round" title="循环轮次">轮次</LiquidHint> {round} 停止请求 {stopRequested ? 'ON' : 'OFF'}</div>
           <div style={{ display: 'flex', gap: 12 }}>
-            <span style={{ color: sensors.forward ? '#4ade80' : '#475569' }}>● 正转 {sensors.forward ? 'ON' : 'OFF'}</span>
-            <span style={{ color: sensors.reverse ? '#4ade80' : '#475569' }}>● 反转 {sensors.reverse ? 'ON' : 'OFF'}</span>
+            <span style={{ color: sensors.forward ? '#4ade80' : '#475569' }}>● <LiquidSensorHint sensorKey="LIQUID_STIR_FORWARD" label="正转" /> {sensors.forward ? 'ON' : 'OFF'}</span>
+            <span style={{ color: sensors.reverse ? '#4ade80' : '#475569' }}>● <LiquidSensorHint sensorKey="LIQUID_STIR_REVERSE" label="反转" /> {sensors.reverse ? 'ON' : 'OFF'}</span>
           </div>
         </div>
       </div>

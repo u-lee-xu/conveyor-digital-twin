@@ -9,6 +9,14 @@ import {
   box, btn, inputStyle,
   LiquidLevelReadout, LiquidStatusPanel, LiquidAlarmPanel, LiquidRecipeEditor,
 } from './LiquidPanelParts';
+import { LiquidHint } from './LiquidAddressHint';
+import { type LiquidPanelHintKey } from '../constants/liquidVariables';
+
+/** 五个执行器按钮 → 输出线圈地址浮框键；去皮 / 调试主令是本地动作，不标地址 */
+const EXECUTOR_HINT: Record<keyof Outputs, LiquidPanelHintKey> = {
+  valveA: 'valveA', valveB: 'valveB',
+  stirForward: 'stirForward', stirReverse: 'stirReverse', discharge: 'discharge',
+};
 
 export function LiquidManualPanel() {
   const outputs = useLiquidStore((s) => s.outputs);
@@ -55,7 +63,7 @@ export function LiquidManualPanel() {
                   display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
                   background: stateColor, boxShadow: `0 0 5px ${stateColor}`, marginRight: 4,
                 }} />}
-                {t.label} {on ? 'ON' : 'OFF'}
+                <LiquidHint hintKey={EXECUTOR_HINT[t.key]} title={t.label}>{t.label} {on ? 'ON' : 'OFF'}</LiquidHint>
               </button>
             );
           })}
