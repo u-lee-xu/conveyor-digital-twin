@@ -159,8 +159,8 @@ export const LIQUID_VISUAL = {
   SCENE_LIGHTING: INDUSTRIAL_LIGHTING,
   LIQUID_A: '#2f81f7',
   LIQUID_B: '#f59e0b',
+  /** 混合紫：混合罐搅匀色，也是成品罐的默认色（成品装的正是混合后的液体） */
   LIQUID_MIX: '#a855f7',
-  LIQUID_PRODUCT: '#10b981',
   /** 搅拌可视化：桨叶示踪 / 旋流弧线 / 罐顶转向环 */
   BLADE_MARK: '#c084fc',
   SWIRL: '#7dd3fc',
@@ -186,7 +186,7 @@ export const LIQUID_TANKS: Record<TankId, TankGeometry> = {
   a: { label: 'A 原液罐', short: 'A', radius: 0.155, height: 0.50, baseY: 0.14, position: [-0.86, 0.14, -0.44], color: LIQUID_VISUAL.LIQUID_A },
   b: { label: 'B 原液罐', short: 'B', radius: 0.155, height: 0.50, baseY: 0.14, position: [-0.86, 0.14, 0.44], color: LIQUID_VISUAL.LIQUID_B },
   mix: { label: '混合罐', short: 'MIX', radius: 0.205, height: 0.58, baseY: 0.14, position: [0, 0.14, 0], color: LIQUID_VISUAL.LIQUID_MIX },
-  product: { label: '成品储液罐', short: 'OUT', radius: 0.215, height: 0.62, baseY: 0.14, position: [0.92, 0.14, 0], color: LIQUID_VISUAL.LIQUID_PRODUCT },
+  product: { label: '成品储液罐', short: 'OUT', radius: 0.215, height: 0.62, baseY: 0.14, position: [0.92, 0.14, 0], color: LIQUID_VISUAL.LIQUID_MIX },
 };
 
 /** 机架台面 / 管路 / 阀泵尺寸，与罐体同一份常量表 */
@@ -316,11 +316,24 @@ export function liquidPairPresence(ratioA: number, ratioB: number): number {
  * 两组分齐备时向本场景的混合紫偏移，搅匀后是饱和的一体色；只有单一组分时保持原液色。
  */
 export function liquidBlendColor(ratioA: number, ratioB: number): string {
+  const a = Math.max(0, Number.isFinite(ratioA) ? ratioA : 0);
+  const b = Math.max(0, Number.isFinite(ratioB) ? ratioB : 0);
+  // 空罐没有组分可插值：回退到混合紫，避免蓝橙中值灰褐色出现在空液柱 / 读数条 / 锚点上
+  if (a + b <= 0) return LIQUID_VISUAL.LIQUID_MIX;
   return mixHexColor(
-    liquidMixColor(ratioA, ratioB),
+    liquidMixColor(a, b),
     LIQUID_VISUAL.LIQUID_MIX,
-    0.88 * liquidPairPresence(ratioA, ratioB),
+    0.88 * liquidPairPresence(a, b),
   );
+}
+
+/**
+ * 成品罐液体颜色：与混合罐搅匀后的颜色**同一个纯函数**派生。
+ * 出料时 A/B 组分按混合罐当时的占比一起转入成品罐，比例不变 → 颜色必然一致；
+ * 两罐都空时同样回退到混合紫，演示循环任何阶段 mix/product 都同色。
+ */
+export function liquidProductColor(productA: number, productB: number): string {
+  return liquidBlendColor(productA, productB);
 }
 
 /**

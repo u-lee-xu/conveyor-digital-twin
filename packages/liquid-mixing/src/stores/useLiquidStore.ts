@@ -51,6 +51,9 @@ interface LiquidStore {
   mixB: number;
   /** 混合均匀度 0..1：由累计搅拌积分，进快照 / 面板 / 3D / 观众镜像（纯本地教学量，不上 PLC） */
   mixUniformity: number;
+  /** 成品罐内 A / B 组分量（L）：出料时随体积一起转移，派生成品液颜色与混合液同源 */
+  productA: number;
+  productB: number;
   demoRunning: boolean;
   stopRequested: boolean;
   demoPaused: boolean;
@@ -112,6 +115,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   mixA: 0,
   mixB: 0,
   mixUniformity: 0,
+  productA: 0,
+  productB: 0,
   demoRunning: false,
   stopRequested: false,
   demoPaused: false,
@@ -129,9 +134,12 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   setRecipe: (patch) => set((s) => ({ recipe: { ...s.recipe, ...patch } })),
   setVolume: (tank, value) => set((s) => {
     const next = clampVolume(tank, value);
+    const emptied = next <= LIQUID_PROCESS.EPS;
     return {
       volumes: { ...s.volumes, [tank]: next },
-      mixUniformity: tank === 'mix' && next <= LIQUID_PROCESS.EPS ? 0 : s.mixUniformity,
+      mixUniformity: tank === 'mix' && emptied ? 0 : s.mixUniformity,
+      productA: tank === 'product' && emptied ? 0 : s.productA,
+      productB: tank === 'product' && emptied ? 0 : s.productB,
     };
   }),
 
@@ -176,7 +184,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (frame.reset) {
       patch.volumes = initialVolumes();
       patch.tare = emptyVolumes();
-      patch.mixA = 0; patch.mixB = 0; patch.mixUniformity = 0; patch.round = 0;
+      patch.mixA = 0; patch.mixB = 0; patch.mixUniformity = 0;
+      patch.productA = 0; patch.productB = 0; patch.round = 0;
       patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
     }
     if (typeof frame.actionWord === 'number' && Number.isFinite(frame.actionWord)) {
@@ -191,7 +200,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
           case LIQUID_ACTION.RESET:
             patch.volumes = initialVolumes();
             patch.tare = emptyVolumes();
-            patch.mixA = 0; patch.mixB = 0; patch.mixUniformity = 0; patch.round = 0;
+            patch.mixA = 0; patch.mixB = 0; patch.mixUniformity = 0;
+            patch.productA = 0; patch.productB = 0; patch.round = 0;
             patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
             break;
           case LIQUID_ACTION.ALARM_RESET:
@@ -232,7 +242,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     outputs: { ...LIQUID_EMPTY_OUTPUTS },
     sensors: liquidSensorStates(initialVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
     phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, agitatorAngle: 0, stirDirection: 0,
-    mixA: 0, mixB: 0, mixUniformity: 0,
+    mixA: 0, mixB: 0, mixUniformity: 0, productA: 0, productB: 0,
     demoRunning: false, stopRequested: false, demoPaused: false, round: 0,
     alarm: 0, estop: false, controlSource: 'local', connected: false,
     actionSeq: 0,
@@ -323,6 +333,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     let mixA = s.mixA;
     let mixB = s.mixB;
     let uniformity = s.mixUniformity;
+    let productA = s.productA;
+    let productB = s.productB;
     // 本地演示暂停时保持阀门状态但冻结物理过程，恢复后从原处继续；
     // 仿真模式（controlSource==='plc'）从不受本地暂停影响。
     const pausedLocally = s.controlSource === 'local' && s.demoRunning && s.demoPaused;
@@ -348,8 +360,13 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
         const d = Math.min(LIQUID_PROCESS.DISCHARGE_RATE * dt, volumes.mix, LIQUID_CAPACITY.product - volumes.product);
         const total = mixA + mixB;
         if (total > LIQUID_PROCESS.EPS) {
-          mixA -= d * (mixA / total);
-          mixB -= d * (mixB / total);
+          // 组分随体积同比例转移：成品罐 A/B 比例 = 混合罐比例 → 颜色必然同源
+          const fA = mixA / total;
+          const fB = mixB / total;
+          mixA -= d * fA;
+          mixB -= d * fB;
+          productA += d * fA;
+          productB += d * fB;
         }
         volumes.mix -= d; volumes.product += d;
       }
@@ -357,15 +374,24 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       if (running && phase === LIQUID_PHASE.DONE) {
         const ra = Math.min(LIQUID_PROCESS.REFILL_RATE * dt, LIQUID_INITIAL_VOLUMES.a - volumes.a);
         const rb = Math.min(LIQUID_PROCESS.REFILL_RATE * dt, LIQUID_INITIAL_VOLUMES.b - volumes.b);
-        const rp = Math.min(LIQUID_PROCESS.PRODUCT_DRAIN_RATE * dt, volumes.product);
+        const pBefore = volumes.product;
+        const rp = Math.min(LIQUID_PROCESS.PRODUCT_DRAIN_RATE * dt, pBefore);
         volumes.a += Math.max(0, ra);
         volumes.b += Math.max(0, rb);
         volumes.product -= Math.max(0, rp);
+        if (pBefore > LIQUID_PROCESS.EPS && rp > 0) {
+          const keep = Math.max(0, pBefore - rp) / pBefore;
+          productA *= keep;
+          productB *= keep;
+        }
       }
     }
     for (const tank of TANK_IDS) volumes[tank] = clampVolume(tank, volumes[tank]);
     mixA = clamp(mixA, 0, LIQUID_CAPACITY.mix);
     mixB = clamp(mixB, 0, LIQUID_CAPACITY.mix);
+    productA = clamp(productA, 0, LIQUID_CAPACITY.product);
+    productB = clamp(productB, 0, LIQUID_CAPACITY.product);
+    if (volumes.product <= LIQUID_PROCESS.EPS) { productA = 0; productB = 0; }
 
     /* 3) 禁止态：正反转同时有效保持上次方向；搅拌角度只影响观感。
      *    恰好一个方向有效才算「有效搅拌」，正反转都推进均匀度、禁止态不推进。 */
@@ -376,8 +402,9 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (stirring && volumes.mix > LIQUID_PROCESS.EPS) {
       uniformity = clampUniformity(uniformity + LIQUID_PROCESS.UNIFORMITY_RATE * dt);
     }
-    // 混合罐排空后回到未混合初态；停机 / 暂停 / 急停时保持当前值
-    if (volumes.mix <= LIQUID_PROCESS.EPS) uniformity = 0;
+    // 混合罐排空后回到未混合初态，组分一并清零，避免残量污染下一批的成品色；
+    // 停机 / 暂停 / 急停时保持当前值。
+    if (volumes.mix <= LIQUID_PROCESS.EPS) { uniformity = 0; mixA = 0; mixB = 0; }
 
     /* 4) 模拟量与开关量同源派生 + 报警停机 */
     let alarm = liquidAlarmFlags(volumes, outputs, s.estop);
@@ -390,7 +417,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (s.alarm !== 0 && alarm === 0) alarm = 0;
 
     set({
-      volumes, mixA, mixB, mixUniformity: uniformity, outputs, phase, phaseElapsed,
+      volumes, mixA, mixB, mixUniformity: uniformity, productA, productB,
+      outputs, phase, phaseElapsed,
       demoRunning, stopRequested, round, batchStartA, batchStartB,
       agitatorAngle, stirDirection, sensors, alarm,
     });
@@ -427,6 +455,10 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (mixB !== undefined) patch.mixB = mixB;
     const uniformity = num('LIQUID_UNIFORMITY');
     if (uniformity !== undefined) patch.mixUniformity = clampUniformity(uniformity);
+    const productA = num('LIQUID_PRODUCT_A');
+    const productB = num('LIQUID_PRODUCT_B');
+    if (productA !== undefined) patch.productA = clamp(productA, 0, LIQUID_CAPACITY.product);
+    if (productB !== undefined) patch.productB = clamp(productB, 0, LIQUID_CAPACITY.product);
     const phase = num('LIQUID_PHASE');
     if (phase !== undefined) patch.phase = clamp(Math.trunc(phase), 0, LIQUID_PHASE.DONE) as LiquidPhase;
     const round = num('LIQUID_ROUND');
@@ -485,6 +517,8 @@ export function exportLiquidSnapshot(): Record<string, number> {
     LIQUID_MIX_A: round2(s.mixA),
     LIQUID_MIX_B: round2(s.mixB),
     LIQUID_UNIFORMITY: round2(s.mixUniformity),
+    LIQUID_PRODUCT_A: round2(s.productA),
+    LIQUID_PRODUCT_B: round2(s.productB),
     LIQUID_PHASE: s.phase,
     LIQUID_ROUND: s.round,
     LIQUID_ALARM: s.alarm,

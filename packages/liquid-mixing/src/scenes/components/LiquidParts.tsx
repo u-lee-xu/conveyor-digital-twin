@@ -20,7 +20,7 @@ import {
   LIQUID_TANKS, LIQUID_GEOM, LIQUID_CAPACITY, LIQUID_PROCESS,
   LIQUID_VIEW_PRESETS,
   liquidLevelHeight, liquidMixBandColors, liquidMixStratification,
-  liquidSwirlStrength, liquidDisplay,
+  liquidProductColor, liquidSwirlStrength, liquidDisplay,
   type TankId, type LiquidSensors, type LiquidPartKind,
 } from '../../constants/liquidConstants';
 import { useLiquidStore } from '../../stores/useLiquidStore';
@@ -82,6 +82,7 @@ export function LiquidColumn({ tank }: { tank: TankId }) {
   const swirlArmRefs = useRef<(THREE.Group | null)[]>([]);
   const pointerRef = useRef<THREE.Group>(null);
   const lastBands = useRef('');
+  const lastProductColor = useRef('');
   const g = LIQUID_TANKS[tank];
   const liquidR = g.radius - LIQUID_GAP;
   const isMix = tank === 'mix';
@@ -156,6 +157,17 @@ export function LiquidColumn({ tank }: { tank: TankId }) {
           pointerRef.current.position.y = surfaceY
             - depth * (1 - SWIRL_POINTER_T) ** 2 + GAP * 3;
         }
+      }
+    }
+    // 成品罐装的是混合后的液体：颜色由同一纯函数按罐内 A/B 组分派生，与混合液同源
+    if (tank === 'product') {
+      const c = liquidProductColor(s.productA, s.productB);
+      if (c !== lastProductColor.current) {
+        lastProductColor.current = c;
+        LM.liquidProduct.color.set(c);
+        LM.liquidProduct.emissive.set(c);
+        LM.surfaceProduct.color.set(c);
+        LM.surfaceProduct.emissive.set(c);
       }
     }
     surface.position.y = surfaceY;

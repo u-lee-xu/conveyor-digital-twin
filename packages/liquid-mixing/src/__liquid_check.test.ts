@@ -299,3 +299,44 @@ describe('搅拌可视化四层：桨叶 / 涡流 / 均匀度 / 转向与机位'
     expect(store).toContain('clampUniformity(uniformity)');
   });
 });
+
+describe('成品罐颜色与混合后的液体同源', () => {
+  const constants = read('packages/liquid-mixing/src/constants/liquidConstants.ts');
+  const materials = read('packages/liquid-mixing/src/scenes/shared/liquidMaterials.ts');
+  const parts = read('packages/liquid-mixing/src/scenes/components/LiquidParts.tsx');
+  const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const vars = read('packages/liquid-mixing/src/constants/liquidVariables.ts');
+  const effects = read('packages/liquid-mixing/src/platform/LiquidDeviceEffects.tsx');
+
+  it('取消成品罐独立绿色，颜色由与混合色相同的纯函数派生', () => {
+    expect(constants).toContain('liquidProductColor');
+    expect(constants).toContain('return liquidBlendColor(productA, productB);');
+    expect(constants).toContain('if (a + b <= 0) return LIQUID_VISUAL.LIQUID_MIX;');
+    expect(constants).not.toContain("LIQUID_PRODUCT: '#10b981'");
+    expect(constants).toMatch(/product: \{[^}]*color: LIQUID_VISUAL\.LIQUID_MIX \}/);
+    expect(materials).toContain('liquidProduct: liquidMat(LIQUID_TANKS.product.color)');
+  });
+
+  it('3D 液柱 / 液面 / 面板读数条三处同源，且有颜色诊断锚点', () => {
+    expect(parts).toContain("tank === 'product'");
+    expect(parts).toContain('LM.liquidProduct.color.set(c)');
+    expect(parts).toContain('LM.surfaceProduct.color.set(c)');
+    expect(panel).toContain('liquidProductColor(productA, productB)');
+    expect(panel).toContain("if (tank === 'mix') return liquidBlendColor(mixA, mixB);");
+    expect(panel).toContain('data-dt-liquid-color');
+    expect(panel).toContain('background: tankColor(tank)');
+  });
+
+  it('组分随出料转移，只进本地快照 / 观众镜像，不上 PLC 地址表', () => {
+    expect(store).toContain('productA += d * fA;');
+    expect(store).toContain('productB += d * fB;');
+    expect(store).toContain('LIQUID_PRODUCT_A');
+    expect(store).toContain("num('LIQUID_PRODUCT_A')");
+    expect(vars).not.toMatch(/PRODUCT_A|PRODUCT_B/);
+    expect(effects).not.toMatch(/PRODUCT_A|PRODUCT_B|productColor/);
+    // LIQUID_LEVEL_PRODUCT 是既有 REAL 液位字，与颜色无关；这里只排除颜色 / 组分新键
+    expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /PRODUCT_A|PRODUCT_B|COLOR/i.test(k))).toBe(false);
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(23);
+  });
+});

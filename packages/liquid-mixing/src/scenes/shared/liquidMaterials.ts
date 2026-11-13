@@ -126,6 +126,7 @@ export const LM = {
   liquidMix: translucentLiquidMat(LIQUID_TANKS.mix.color),
   /** 混合罐上段分层色带，与下段颜色分别由 liquidMixBandColors 改写 */
   liquidMixUpper: translucentLiquidMat(LIQUID_TANKS.mix.color),
+  /** 成品罐：初值取混合紫，运行时由 liquidProductColor(productA, productB) 改写，与混合液同源 */
   liquidProduct: liquidMat(LIQUID_TANKS.product.color),
   /** 液面圆盘：稍亮，底面与柱顶错开 ≥ CAP_GAP */
   surfaceA: surfaceMat(LIQUID_TANKS.a.color),
@@ -137,6 +138,7 @@ export const LM = {
     m.side = THREE.DoubleSide;
     return m;
   })(),
+  /** 成品罐液面：与液柱同色同源，逐帧一起改写 */
   surfaceProduct: surfaceMat(LIQUID_TANKS.product.color),
   /** 开关量液位传感器 LED：亮绿 / 暗 */
   ledOn: new THREE.MeshStandardMaterial({

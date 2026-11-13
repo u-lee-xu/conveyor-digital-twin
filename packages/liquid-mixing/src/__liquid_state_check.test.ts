@@ -10,7 +10,7 @@ import {
   liquidSensorStates, liquidLevelHeight, liquidLevelRatio, resolveStirDirection,
   liquidDisplay, LIQUID_EMPTY_OUTPUTS, liquidAlarmFlags, LIQUID_VISUAL, LIQUID_VIEW_PRESETS,
   liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
-  liquidBlendColor, liquidMixStratification, liquidPairPresence,
+  liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
   clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
 import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION } from './constants/liquidVariables';
@@ -348,6 +348,71 @@ describe('搅拌可视化四层：颜色 / 涡流 / 机位纯函数', () => {
       expect(v.position).toHaveLength(3);
       expect(v.target).toHaveLength(3);
     }
+  });
+});
+
+describe('成品罐颜色与混合后的液体同源', () => {
+  /** 造一批已搅匀的混合液，再出料到成品罐 */
+  const feedAndStir = () => {
+    S().resetAll();
+    useLiquidStore.setState({
+      volumes: { a: 80, b: 80, mix: 50, product: 0 },
+      mixA: 30, mixB: 20, mixUniformity: 1,
+    });
+  };
+
+  it('成品色由与混合色相同的纯函数派生，空罐回退到混合紫', () => {
+    expect(liquidProductColor(30, 20)).toBe(liquidBlendColor(30, 20));
+    expect(liquidProductColor(20, 30)).toBe(liquidBlendColor(20, 30));
+    expect(liquidProductColor(0, 0)).toBe(LIQUID_VISUAL.LIQUID_MIX);
+    // 两罐都空 / 混合罐刚排空的循环间隙也必须同色，不能让空罐灰褐色破坏同源
+    expect(liquidBlendColor(0, 0)).toBe(liquidProductColor(0, 0));
+    expect(liquidBlendColor(Number.NaN, 0)).toBe(LIQUID_VISUAL.LIQUID_MIX);
+    expect(liquidProductColor(Number.NaN, 5)).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it('出料时 A/B 组分随体积同比例转移，成品色与搅匀色完全一致', () => {
+    feedAndStir();
+    const mixed = liquidBlendColor(S().mixA, S().mixB);
+    S().setOutput('discharge', true);
+    run(20); // 1s × 15 L/s = 15 L 转入成品罐
+    S().setOutput('discharge', false);
+    expect(S().volumes.product).toBeGreaterThan(0);
+    expect(S().productA + S().productB).toBeCloseTo(S().volumes.product, 3);
+    expect(S().productA / (S().productA + S().productB)).toBeCloseTo(0.6, 3);
+    expect(liquidProductColor(S().productA, S().productB)).toBe(mixed);
+  });
+
+  it('混合罐排空后组分归零，不把残量带进下一批', () => {
+    feedAndStir();
+    S().setOutput('discharge', true);
+    run(400); // 足够把 50 L 全部转入成品罐
+    S().setOutput('discharge', false);
+    expect(S().volumes.mix).toBeLessThanOrEqual(LIQUID_PROCESS.EPS);
+    expect(S().mixA).toBe(0);
+    expect(S().mixB).toBe(0);
+    expect(liquidProductColor(S().productA, S().productB))
+      .toBe(liquidBlendColor(30, 20));
+  });
+
+  it('成品组分进快照 / 观众镜像，复位与排空都清零', () => {
+    feedAndStir();
+    S().setOutput('discharge', true);
+    run(20);
+    S().setOutput('discharge', false);
+    const color = liquidProductColor(S().productA, S().productB);
+    const snap = exportLiquidSnapshot();
+    expect(snap.LIQUID_PRODUCT_A).toBeCloseTo(S().productA, 3);
+    expect(snap.LIQUID_PRODUCT_B).toBeCloseTo(S().productB, 3);
+    S().resetAll();
+    expect(S().productA).toBe(0);
+    expect(S().productB).toBe(0);
+    S().applyBroadcast(snap);
+    expect(liquidProductColor(S().productA, S().productB)).toBe(color);
+    S().setVolume('product', 0);
+    expect(S().productA).toBe(0);
+    expect(S().productB).toBe(0);
+    expect(liquidProductColor(S().productA, S().productB)).toBe(LIQUID_VISUAL.LIQUID_MIX);
   });
 });
 
