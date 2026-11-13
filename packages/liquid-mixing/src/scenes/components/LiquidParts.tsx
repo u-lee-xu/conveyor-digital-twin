@@ -6,7 +6,7 @@
  * 不使用带 polygonOffset 的薄贴面，杜绝共面闪烁与贴面埋入本体。
  *
  * 真值只从 useLiquidStore 读：液面高度由 liquidLevelHeight(tank, volume) 纯函数派生、
- * 混合色由 liquidMixColor(mixA, mixB) 纯函数派生、读数由 liquidDisplay 纯函数派生，
+ * 混合色由 liquidMixBandColors(uniformity, mixA, mixB) 纯函数派生、读数由 liquidDisplay 派生，
  * 组件内不另算体积 / 液面 / 配比。
  *
  * 每个罐的局部原点在罐底中心，上层按 LIQUID_TANKS[tank].position 摆放，
@@ -19,7 +19,8 @@ import * as THREE from 'three';
 import {
   LIQUID_TANKS, LIQUID_GEOM, LIQUID_CAPACITY, LIQUID_PROCESS,
   LIQUID_VIEW_PRESETS,
-  liquidLevelHeight, liquidMixColor, liquidDisplay,
+  liquidLevelHeight, liquidMixBandColors, liquidMixStratification,
+  liquidSwirlStrength, liquidDisplay,
   type TankId, type LiquidSensors, type LiquidPartKind,
 } from '../../constants/liquidConstants';
 import { useLiquidStore } from '../../stores/useLiquidStore';
@@ -46,6 +47,12 @@ const TICK_COUNT = 10;                   // 约 10 道刻线
 const TICK_H = GAP * 2;                  // 刻线高
 const TICK_T = GAP;                      // 刻线厚
 const SCALE_T = WINDOW_INSET;            // 刻度板厚
+/** 三条旋流弧的归一化半径：几何与碗面高度共用同一份，避免弧线脱离液面 */
+const SWIRL_RADII = Array.from(
+  { length: LIQUID_PROCESS.SWIRL_ARMS }, (_, i) => 0.36 + i * 0.2,
+);
+/** 液面方向指针的归一化半径：与碗面高度共用同一公式，转动方向一眼可辨 */
+const SWIRL_POINTER_T = 0.9;
 
 const SENSOR_HIGH: Record<TankId, keyof LiquidSensors> = {
   a: 'aHigh', b: 'bHigh', mix: 'mixHigh', product: 'productHigh',
@@ -61,53 +68,136 @@ const SURFACE_MAT: Record<TankId, THREE.MeshStandardMaterial> = {
 };
 
 /* --------------------------------------------------------------------------
- * ② 液体柱：高度只能由 liquidLevelHeight(tank, volume) 派生，
- *    scale.y + position.y 实现；体积为 0 时柱与液面盘都不可见。
+ * ② 液体柱：高度只能由 liquidLevelHeight(tank, volume) 派生。
+ *    混合罐是「一根连续液柱」：下半段主体 + 上半段分层带，两段 openEnded 首尾精确相接
+ *    （只有侧面、只在一条圆周线上接触，无重叠面积，不会 z-fighting，也没有可见缝隙）。
+ *    分层带高度 = h/2 × 分层度，搅匀时平滑收缩到 0 并隐藏，液柱成为完整一根、不再有两层。
+ *    颜色由 liquidMixBandColors / liquidBlendColor 派生；半透明让桨叶透出来，液面盘仍不透明。
  * ------------------------------------------------------------------------ */
 export function LiquidColumn({ tank }: { tank: TankId }) {
-  const columnRef = useRef<THREE.Mesh>(null);
+  const lowerRef = useRef<THREE.Mesh>(null);
+  const upperRef = useRef<THREE.Mesh>(null);
   const surfaceRef = useRef<THREE.Mesh>(null);
-  const lastMix = useRef('');
+  const swirlRef = useRef<THREE.Group>(null);
+  const swirlArmRefs = useRef<(THREE.Group | null)[]>([]);
+  const pointerRef = useRef<THREE.Group>(null);
+  const lastBands = useRef('');
   const g = LIQUID_TANKS[tank];
-  const liquidR = g.radius - LIQUID_GAP;   // 与玻璃内壁错开 ≥ GAP
+  const liquidR = g.radius - LIQUID_GAP;
+  const isMix = tank === 'mix';
+  // 归一化涡流碗面：中心 y=-1、边缘 y=0，scale.y 直接等于凹陷深度
+  const lathePoints = useMemo(
+    () => Array.from({ length: 13 }, (_, i) => {
+      const t = i / 12;
+      return new THREE.Vector2(liquidR * t, -((1 - t) ** 2));
+    }),
+    [liquidR],
+  );
 
   useFrame(() => {
     const s = useLiquidStore.getState();
     const h = liquidLevelHeight(tank, s.volumes[tank]);
-    const column = columnRef.current;
+    const lower = lowerRef.current;
+    const upper = upperRef.current;
     const surface = surfaceRef.current;
-    if (!column || !surface) return;
+    if (!lower || !surface) return;
     const visible = h > 0;
-    column.visible = visible;
+    lower.visible = visible;
     surface.visible = visible;
+    if (upper) upper.visible = visible && isMix;
+    if (swirlRef.current) swirlRef.current.visible = false;
     if (!visible) return;
-    // 单位高度圆柱 → scale.y = 液面高度；柱底 = LIQUID_GAP
-    column.scale.y = h;
-    column.position.y = LIQUID_GAP + h / 2;
+
     const top = LIQUID_GAP + h;
-    // 液面圆盘底面 = 柱顶 + CAP_GAP（≥ GAP），与柱顶错开
-    surface.position.y = top + CAP_GAP + SURFACE_H / 2;
-    // 混合罐颜色由 A/B 组分经官方纯函数派生，不另算配比
-    if (tank === 'mix') {
-      const c = liquidMixColor(s.mixA, s.mixB);
-      if (c !== lastMix.current) {
-        lastMix.current = c;
-        LM.liquidMix.color.set(c);
-        LM.liquidMix.emissive.set(c);
-        LM.surfaceMix.color.set(c);
-        LM.surfaceMix.emissive.set(c);
+    if (isMix && upper) {
+      // 分层度决定上半段还占多高：搅匀到 1 时归零，界面消失，只剩一根连续液柱
+      const strat = liquidMixStratification(s.mixUniformity, s.mixA, s.mixB);
+      const upperH = h * 0.5 * strat;
+      const lowerH = h - upperH;
+      lower.scale.y = lowerH;
+      lower.position.y = LIQUID_GAP + lowerH / 2;
+      upper.visible = upperH > GAP * 0.5;
+      upper.scale.y = Math.max(upperH, 0.0001);
+      upper.position.y = LIQUID_GAP + lowerH + upperH / 2;
+    } else {
+      lower.scale.y = h;
+      lower.position.y = LIQUID_GAP + h / 2;
+      if (upper) upper.visible = false;
+    }
+
+    let surfaceY = top + CAP_GAP + SURFACE_H / 2;
+    if (isMix) {
+      const [lowerColor, upperColor] = liquidMixBandColors(s.mixUniformity, s.mixA, s.mixB);
+      const key = `${lowerColor}|${upperColor}`;
+      if (key !== lastBands.current) {
+        lastBands.current = key;
+        LM.liquidMix.color.set(lowerColor);
+        LM.liquidMix.emissive.set(lowerColor);
+        LM.liquidMixUpper.color.set(upperColor);
+        LM.liquidMixUpper.emissive.set(upperColor);
+        // 液面是上层色带的顶面：分层时橙、搅匀后随色带一起收敛到饱和混合紫
+        LM.surfaceMixSwirl.color.set(upperColor);
+        LM.surfaceMixSwirl.emissive.set(upperColor);
+      }
+      const strength = liquidSwirlStrength(s.mixUniformity, s.stirDirection);
+      const depth = LIQUID_PROCESS.SWIRL_DEPTH * strength;
+      surface.scale.y = Math.max(0.0001, depth);
+      // Lathe 碗沿在 y=0、碗心在 y=-depth：碗沿与液柱顶错开 CAP_GAP，碗心自然凹进液柱
+      surfaceY = top + CAP_GAP;
+      if (swirlRef.current) {
+        swirlRef.current.visible = strength > 0;
+        // 整组随搅拌角旋转，正反转由角度符号自然反向；各弧高度贴着碗面，形成螺旋
+        swirlRef.current.rotation.y = s.agitatorAngle * 0.6;
+        SWIRL_RADII.forEach((t, i) => {
+          const arm = swirlArmRefs.current[i];
+          if (arm) arm.position.y = surfaceY - depth * (1 - t) ** 2 + GAP * 2;
+        });
+        if (pointerRef.current) {
+          pointerRef.current.position.y = surfaceY
+            - depth * (1 - SWIRL_POINTER_T) ** 2 + GAP * 3;
+        }
       }
     }
+    surface.position.y = surfaceY;
   });
 
   return (
     <group>
-      <mesh ref={columnRef} material={LIQUID_MAT[tank]}>
-        <cylinderGeometry args={[liquidR, liquidR, 1, 32]} />
+      <mesh ref={lowerRef} material={LIQUID_MAT[tank]}>
+        <cylinderGeometry args={[liquidR, liquidR, 1, 32, 1, isMix]} />
       </mesh>
-      <mesh ref={surfaceRef} material={SURFACE_MAT[tank]}>
-        <cylinderGeometry args={[liquidR, liquidR, SURFACE_H, 32]} />
+      {isMix && (
+        <mesh ref={upperRef} material={LM.liquidMixUpper}>
+          <cylinderGeometry args={[liquidR, liquidR, 1, 32, 1, true]} />
+        </mesh>
+      )}
+      <mesh ref={surfaceRef} material={isMix ? LM.surfaceMixSwirl : SURFACE_MAT[tank]}>
+        {isMix
+          ? <latheGeometry args={[lathePoints, 32]} />
+          : <cylinderGeometry args={[liquidR, liquidR, SURFACE_H, 32]} />}
       </mesh>
+      {isMix && (
+        <group ref={swirlRef}>
+          {SWIRL_RADII.map((t, i) => (
+            <group key={i}
+              ref={(el) => { swirlArmRefs.current[i] = el; }}
+              rotation={[0, (i * Math.PI * 2) / LIQUID_PROCESS.SWIRL_ARMS, 0]}>
+              <mesh rotation={[-Math.PI / 2, 0, 0]} material={LM.swirl}>
+                <torusGeometry args={[liquidR * t, GAP * 1.5, 5, 24, Math.PI * 0.8]} />
+              </mesh>
+            </group>
+          ))}
+          {/* 液面方向指针：随旋流组同角度旋转，正反转在同一机位下可辨 */}
+          <group ref={pointerRef}>
+            <mesh position={[liquidR * 0.52, 0, 0]} material={LM.direction}>
+              <boxGeometry args={[liquidR * 0.86, GAP * 2, GAP * 4]} />
+            </mesh>
+            <mesh position={[liquidR * 0.97, 0, 0]} rotation={[0, 0, -Math.PI / 2]} material={LM.direction}>
+              <coneGeometry args={[GAP * 3, GAP * 8, 10]} />
+            </mesh>
+          </group>
+        </group>
+      )}
     </group>
   );
 }
@@ -324,24 +414,31 @@ export function TankAssembly({ tank }: { tank: TankId }) {
 }
 
 /* --------------------------------------------------------------------------
- * 搅拌器：罐顶电机（散热筋 + 接线盒）+ 伸入罐内的轴 + 两片桨叶，
- * 按 agitatorAngle 旋转（正反转由角度符号体现）。
+ * 搅拌器：罐顶电机 + 主轴 + 锚式框桨 + 非对称示踪叶 + 罐顶转向指针。
+ * 锚式框桨从罐底延伸到罐身中上部，任何液位都有部分浸没、部分露出；
+ * 半透明混合液柱下始终可见。示踪叶只装一侧，单帧即可读出角度与转向。
  * ------------------------------------------------------------------------ */
 export function Agitator() {
   const g = LIQUID_TANKS.mix;
   const h = g.height;
   const spinRef = useRef<THREE.Group>(null);
+  const directionRef = useRef<THREE.Group>(null);
   useFrame(() => {
-    // 角度直接取真值 store；方向不再另算，正反转由角度符号体现
-    if (spinRef.current) spinRef.current.rotation.y = useLiquidStore.getState().agitatorAngle;
+    const angle = useLiquidStore.getState().agitatorAngle;
+    if (spinRef.current) spinRef.current.rotation.y = angle;
+    if (directionRef.current) directionRef.current.rotation.y = angle;
   });
   const motorBase = h + CAP_GAP + MANHOLE_NECK_H + GAP;
   const motorH = PUMP_R * 1.6;
   const shaftTop = motorBase;
-  const shaftBottom = h * LIQUID_PROCESS.LOW_RATIO;
+  const shaftBottom = h * LIQUID_PROCESS.LOW_RATIO * 0.5;
   const shaftLen = shaftTop - shaftBottom;
   const shaftY = (shaftTop + shaftBottom) / 2;
-  const bladeY = shaftBottom + STIR_BLADE_L * 0.25;
+  const frameR = (g.radius - LIQUID_GAP) * 0.62;
+  const frameBottom = shaftBottom + GAP * 2;
+  const frameTop = h * 0.62;
+  const frameH = frameTop - frameBottom;
+  const frameY = (frameTop + frameBottom) / 2;
   return (
     <group>
       <mesh position={[0, motorBase + motorH / 2, 0]} material={LM.motor} castShadow>
@@ -358,16 +455,39 @@ export function Agitator() {
       <mesh position={[0, motorBase + motorH / 2, PUMP_R + GAP + PIPE_R]} material={LM.bolt}>
         <boxGeometry args={[PIPE_R * 2, motorH * 0.5, PIPE_R * 2]} />
       </mesh>
+      {/* 罐顶转向指示环：非对称弧 + 指针箭头，与桨叶同角度同向转 */}
+      <group ref={directionRef} position={[0, motorBase + motorH + GAP * 3, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} material={LM.direction}>
+          <torusGeometry args={[PUMP_R * 0.82, GAP, 6, 20, Math.PI * 1.3]} />
+        </mesh>
+        <mesh position={[PUMP_R * 0.42, GAP, 0]} material={LM.direction}>
+          <boxGeometry args={[PUMP_R * 0.84, GAP * 2, GAP * 3]} />
+        </mesh>
+        <mesh position={[PUMP_R * 0.9, GAP, 0]} rotation={[0, 0, -Math.PI / 2]} material={LM.direction}>
+          <coneGeometry args={[GAP * 2.4, GAP * 5, 8]} />
+        </mesh>
+      </group>
       <group ref={spinRef}>
         <mesh position={[0, shaftY, 0]} material={LM.shaft}>
           <cylinderGeometry args={[STIR_SHAFT_R, STIR_SHAFT_R, shaftLen, 16]} />
         </mesh>
-        {/* 两片桨叶：分列轴两侧，随旋转组一起转 */}
+        {/* 锚式框桨：两根竖杆 + 底部横杆，转动轮廓最醒目 */}
         {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * STIR_BLADE_L / 4, bladeY, 0]} material={LM.shaft} castShadow>
-            <boxGeometry args={[STIR_BLADE_L / 2, GAP * 4, PIPE_R * 1.2]} />
+          <mesh key={s} position={[s * frameR, frameY, 0]} material={LM.shaft} castShadow>
+            <boxGeometry args={[GAP * 4, frameH, GAP * 4]} />
           </mesh>
         ))}
+        <mesh position={[0, frameBottom, 0]} material={LM.shaft} castShadow>
+          <boxGeometry args={[frameR * 2, GAP * 4, GAP * 4]} />
+        </mesh>
+        {/* 非对称示踪叶：只装一侧且抬高，单帧即可读出角度与正反转 */}
+        <mesh position={[frameR * 0.72, frameY + frameH * 0.18, 0]}
+          rotation={[0, 0, Math.PI / 8]} material={LM.bladeMark} castShadow>
+          <boxGeometry args={[STIR_BLADE_L * 0.42, GAP * 5, PIPE_R * 1.6]} />
+        </mesh>
+        <mesh position={[-frameR * 0.6, frameY - frameH * 0.2, 0]} material={LM.shaft} castShadow>
+          <boxGeometry args={[STIR_BLADE_L * 0.22, GAP * 4, PIPE_R]} />
+        </mesh>
       </group>
     </group>
   );
@@ -517,7 +637,7 @@ export function PlatformFrame() {
 }
 
 /* --------------------------------------------------------------------------
- * 机位阻尼过渡：LIQUID_VIEW_PRESETS 五项用 useThree().controls 做阻尼，
+ * 机位阻尼过渡：LIQUID_VIEW_PRESETS 六项用 useThree().controls 做阻尼，
  * 展台用专用近景相机短路；切换不刷新页面、不改设备真值。
  * ------------------------------------------------------------------------ */
 interface RigGoal {
