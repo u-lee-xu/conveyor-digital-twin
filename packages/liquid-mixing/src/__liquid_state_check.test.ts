@@ -13,7 +13,7 @@ import {
   liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
   liquidValveStateColor, clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
-import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION } from './constants/liquidVariables';
+import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION, liquidSensorHintRow } from './constants/liquidVariables';
 
 const S = () => useLiquidStore.getState();
 /** 以 0.05s 帧推进，模拟浏览器 rAF */
@@ -446,6 +446,22 @@ describe('快照 / 观众只读镜像', () => {
     }
     expect(snap.LIQUID_SENSOR_MASK).toBeGreaterThanOrEqual(0);
     expect(snap.LIQUID_SENSOR_MASK).toBeLessThan(1 << LIQUID_SENSOR_FEEDBACK.length);
+  });
+});
+
+describe('面板地址浮框数据源', () => {
+  it('14 路开关量逐路给出三协议地址，与回写表同源', () => {
+    for (const r of LIQUID_SENSOR_FEEDBACK) {
+      const rows = liquidSensorHintRow(r.key);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        label: r.signal, mitsubishi: r.mitsubishi, modbus: `C${r.modbus}`, s7: r.s7,
+      });
+    }
+  });
+
+  it('未知开关量键立即报错，不静默给出空地址', () => {
+    expect(() => liquidSensorHintRow('NOT_EXIST')).toThrow(/缺少信号/);
   });
 });
 

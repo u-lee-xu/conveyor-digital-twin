@@ -12,6 +12,8 @@ import {
   LIQUID_COMMAND_WORD_NAMES, LIQUID_SENSOR_FEEDBACK, LIQUID_BOOL_S7,
   LIQUID_BOOL_MITSUBISHI, LIQUID_OUTPUT_COIL_NAMES, LIQUID_ADDRESS_ROWS,
   LIQUID_COILS, liquidSensorBits, liquidSensorMask, LIQUID_IO_MAP,
+  LIQUID_PANEL_HINT_SIGNALS, liquidAddressRowsFor, liquidSensorHintRow,
+  type LiquidPanelHintKey,
 } from './constants/liquidVariables';
 import {
   liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
@@ -398,5 +400,88 @@ describe('阀门开关状态色：3D / 面板 / 展台同源', () => {
     expect(vars).not.toMatch(/VALVE_STATE|VALVE_COLOR/i);
     expect(effects).not.toMatch(/valveStateColor|LIQUID_VALVE_STATE/);
     expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /VALVE_STATE|COLOR/i.test(k))).toBe(false);
+  });
+});
+
+describe('面板变量地址浮框（参考自动配药 AddressHint）', () => {
+  const vars = read('packages/liquid-mixing/src/constants/liquidVariables.ts');
+  const hint = read('packages/liquid-mixing/src/platform/LiquidAddressHint.tsx');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const manual = read('packages/liquid-mixing/src/platform/LiquidManualPanel.tsx');
+  const demo = read('packages/liquid-mixing/src/platform/LiquidDemoPanel.tsx');
+  const sim = read('packages/liquid-mixing/src/platform/LiquidSimPanel.tsx');
+
+  it('每个面板语义键都在仿真地址表里有对应 signal，地址零回填', () => {
+    const signals = new Set(LIQUID_ADDRESS_ROWS.map((r) => r.signal));
+    for (const [key, list] of Object.entries(LIQUID_PANEL_HINT_SIGNALS)) {
+      expect(list.length, `${key} 至少一行`).toBeGreaterThan(0);
+      for (const s of list) expect(signals.has(s), `${key} → ${s}`).toBe(true);
+    }
+    expect(vars).toContain('LIQUID_ADDRESS_ROWS.find((r) => r.signal === signal)');
+    // 组件与面板 JSX 里都不许出现 C40 / HR300 / M160.0 这类地址字面量
+    expect(hint).not.toMatch(/'[CHM DXY][0-9]{1,3}[·.]?[0-9]*'/);
+    for (const src of [panel, manual, demo, sim]) {
+      expect(src).not.toMatch(/hintKey="[A-Z]{1,2}[0-9]{2,3}/);
+    }
+  });
+
+  it('浮框行三协议地址与仿真地址表逐字段一致', () => {
+    for (const key of Object.keys(LIQUID_PANEL_HINT_SIGNALS) as LiquidPanelHintKey[]) {
+      for (const row of liquidAddressRowsFor(key)) {
+        const src = LIQUID_ADDRESS_ROWS.find((r) => r.signal === row.label);
+        expect(src, `${key} → ${row.label}`).toBeDefined();
+        expect(row.mitsubishi).toBe(src?.mitsubishi);
+        expect(row.modbus).toBe(src?.modbus);
+        expect(row.s7).toBe(src?.s7);
+      }
+    }
+    // 搅拌方向是正 / 反转两个线圈，各占一行
+    expect(liquidAddressRowsFor('stirDirection').map((r) => r.modbus)).toEqual(['C42', 'C43']);
+  });
+
+  it('14 路开关量逐路地址与回写表同源', () => {
+    for (const r of LIQUID_SENSOR_FEEDBACK) {
+      const [row] = liquidSensorHintRow(r.key);
+      expect(row.label).toBe(r.signal);
+      expect(row.modbus).toBe(`C${r.modbus}`);
+      expect(row.mitsubishi).toBe(r.mitsubishi);
+      expect(row.s7).toBe(r.s7);
+    }
+  });
+
+  it('浮框用 portal 挂 body，表头恒三协议，锚点与配药一致', () => {
+    expect(hint).toContain('createPortal');
+    expect(hint).toContain('document.body');
+    expect(hint).toContain('data-io-hint-trigger');
+    expect(hint).toContain('data-io-hint-head');
+    expect(hint).toContain('data-io-hint-row');
+    expect(hint).toContain('>三菱 FX</span>');
+    expect(hint).toContain('>Modbus TCP</span>');
+    expect(hint).toContain('>Siemens S7</span>');
+    expect(hint).toContain('data-addr="mitsubishi"');
+    expect(hint).toContain('data-addr="modbus"');
+    expect(hint).toContain('data-addr="s7"');
+    expect(hint).toContain('data-hint-key={hintKey}');
+  });
+
+  it('三模式面板都挂了浮框，且每个语义键都被真实使用', () => {
+    const all = panel + manual + demo + sim;
+    for (const src of [panel, manual, demo, sim]) expect(src).toContain('LiquidHint');
+    expect(panel).toContain('LiquidSensorHint');
+    expect(demo).toContain('LiquidSensorHint');
+    for (const key of Object.keys(LIQUID_PANEL_HINT_SIGNALS)) {
+      // 静态写法 hintKey="xxx"，或经 LEVEL_HINT / EXECUTOR_HINT 映射表引用 'xxx'
+      const used = all.includes(`hintKey="${key}"`) || all.includes(`'${key}'`);
+      expect(used, `语义键 ${key} 未被任何面板使用`).toBe(true);
+    }
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(23);
+  });
+
+  it('纯本地教学量与本地演示主令严禁标地址', () => {
+    const keys = Object.keys(LIQUID_PANEL_HINT_SIGNALS);
+    expect(keys.some((k) => /uniform|productA|productB|color|demo|estop/i.test(k))).toBe(false);
+    // 均匀度是纯本地教学量，不在 PLC 链路上；演示启动 / 停止是本地状态机主令
+    expect(panel).not.toMatch(/LiquidHint[^>]*>[^<]*混合均匀度/);
+    expect(demo).not.toMatch(/LiquidHint[^>]*>[^<]*(启动|停止本轮后|暂停|紧急停)/);
   });
 });

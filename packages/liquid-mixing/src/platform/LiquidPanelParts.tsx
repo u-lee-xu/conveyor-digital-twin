@@ -10,7 +10,9 @@ import {
 } from '../constants/liquidConstants';
 import {
   LIQUID_SENSOR_FEEDBACK, LIQUID_ADDRESS_ROWS, liquidSensorBits,
+  type LiquidPanelHintKey,
 } from '../constants/liquidVariables';
+import { LiquidHint, LiquidSensorHint } from './LiquidAddressHint';
 
 export const box: CSSProperties = { background: 'rgba(30,41,59,.9)', border: '1px solid rgba(100,116,139,.4)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 };
 export const btn: CSSProperties = { padding: '3px 7px', borderRadius: 5, cursor: 'pointer', background: 'rgba(71,85,105,.6)', border: '1px solid rgba(100,116,139,.5)', color: '#e2e8f0', fontSize: 11 };
@@ -26,6 +28,11 @@ const HIGH_LOW: Record<TankId, { high: keyof LiquidSensors; low: keyof LiquidSen
   b: { high: 'bHigh', low: 'bLow' },
   mix: { high: 'mixHigh', low: 'mixLow' },
   product: { high: 'productHigh', low: 'productLow' },
+};
+
+/** 四罐 REAL 液位读数 → 地址浮框键，键的取值由 LIQUID_PANEL_HINT_SIGNALS 校验 */
+export const LEVEL_HINT: Record<TankId, LiquidPanelHintKey> = {
+  a: 'levelA', b: 'levelB', mix: 'levelMix', product: 'levelProduct',
 };
 
 /** 四罐去皮后 REAL 读数 + 容量 + 百分比条 + 上下限 LED */
@@ -57,7 +64,7 @@ export function LiquidLevelReadout() {
           return (
             <div key={tank} style={{ fontFamily: 'monospace', marginTop: 5 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap' }}>
-                <span>{LIQUID_TANKS[tank].label}</span>
+                <span><LiquidHint hintKey={LEVEL_HINT[tank]} title={`${LIQUID_TANKS[tank].label}液位`}>{LIQUID_TANKS[tank].label}</LiquidHint></span>
                 <span style={{ color: '#93c5fd' }}>{shown.toFixed(2)} / {LIQUID_CAPACITY[tank]} L</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -97,13 +104,20 @@ export function LiquidStatusPanel() {
           {`valveA=${outputs.valveA ? 1 : 0}:${liquidValveStateColor(outputs.valveA)}|valveB=${outputs.valveB ? 1 : 0}:${liquidValveStateColor(outputs.valveB)}|discharge=${outputs.discharge ? 1 : 0}:${liquidValveStateColor(outputs.discharge)}`}
         </span>
         <div data-dt-liquid-status style={{ fontFamily: 'monospace', marginTop: 5, lineHeight: 1.7 }}>
-          <div>阶段 {phase} {LIQUID_PHASE_LABEL[phase]} 轮次 {round}</div>
-          <div>配比 A {(liquidRatioA(mixA, mixB) * 100).toFixed(0)} % 搅拌方向 {stirDirection === 1 ? '正转' : stirDirection === -1 ? '反转' : '停止'}</div>
           <div>
-            <span style={{ color: liquidValveStateColor(outputs.valveA) }}>A 阀 {outputs.valveA ? 'ON' : 'OFF'}</span>
-            {' '}<span style={{ color: liquidValveStateColor(outputs.valveB) }}>B 阀 {outputs.valveB ? 'ON' : 'OFF'}</span>
-            {' '}正转 {outputs.stirForward ? 'ON' : 'OFF'} 反转 {outputs.stirReverse ? 'ON' : 'OFF'}
-            {' '}<span style={{ color: liquidValveStateColor(outputs.discharge) }}>出料 {outputs.discharge ? 'ON' : 'OFF'}</span>
+            <LiquidHint hintKey="phase" title="工艺阶段">阶段</LiquidHint> {phase} {LIQUID_PHASE_LABEL[phase]}
+            {' '}<LiquidHint hintKey="round" title="循环轮次">轮次</LiquidHint> {round}
+          </div>
+          <div>
+            <LiquidHint hintKey="ratioA" title="A 液配比">配比 A</LiquidHint> {(liquidRatioA(mixA, mixB) * 100).toFixed(0)} %
+            {' '}<LiquidHint hintKey="stirDirection" title="搅拌方向">搅拌方向</LiquidHint> {stirDirection === 1 ? '正转' : stirDirection === -1 ? '反转' : '停止'}
+          </div>
+          <div>
+            <LiquidHint hintKey="valveA" title="A 进料阀 / 泵"><span style={{ color: liquidValveStateColor(outputs.valveA) }}>A 阀 {outputs.valveA ? 'ON' : 'OFF'}</span></LiquidHint>
+            {' '}<LiquidHint hintKey="valveB" title="B 进料阀 / 泵"><span style={{ color: liquidValveStateColor(outputs.valveB) }}>B 阀 {outputs.valveB ? 'ON' : 'OFF'}</span></LiquidHint>
+            {' '}<LiquidHint hintKey="stirForward" title="搅拌正转">正转</LiquidHint> {outputs.stirForward ? 'ON' : 'OFF'}
+            {' '}<LiquidHint hintKey="stirReverse" title="搅拌反转">反转</LiquidHint> {outputs.stirReverse ? 'ON' : 'OFF'}
+            {' '}<LiquidHint hintKey="discharge" title="出料阀"><span style={{ color: liquidValveStateColor(outputs.discharge) }}>出料 {outputs.discharge ? 'ON' : 'OFF'}</span></LiquidHint>
           </div>
           <div data-dt-liquid-uniformity data-value={mixUniformity.toFixed(3)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -119,11 +133,12 @@ export function LiquidStatusPanel() {
         </div>
       </div>
       <div style={box}>
-        <b>开关量状态 14 路</b>
+        <b><LiquidHint hintKey="sensorMask" title="开关量掩码">开关量状态 14 路</LiquidHint></b>
         <div data-dt-liquid-sensors style={{ fontFamily: 'monospace', marginTop: 5, lineHeight: 1.7 }}>
           {LIQUID_SENSOR_FEEDBACK.map((r, i) => (
             <span key={r.key} style={{ display: 'inline-block', width: '50%', whiteSpace: 'nowrap' }}>
-              <span style={led(bits[i], '#4ade80')} />{r.signal} {bits[i] ? 'ON' : 'OFF'}
+              <span style={led(bits[i], '#4ade80')} />
+              <LiquidSensorHint sensorKey={r.key} label={r.signal} /> {bits[i] ? 'ON' : 'OFF'}
             </span>
           ))}
         </div>
@@ -173,7 +188,7 @@ export function LiquidAlarmPanel() {
   return (
     <div data-dt-liquid-alarm style={{ ...box, display: 'flex', alignItems: 'center', gap: 6 }}>
       <span style={led(alarm !== 0, '#ef4444')} />
-      <b>报警</b>
+      <b><LiquidHint hintKey="alarm" title="报警字">报警</LiquidHint></b>
       <span style={{ fontFamily: 'monospace', color: alarm !== 0 ? '#fca5a5' : '#86efac' }}>{liquidAlarmText(alarm)}</span>
       <button aria-label="报警复位" style={{ ...btn, marginLeft: 'auto' }} onClick={() => clearAlarm()}>报警复位</button>
     </div>
@@ -188,19 +203,19 @@ export function LiquidRecipeEditor() {
     <div data-dt-liquid-recipe style={box}>
       <b>配方设定</b>
       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center', fontFamily: 'monospace' }}>
-        <span style={{ color: '#94a3b8' }}>A 目标</span>
+        <span style={{ color: '#94a3b8' }}><LiquidHint hintKey="recipeA" title="A 目标量">A 目标</LiquidHint></span>
         <input aria-label="A 目标量" type="number" style={inputStyle} value={recipe.targetA}
           onChange={(e) => setRecipe({ targetA: Number(e.target.value) })} />
         <span style={{ color: '#94a3b8' }}>L</span>
-        <span style={{ color: '#94a3b8' }}>B 目标</span>
+        <span style={{ color: '#94a3b8' }}><LiquidHint hintKey="recipeB" title="B 目标量">B 目标</LiquidHint></span>
         <input aria-label="B 目标量" type="number" style={inputStyle} value={recipe.targetB}
           onChange={(e) => setRecipe({ targetB: Number(e.target.value) })} />
         <span style={{ color: '#94a3b8' }}>L</span>
-        <span style={{ color: '#94a3b8' }}>正转</span>
+        <span style={{ color: '#94a3b8' }}><LiquidHint hintKey="stirForwardSec" title="正转时长">正转</LiquidHint></span>
         <input aria-label="正转时长" type="number" style={inputStyle} value={recipe.stirForwardSec}
           onChange={(e) => setRecipe({ stirForwardSec: Number(e.target.value) })} />
         <span style={{ color: '#94a3b8' }}>s</span>
-        <span style={{ color: '#94a3b8' }}>反转</span>
+        <span style={{ color: '#94a3b8' }}><LiquidHint hintKey="stirReverseSec" title="反转时长">反转</LiquidHint></span>
         <input aria-label="反转时长" type="number" style={inputStyle} value={recipe.stirReverseSec}
           onChange={(e) => setRecipe({ stirReverseSec: Number(e.target.value) })} />
         <span style={{ color: '#94a3b8' }}>s</span>
