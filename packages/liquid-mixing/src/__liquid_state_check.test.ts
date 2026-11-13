@@ -8,7 +8,10 @@ import { useLiquidStore, exportLiquidSnapshot, liquidRatioA } from './stores/use
 import {
   LIQUID_PHASE, LIQUID_ALARM, LIQUID_CAPACITY, LIQUID_PROCESS, LIQUID_TANKS, LIQUID_GEOM,
   liquidSensorStates, liquidLevelHeight, liquidLevelRatio, resolveStirDirection,
-  liquidDisplay, LIQUID_EMPTY_OUTPUTS, liquidAlarmFlags,
+  liquidDisplay, LIQUID_EMPTY_OUTPUTS, liquidAlarmFlags, LIQUID_VISUAL, LIQUID_VIEW_PRESETS,
+  liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
+  liquidBlendColor, liquidMixStratification, liquidPairPresence,
+  clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
 import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION } from './constants/liquidVariables';
 
@@ -191,6 +194,160 @@ describe('报警 / 急停 / 仿真边界', () => {
     expect(S().volumes.a).toBe(2); // 同一序号不重复触发
     S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 8) });
     expect(S().volumes.a).toBe(LIQUID_PROCESS.INITIAL_A);
+  });
+});
+
+describe('搅拌可视化四层：混合均匀度真值（纯本地教学量）', () => {
+  it('正转推进、反转同样推进，角度随方向反号，停机保持且不超 1', () => {
+    S().setVolume('mix', 40);
+    S().setOutput('stirForward', true);
+    run(20); // 1s
+    const fwd = S().mixUniformity;
+    const angleFwd = S().agitatorAngle;
+    expect(fwd).toBeGreaterThan(0);
+    expect(angleFwd).toBeGreaterThan(0);
+    S().setOutputs({ stirForward: false, stirReverse: true });
+    run(20);
+    expect(S().mixUniformity).toBeGreaterThan(fwd);
+    expect(S().agitatorAngle).toBeLessThan(angleFwd);
+    const reached = S().mixUniformity;
+    S().setOutput('stirReverse', false);
+    run(30);
+    expect(S().mixUniformity).toBe(reached);
+    S().setOutput('stirForward', true);
+    run(600);
+    expect(S().mixUniformity).toBe(1);
+  });
+
+  it('正反转同时有效属禁止态：不积分均匀度、桨叶不转', () => {
+    S().setVolume('mix', 40);
+    S().setOutputs({ stirForward: true, stirReverse: true });
+    const angle = S().agitatorAngle;
+    run(40);
+    expect(S().mixUniformity).toBe(0);
+    expect(S().agitatorAngle).toBe(angle);
+  });
+
+  it('演示暂停 / 急停冻结均匀度，恢复后从原值继续', () => {
+    S().setVolume('mix', 40);
+    S().setOutput('stirForward', true);
+    run(20);
+    const before = S().mixUniformity;
+    S().startDemo();
+    S().toggleDemoPause();
+    S().setOutput('stirForward', true);
+    run(40);
+    expect(S().mixUniformity).toBe(before);
+    S().toggleDemoPause();
+    S().stopDemo();
+    S().setOutput('stirForward', true);
+    run(10);
+    expect(S().mixUniformity).toBeGreaterThan(before);
+    S().setEstop(true);
+    const held = S().mixUniformity;
+    run(40);
+    expect(S().mixUniformity).toBe(held);
+  });
+
+  it('新进原液按质量占比稀释均匀度，排空归零', () => {
+    S().setVolume('mix', 40);
+    S().setOutput('stirForward', true);
+    run(60); // 3s → 0.51
+    const before = S().mixUniformity;
+    expect(before).toBeGreaterThan(0.4);
+    S().setOutputs({ stirForward: false, valveA: true });
+    run(20); // 1s × 12 L/s = 12 L 新 A 液
+    const afterFeed = S().volumes.mix;
+    expect(S().mixUniformity).toBeCloseTo(before * 40 / afterFeed, 6);
+    expect(S().mixUniformity).toBeLessThan(before);
+    S().setVolume('mix', 0);
+    expect(S().mixUniformity).toBe(0);
+  });
+
+  it('复位与动作字复位都清均匀度，停机不清（保持当前值）', () => {
+    S().setVolume('mix', 40);
+    S().setOutput('stirForward', true);
+    run(20);
+    S().stopDemo();
+    expect(S().mixUniformity).toBeGreaterThan(0);
+    S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 3) });
+    expect(S().mixUniformity).toBe(0);
+    S().setVolume('mix', 40);
+    S().setOutput('stirForward', true);
+    run(20);
+    expect(S().mixUniformity).toBeGreaterThan(0);
+    S().resetAll();
+    expect(S().mixUniformity).toBe(0);
+  });
+
+  it('快照与观众镜像成对：均匀度可导出、可回放、越界与 NaN 被守卫', () => {
+    S().setVolume('mix', 40);
+    S().setOutput('stirForward', true);
+    run(20);
+    const snap = exportLiquidSnapshot();
+    expect(snap.LIQUID_UNIFORMITY).toBeCloseTo(S().mixUniformity, 3);
+    S().resetAll();
+    S().applyBroadcast(snap);
+    expect(S().mixUniformity).toBeCloseTo(snap.LIQUID_UNIFORMITY, 3);
+    S().applyBroadcast({ LIQUID_UNIFORMITY: 5 });
+    expect(S().mixUniformity).toBe(1);
+    S().applyBroadcast({ LIQUID_UNIFORMITY: NaN });
+    expect(S().mixUniformity).toBe(1);
+  });
+});
+
+describe('搅拌可视化四层：颜色 / 涡流 / 机位纯函数', () => {
+  it('混合色按 B 液占比插值，A 越多越蓝而不是越橙', () => {
+    expect(liquidMixColor(30, 0)).toBe(LIQUID_VISUAL.LIQUID_A);
+    expect(liquidMixColor(0, 20)).toBe(LIQUID_VISUAL.LIQUID_B);
+    expect(mixHexColor(LIQUID_VISUAL.LIQUID_A, LIQUID_VISUAL.LIQUID_B, 0)).toBe(LIQUID_VISUAL.LIQUID_A);
+    expect(mixHexColor(LIQUID_VISUAL.LIQUID_A, LIQUID_VISUAL.LIQUID_B, 1)).toBe(LIQUID_VISUAL.LIQUID_B);
+    expect(liquidMixColor(30, 20)).not.toBe(liquidMixColor(20, 30));
+  });
+
+  it('分层色带：未混合时上下异色，搅匀后收敛到混合色', () => {
+    const [lo0, up0] = liquidMixBandColors(0, 30, 20);
+    const [lo1, up1] = liquidMixBandColors(1, 30, 20);
+    expect(lo0).not.toBe(up0);
+    expect(lo1).toBe(up1);
+    expect(lo1).toBe(liquidBlendColor(30, 20));
+    // 蓝橙直接插值会发灰，搅匀目标色要明显偏紫，避免「搅完变透明」的观感
+    expect(liquidBlendColor(30, 20)).not.toBe(liquidMixColor(30, 20));
+    // 只有 A 液时不凭空画出 B 色分层
+    const [onlyA0, onlyA1] = liquidMixBandColors(0, 30, 0);
+    expect(onlyA0).toBe(onlyA1);
+    expect(onlyA0).toBe(LIQUID_VISUAL.LIQUID_A);
+    expect(liquidStratification(0)).toBe(1);
+    expect(liquidStratification(1)).toBe(0);
+    expect(clampUniformity(9)).toBe(1);
+    expect(clampUniformity(Number.NaN)).toBe(0);
+  });
+
+  it('分层带高度随均匀度归零：搅匀后只剩一根连续液柱，不再有两层', () => {
+    expect(liquidPairPresence(30, 20)).toBeCloseTo(0.8, 6);
+    expect(liquidPairPresence(30, 0)).toBe(0);
+    // 未搅拌且两组分齐备 → 分层带占半高；搅到 1 → 归零
+    expect(liquidMixStratification(0, 30, 30)).toBe(1);
+    expect(liquidMixStratification(1, 30, 20)).toBe(0);
+    expect(liquidMixStratification(0, 30, 0)).toBe(0);
+    const heights = [0, 0.25, 0.5, 0.75, 1].map((u) => liquidMixStratification(u, 30, 30));
+    for (let i = 1; i < heights.length; i += 1) expect(heights[i]).toBeLessThan(heights[i - 1]);
+  });
+
+  it('停机无涡流，搅拌时涡流强度随方向保留且落在 0..1', () => {
+    expect(liquidSwirlStrength(0.5, 0)).toBe(0);
+    expect(liquidSwirlStrength(0.5, 1)).toBeGreaterThan(0);
+    expect(liquidSwirlStrength(0.5, -1)).toBe(liquidSwirlStrength(0.5, 1));
+    expect(liquidSwirlStrength(1, 1)).toBeLessThanOrEqual(1);
+  });
+
+  it('机位预设含低角度「搅拌观察」，且六项都有完整位姿', () => {
+    expect(Object.keys(LIQUID_VIEW_PRESETS)).toHaveLength(6);
+    expect(LIQUID_VIEW_PRESETS.stir.label).toBe('搅拌观察');
+    for (const v of Object.values(LIQUID_VIEW_PRESETS)) {
+      expect(v.position).toHaveLength(3);
+      expect(v.target).toHaveLength(3);
+    }
   });
 });
 

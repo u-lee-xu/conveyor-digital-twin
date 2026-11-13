@@ -13,7 +13,9 @@ import {
   LIQUID_BOOL_MITSUBISHI, LIQUID_OUTPUT_COIL_NAMES, LIQUID_ADDRESS_ROWS,
   LIQUID_COILS, liquidSensorBits, liquidSensorMask, LIQUID_IO_MAP,
 } from './constants/liquidVariables';
-import { liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE } from './constants/liquidConstants';
+import {
+  liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
+} from './constants/liquidConstants';
 import { LIQUID_REAL32_WORD_ORDER } from './constants/real32';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -210,5 +212,90 @@ describe('面板与阶段口径', () => {
     const manual = read('packages/liquid-mixing/src/platform/LiquidManualPanel.tsx');
     expect(manual).toContain('tareTo');
     expect(manual).toContain('data-dt-liquid-tare');
+  });
+});
+
+describe('搅拌可视化四层：桨叶 / 涡流 / 均匀度 / 转向与机位', () => {
+  const constants = read('packages/liquid-mixing/src/constants/liquidConstants.ts');
+  const materials = read('packages/liquid-mixing/src/scenes/shared/liquidMaterials.ts');
+  const parts = read('packages/liquid-mixing/src/scenes/components/LiquidParts.tsx');
+  const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const switcher = read('packages/liquid-mixing/src/platform/LiquidViewSwitcher.tsx');
+
+  it('① 桨叶可见：混合罐液柱半透明、非对称锚式框桨与示踪色，液面盘仍不透明', () => {
+    expect(materials).toContain('translucentLiquidMat');
+    expect(materials).toContain('depthWrite: false');
+    expect(materials).toContain('bladeMark');
+    expect(parts).toContain('frameR');
+    expect(parts).toContain('LM.bladeMark');
+    expect(parts).toContain('liquidMixUpper');
+  });
+
+  it('② 液体被搅动：Lathe 涡流碗面 + 旋流弧线贴碗面 + 两段分层色带随均匀度收敛', () => {
+    expect(parts).toContain('latheGeometry');
+    expect(parts).toContain('SWIRL_RADII');
+    expect(parts).toContain('surfaceY - depth * (1 - t) ** 2');
+    expect(parts).toContain('liquidMixBandColors');
+    expect(parts).toContain('liquidSwirlStrength');
+    expect(parts).toContain('LM.swirl');
+    // 碗沿与液柱顶错开 CAP_GAP，不把涡流面抬到液面上方
+    expect(parts).toContain('surfaceY = top + CAP_GAP;');
+  });
+
+  it('② 分层带随搅拌缩短到零：液柱连续、搅匀后不再有「两层」横线', () => {
+    expect(parts).toContain('liquidMixStratification');
+    expect(parts).toContain('const upperH = h * 0.5 * strat;');
+    expect(parts).toContain('upper.visible = upperH > GAP * 0.5;');
+    // 两段都只有侧面、首尾精确相接，绝不再留中间 GAP 缝隙
+    expect(parts).toContain('1, 32, 1, isMix');
+    expect(parts).toContain('1, 32, 1, true');
+    expect(parts).not.toContain('h / 2 - GAP / 2');
+    expect(constants).toContain('liquidBlendColor');
+  });
+
+  it('搅匀后颜色保持饱和且浓度恒定，不会「变透明」', () => {
+    expect(parts).not.toContain('opacity = 0.48');
+    expect(parts).not.toContain('LM.liquidMix.opacity');
+    expect(materials).toContain('opacity: 0.66');
+    expect(materials).toContain('浓度恒定');
+  });
+
+  it('③ 搅拌有结果：均匀度常量与纯函数单一来源，且进 store / 快照 / 面板', () => {
+    expect(constants).toContain('UNIFORMITY_RATE');
+    expect(constants).toContain('clampUniformity');
+    expect(constants).toContain('liquidStratification');
+    expect(store).toContain('mixUniformity:');
+    expect(store).toContain('LIQUID_UNIFORMITY');
+    expect(store).toContain('UNIFORMITY_RATE * dt');
+    expect(panel).toContain('data-dt-liquid-uniformity');
+  });
+
+  it('④ 方向与机位：罐顶转向环 + 六机位含「搅拌观察」，切换器自动遍历预设', () => {
+    expect(materials).toContain('direction:');
+    expect(parts).toContain('LM.direction');
+    expect(Object.keys(LIQUID_VIEW_PRESETS)).toHaveLength(6);
+    expect(LIQUID_VIEW_PRESETS.stir.label).toBe('搅拌观察');
+    expect(switcher).toContain('Object.keys(LIQUID_VIEW_PRESETS)');
+  });
+
+  it('混合均匀度是纯本地教学量：不进 PLC 变量表 / 地址表 / 300ms 链路', () => {
+    const vars = read('packages/liquid-mixing/src/constants/liquidVariables.ts');
+    const effects = read('packages/liquid-mixing/src/platform/LiquidDeviceEffects.tsx');
+    const connection = read('packages/liquid-mixing/src/platform/LiquidPlcConnection.tsx');
+    expect(vars).not.toMatch(/UNIFORMITY|uniformity/);
+    expect(effects).not.toMatch(/UNIFORMITY|uniformity/);
+    expect(connection).not.toMatch(/UNIFORMITY|uniformity/);
+    expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /UNIFORM/i.test(k))).toBe(false);
+    for (const row of LIQUID_ADDRESS_ROWS) {
+      expect(row.signal).not.toMatch(/均匀度|UNIFORM/i);
+    }
+    // 上行地址表行数不因本轮变化（冻结的 S0 通道口径）
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(23);
+  });
+
+  it('均匀度在 exportSnapshot / applyBroadcast 成对出现，观众端同源可见', () => {
+    expect((store.match(/LIQUID_UNIFORMITY/g) ?? []).length).toBe(2);
+    expect(store).toContain('clampUniformity(uniformity)');
   });
 });

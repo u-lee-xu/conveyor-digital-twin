@@ -78,6 +78,11 @@ export const LIQUID_PROCESS = {
   LOW_RATIO: 0.1,
   /** 搅拌角速度 rad/s，只影响 3D 桨叶观感，不参与真值 */
   STIR_OMEGA: 5.2,
+  /** 混合均匀度积分速率（1/s）：正反转同速，默认 3s + 3s 恰好推进到 1 */
+  UNIFORMITY_RATE: 0.17,
+  /** 涡流液面最大凹陷（m）与旋流弧线条数：凹陷要足以在近距俯看时一眼可辨 */
+  SWIRL_DEPTH: 0.028,
+  SWIRL_ARMS: 3,
   /** 体积积分上限保护：单帧最多 0.05s */
   MAX_DT: 0.05,
   /** 判零容差（L） */
@@ -156,6 +161,10 @@ export const LIQUID_VISUAL = {
   LIQUID_B: '#f59e0b',
   LIQUID_MIX: '#a855f7',
   LIQUID_PRODUCT: '#10b981',
+  /** 搅拌可视化：桨叶示踪 / 旋流弧线 / 罐顶转向环 */
+  BLADE_MARK: '#c084fc',
+  SWIRL: '#7dd3fc',
+  DIRECTION: '#fbbf24',
   GLASS: '#bcd7ee',
   SCALE: '#e2e8f0',
   PIPE: '#aab6c4',
@@ -201,12 +210,13 @@ export const LIQUID_GEOM = {
   CAP_GAP: 0.005,
 } as const;
 
-/** 机位预设：整机 / 正面 / 俯视 / 混合罐 / 成品罐 */
+/** 机位预设：整机 / 正面 / 俯视 / 混合罐 / 搅拌观察 / 成品罐 */
 export const LIQUID_VIEW_PRESETS = {
   overview: { label: '整机', desc: '四罐与管路全景', position: [1.85, 1.18, 2.15] as [number, number, number], target: [0, 0.42, 0] as [number, number, number] },
   front: { label: '正面', desc: '正对四个液位视窗', position: [0, 0.62, 2.55] as [number, number, number], target: [0, 0.42, 0] as [number, number, number] },
   top: { label: '俯视', desc: '管路与罐顶布置', position: [0.05, 2.35, 0.35] as [number, number, number], target: [0, 0.24, 0] as [number, number, number] },
   mixer: { label: '混合罐', desc: '搅拌桨与液面特写', position: [0.62, 0.92, 0.85] as [number, number, number], target: [0, 0.40, 0] as [number, number, number] },
+  stir: { label: '搅拌观察', desc: '近距俯看涡流、旋流与桨叶', position: [0.40, 0.82, 0.52] as [number, number, number], target: [0, 0.34, 0] as [number, number, number] },
   product: { label: '成品罐', desc: '出料管路与成品液位', position: [1.72, 0.86, 0.78] as [number, number, number], target: [0.92, 0.42, 0] as [number, number, number] },
 } as const;
 export type LiquidViewKey = keyof typeof LIQUID_VIEW_PRESETS;
@@ -262,14 +272,86 @@ export function liquidLevelHeight(tank: TankId, volume: number): number {
   return liquidLevelRatio(tank, volume) * usable;
 }
 
-/** 混合液颜色：A 蓝与 B 橙按当前混合罐内 A/B 占比线性插值（纯函数） */
+/* ------------------------------ 颜色 / 搅拌派生 ------------------------------ */
+
+/** 十六进制颜色解析（本文件颜色派生的单一实现） */
+function hexRgb(hex: string): [number, number, number] {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+function rgbHex(c: number[]): string {
+  return `#${c.map((v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** 两色线性插值：t=0 取 a、t=1 取 b */
+export function mixHexColor(a: string, b: string, t: number): string {
+  const k = clamp(t, 0, 1);
+  const ca = hexRgb(a);
+  const cb = hexRgb(b);
+  return rgbHex([0, 1, 2].map((i) => ca[i] + (cb[i] - ca[i]) * k));
+}
+
+/** 混合液颜色：按混合罐内 A / B 占比，从 A 原液色插值到 B 原液色 */
 export function liquidMixColor(ratioA: number, ratioB: number): string {
   const total = ratioA + ratioB;
-  const t = total <= 0 ? 0.5 : clamp(ratioA / total, 0, 1);
-  const ca = [0x2f, 0x81, 0xf7];
-  const cb = [0xf5, 0x9e, 0x0b];
-  const c = ca.map((v, i) => Math.round(v + (cb[i] - v) * t));
-  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+  const t = total <= 0 ? 0.5 : clamp(ratioB / total, 0, 1);
+  return mixHexColor(LIQUID_VISUAL.LIQUID_A, LIQUID_VISUAL.LIQUID_B, t);
+}
+
+/** 混合均匀度 0..1 守卫（非有限值归零） */
+export function clampUniformity(v: number): number {
+  return Number.isFinite(v) ? clamp(v, 0, 1) : 0;
+}
+
+/** 两组分齐备度：只有一种原液时为 0，等量时为 1 */
+export function liquidPairPresence(ratioA: number, ratioB: number): number {
+  const a = Math.max(0, Number.isFinite(ratioA) ? ratioA : 0);
+  const b = Math.max(0, Number.isFinite(ratioB) ? ratioB : 0);
+  const total = a + b;
+  return total <= 0 ? 0 : clamp((2 * Math.min(a, b)) / total, 0, 1);
+}
+
+/**
+ * 搅匀后的目标色：A 蓝与 B 橙直接线性插值会得到灰褐色，看起来像「变透明了」。
+ * 两组分齐备时向本场景的混合紫偏移，搅匀后是饱和的一体色；只有单一组分时保持原液色。
+ */
+export function liquidBlendColor(ratioA: number, ratioB: number): string {
+  return mixHexColor(
+    liquidMixColor(ratioA, ratioB),
+    LIQUID_VISUAL.LIQUID_MIX,
+    0.88 * liquidPairPresence(ratioA, ratioB),
+  );
+}
+
+/**
+ * 分层色带：下带 A 色、上带 B 色，随均匀度一起收敛到混合色。
+ * 只有单一组分时不应凭空画出另一层的颜色，因此用「两组分齐备度」缩放分层强度。
+ */
+export function liquidMixBandColors(uniformity: number, ratioA: number, ratioB: number): [string, string] {
+  const strat = liquidMixStratification(uniformity, ratioA, ratioB);
+  const blended = liquidBlendColor(ratioA, ratioB);
+  return [
+    mixHexColor(blended, LIQUID_VISUAL.LIQUID_A, strat),
+    mixHexColor(blended, LIQUID_VISUAL.LIQUID_B, strat),
+  ];
+}
+
+/** 分层度 0..1，驱动 3D 两色带的分离强度 */
+export function liquidStratification(uniformity: number): number {
+  return 1 - clampUniformity(uniformity);
+}
+
+/**
+ * 实际分层度 = 未搅匀程度 × 两组分齐备度。
+ * 3D 用同一个值决定「上半段分层带还占多高」：搅到 1 时upper 高度归零，液柱成为完整一根。
+ */
+export function liquidMixStratification(uniformity: number, ratioA: number, ratioB: number): number {
+  return liquidStratification(uniformity) * liquidPairPresence(ratioA, ratioB);
+}
+
+/** 涡流强度 0..1：停机为 0，搅拌时随均匀度升高略降 */
+export function liquidSwirlStrength(uniformity: number, direction: -1 | 0 | 1): number {
+  return direction === 0 ? 0 : 0.55 + 0.45 * (1 - clampUniformity(uniformity));
 }
 
 /**

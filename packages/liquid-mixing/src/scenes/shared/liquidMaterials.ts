@@ -40,6 +40,23 @@ function surfaceMat(color: string): THREE.MeshStandardMaterial {
   });
 }
 
+/**
+ * 混合罐专用：半透明液柱，让内部桨叶透出来；液面盘仍不透明，液位依旧直观。
+ * 浓度恒定，不随搅拌进程变淡（避免「搅完变透明」的观感），靠颜色与分层带高度表达混合结果。
+ */
+function translucentLiquidMat(color: string): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.30,
+    metalness: 0.05,
+    roughness: 0.3,
+    transparent: true,
+    opacity: 0.66,
+    depthWrite: false,
+  });
+}
+
 export const LM = {
   /** 不锈钢罐体 / 封头 / 法兰 / 人孔 */
   steel: new THREE.MeshStandardMaterial({ color: V.SILVER_COLOR, metalness: 0.88, roughness: 0.24 }),
@@ -87,15 +104,39 @@ export const LM = {
   rib: new THREE.MeshStandardMaterial({ color: V.STRUCT_COLOR, metalness: 0.65, roughness: 0.4 }),
   /** 搅拌轴 / 桨叶（亮银） */
   shaft: new THREE.MeshStandardMaterial({ color: V.SILVER_COLOR, metalness: 0.9, roughness: 0.18 }),
-  /** ② 四罐液柱，颜色取 LIQUID_TANKS[tank].color；mix 由 liquidMixColor 逐帧改写 */
+  /** 示踪桨叶：高对比色，非对称设计让单帧也能看出角度与转向 */
+  bladeMark: new THREE.MeshStandardMaterial({
+    color: V.BLADE_MARK, emissive: V.BLADE_MARK, emissiveIntensity: 0.5,
+    metalness: 0.35, roughness: 0.3,
+  }),
+  /** 液面旋流弧线 */
+  swirl: new THREE.MeshStandardMaterial({
+    color: V.SWIRL, emissive: V.SWIRL, emissiveIntensity: 0.9,
+    metalness: 0.1, roughness: 0.25, transparent: true, opacity: 0.9,
+    side: THREE.DoubleSide, depthWrite: false,
+  }),
+  /** 罐顶转向指示环 */
+  direction: new THREE.MeshStandardMaterial({
+    color: V.DIRECTION, emissive: V.DIRECTION, emissiveIntensity: 0.75,
+    metalness: 0.3, roughness: 0.35, side: THREE.DoubleSide,
+  }),
+  /** ② 四罐液柱，颜色取 LIQUID_TANKS[tank].color；mix 由 liquidMixBandColors 逐帧改写 */
   liquidA: liquidMat(LIQUID_TANKS.a.color),
   liquidB: liquidMat(LIQUID_TANKS.b.color),
-  liquidMix: liquidMat(LIQUID_TANKS.mix.color),
+  liquidMix: translucentLiquidMat(LIQUID_TANKS.mix.color),
+  /** 混合罐上段分层色带，与下段颜色分别由 liquidMixBandColors 改写 */
+  liquidMixUpper: translucentLiquidMat(LIQUID_TANKS.mix.color),
   liquidProduct: liquidMat(LIQUID_TANKS.product.color),
   /** 液面圆盘：稍亮，底面与柱顶错开 ≥ CAP_GAP */
   surfaceA: surfaceMat(LIQUID_TANKS.a.color),
   surfaceB: surfaceMat(LIQUID_TANKS.b.color),
   surfaceMix: surfaceMat(LIQUID_TANKS.mix.color),
+  /** 混合罐涡流液面：Lathe 碗面单面，需 DoubleSide；scale.y 控制凹陷深度 */
+  surfaceMixSwirl: (() => {
+    const m = surfaceMat(LIQUID_TANKS.mix.color);
+    m.side = THREE.DoubleSide;
+    return m;
+  })(),
   surfaceProduct: surfaceMat(LIQUID_TANKS.product.color),
   /** 开关量液位传感器 LED：亮绿 / 暗 */
   ledOn: new THREE.MeshStandardMaterial({

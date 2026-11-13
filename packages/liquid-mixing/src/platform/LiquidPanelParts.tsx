@@ -73,6 +73,7 @@ export function LiquidStatusPanel() {
   const outputs = useLiquidStore((s) => s.outputs);
   const sensors = useLiquidStore((s) => s.sensors);
   const stirDirection = useLiquidStore((s) => s.stirDirection);
+  const mixUniformity = useLiquidStore((s) => s.mixUniformity);
   const bits = liquidSensorBits(sensors);
   return (
     <>
@@ -83,6 +84,17 @@ export function LiquidStatusPanel() {
           <div>配比 A {(liquidRatioA(mixA, mixB) * 100).toFixed(0)} % 搅拌方向 {stirDirection === 1 ? '正转' : stirDirection === -1 ? '反转' : '停止'}</div>
           <div>
             A 阀 {outputs.valveA ? 'ON' : 'OFF'} B 阀 {outputs.valveB ? 'ON' : 'OFF'} 正转 {outputs.stirForward ? 'ON' : 'OFF'} 反转 {outputs.stirReverse ? 'ON' : 'OFF'} 出料 {outputs.discharge ? 'ON' : 'OFF'}
+          </div>
+          <div data-dt-liquid-uniformity data-value={mixUniformity.toFixed(3)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <span style={{ color: '#94a3b8' }}>混合均匀度</span>
+            <span style={{ flex: 1, height: 6, background: '#0f172a', borderRadius: 3, overflow: 'hidden' }}>
+              <span style={{ display: 'block', width: `${(mixUniformity * 100).toFixed(1)}%`,
+                height: '100%', background: '#c084fc' }} />
+            </span>
+            <span style={{ width: 34, textAlign: 'right', color: '#e9d5ff' }}>
+              {(mixUniformity * 100).toFixed(0)}%
+            </span>
           </div>
         </div>
       </div>
