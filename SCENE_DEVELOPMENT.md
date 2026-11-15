@@ -12,7 +12,7 @@
 
 **目标读者**：场景包开发者（内部或第三方，可能只有公共契约与本文）；平台维护者（审核导入包、维护契约）；验收 / QA（判定一个包是否达标）。
 
-**不服务**：学生与教师（用实验指导书与教学手册）；只修改既有场景业务逻辑的人（用 `AGENTS.md` 与包内源码）；AI 会话上下文（用 `.workbuddy/memory/`）。
+**不服务**：学生与教师（用实验指导书与教学手册）；只修改既有场景业务逻辑的人（用 `AGENTS.md` 与包内源码）；AI 会话上下文（本地项目记忆，按 `.gitignore` 不入库）。
 
 **覆盖**：包结构与自描述、`DeviceDefinition` 实现口径、模式与状态真值、快照与观众镜像、PLC 与外部仿真软件边界、三维与视觉、面板与地址表、资源与配置归属、自检与验收、反模式。
 
@@ -23,7 +23,7 @@
 1. `packages/shared/src/types/deviceContract.ts`、`packages/platform/src/deviceCatalog.ts` 中的类型与 `device.json` schema；
 2. 自检 / 验收脚本（可执行约束，见第 9 章）；
 3. 本文；
-4. `CODE_AUDIT_REVIEW_2026-11-13.md` 等审核报告（历史记录）。
+4. 本地历史审核报告等背景材料（不入库，仅作参考，不参与裁决）。
 
 本文不得成为第二份真值：不写死场景数量或名单，不复制 API 全量字段，不描述未实现能力。`AGENTS.md` 的「场景包导入契约」是维护者速查，与本文是速查 / 正文关系。
 
@@ -135,7 +135,7 @@
 | 地址派生 | 地址由 `*AddressRowsFor()` 从点位表派生；组件 / JSX 禁止出现地址字面量，查不到信号应直接抛错 | `packages/auto-dispensing/src/__manual_io_check.test.ts`、`__simulation_io_check.test.ts` |
 | 紧凑面板浮框 | 紧凑面板用 hover / focus portal 浮框给三协议地址，`createPortal` 挂 `document.body` | `packages/auto-dispensing/src/__panel_copy_check.test.ts`、`packages/liquid-mixing/src/__liquid_check.test.ts` |
 | 文案克制 | 不堆说明；可见文案不带中文括号 | `packages/auto-dispensing/src/__panel_copy_check.test.ts` |
-| 地址选号 | 每个场景是独立 PLC 工程，地址只按本场景编程习惯**从低地址起、按信号类型分簇**；不得为避让其它场景而后移，也不得在测试 / 注释里写跨场景避让判断。MD520 手册规定的功能码地址除外 | `packages/liquid-mixing/src/__liquid_check.test.ts`、`packages/inovance-gantry/src/__gantry_mode_check.test.ts`、`packages/motor-reversing/src/__motor_variables_check.test.ts` |
+| 地址选号 | 每个场景是独立 PLC 工程，地址只按本场景编程习惯**从低地址起、按信号类型分簇**；不得为避让其它场景而后移，也不得在测试 / 注释里写跨场景避让判断。MD520 手册规定的功能码地址除外 | `packages/liquid-mixing/src/__liquid_check.test.ts`、`packages/inovance-gantry/src/__gantry_mode_check.test.ts` |
 
 参考实现：`packages/auto-dispensing/src/scenes/auto-dispensing/panels/AddressHint.tsx`。
 
@@ -222,7 +222,7 @@
 
 ### 10.2 同步与冻结
 
-- 契约、自描述字段或接线方式变更时，同步顺序：本文 → 项目侧 `.workbuddy/project-profile.md` → 场景构建 skill 的通用分支（仅接线形态变化时）→ 跑 `__scene_doc_check.test.ts`；该自检会拦住文档与档案漂移。
+- 契约、自描述字段或接线方式变更时，同步顺序：本文 → 包内自检与接线脚本 → 场景构建 skill 的通用分支（仅接线形态变化时）→ 跑 `__scene_doc_check.test.ts`；该自检会拦住文档与代码漂移。项目侧适配档案不入库，只作 AI 会话上下文；自动发现口径以本文与 `packages/platform/src/deviceCatalog.ts` 为准。
 - 教学材料改动时，用包内生成脚本重新生成三处同源产物（包内 HTML、`packages/platform/public/docs/`、场景内抽屉数据）。
 - 新场景验收后进入冻结清单；后续工作不得顺手改动其它场景。冻结清单以 `scripts/device-catalog.cjs` 的扫描结果为准，不在文档里写死数量或名单。
 
@@ -230,8 +230,8 @@
 
 | 项 | 口径 |
 |---|---|
-| 提交范围 | 源码、`SCENE_DEVELOPMENT.md`、`.workbuddy/`（记忆与项目侧档案）、必要测试脚本与项目约定文件 |
-| 不入库 | `docs/` 大型素材、图片、`.vs/`、未入库素材包、临时探针与证据页、`dist`、`node_modules`、临时脚本与日志 |
+| 提交范围 | 源码、`SCENE_DEVELOPMENT.md`、必要测试脚本与项目约定文件 |
+| 不入库 | `.workbuddy/`、`.trae/`（本地 AI 工作数据）、`docs/` 大型素材、图片、`.vs/`、未入库素材包、临时探针与证据页、`dist`、`node_modules`、临时脚本与日志 |
 | 授权边界 | 自动化工作默认只做到**暂存**；`commit` / `push` 需项目所有者明确授权。分支、领先提交数与暂存文件数以实际仓库状态为准，不写进本文 |
 | 提交信息 | 按 `AGENTS.md` 的 Commit 约定，简短说明行为变化与受影响模式 |
 

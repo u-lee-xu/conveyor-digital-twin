@@ -57,14 +57,16 @@ describe('场景开发文档可投入使用', () => {
     expect(SCENE_DESCRIPTORS.length).toBeGreaterThan(0);
   });
 
-  it('项目适配档案以本规范为真值且已切换到自动发现口径', () => {
-    const profile = read('.workbuddy/project-profile.md');
-    expect(profile).toContain('SCENE_DEVELOPMENT.md');
-    expect(profile).toContain('自动发现');
-    expect(profile).toContain('禁止手改');
+  it('自动发现口径与本地档案隔离（只校验入库文件）', () => {
+    // 项目侧适配档案不入库，自检不能依赖本机文件；改校验文档自身与 .gitignore。
+    expect(doc).toContain('自动发现');
+    expect(doc).toContain('不入库');
+    const ignore = read('.gitignore');
+    expect(ignore).toMatch(/^\.workbuddy\/$/m);
+    expect(ignore).toMatch(/^\.trae\/$/m);
     // 旧的手工接线清单不得回退，否则场景构建 skill 会去改平台壳派生配置
-    expect(profile).not.toContain('加 import 与数组项');
-    expect(profile).not.toContain('`resolve.alias` 加');
+    expect(doc).not.toContain('加 import 与数组项');
+    expect(doc).not.toContain('`resolve.alias` 加');
   });
 
   it('交付与收尾章覆盖记录、授权边界与两种部署形态', () => {
