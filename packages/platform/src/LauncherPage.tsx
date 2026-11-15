@@ -1,7 +1,8 @@
-import type { DeviceDefinition } from './types';
+import type { DeviceMeta } from './deviceMeta';
 
 interface LauncherPageProps {
-  devices: DeviceDefinition[];
+  /** 只依赖轻量元数据，不引用任何设备实现，保证启动器首屏不拉入 3D / 物理依赖 */
+  devices: readonly DeviceMeta[];
   onSelect: (deviceId: string) => void;
 }
 
@@ -60,7 +61,7 @@ export function LauncherPage({ devices, onSelect }: LauncherPageProps) {
                 </span>
               ))}
               <span className="status-badge status-badge-inactive">
-                {device.modes.length} 种模式
+                {device.modeCount} 种模式
               </span>
             </div>
           </button>

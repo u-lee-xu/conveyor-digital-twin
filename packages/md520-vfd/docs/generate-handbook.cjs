@@ -156,13 +156,13 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p>独立设备场景 <code>packages/md520-vfd</code> 的参数、功能、接线与现场接入说明。生成自源码单一来源，参数变动后重新运行 <code>generate-handbook.cjs</code> 即可同步。</p>
 <p><strong>范围声明</strong>：本手册是<strong>教学子集</strong>，不是功能码全量表。08 用户手册明确「功能码、故障码的完整信息请参见 09 参数手册」，而 09 参数手册在本机多次抽取失败，因此未收录的码不猜默认值。所有物理算法（矢量控制、直流制动电流闭环、电机辨识）均为教学近似或不做。</p>
 </header>
-<nav><a href="#s1">1 快速上手</a><a href="#s2">2 面板与按键</a><a href="#s3">3 参数速查</a><a href="#s4">4 参数效果</a><a href="#s5">5 四种给定</a><a href="#s6">6 端子接线</a><a href="#s7">7 PLC 点位</a><a href="#s8">8 通信地址</a><a href="#s9">9 故障码</a><a href="#s10">10 现场接入</a><a href="#s11">11 排查</a><a href="#s12">12 B 档 485 主从</a></nav>
+<nav><a href="#s1">1 快速上手</a><a href="#s2">2 面板与按键</a><a href="#s3">3 参数速查</a><a href="#s4">4 参数效果</a><a href="#s5">5 四种给定</a><a href="#s6">6 端子接线</a><a href="#s7">7 PLC 点位</a><a href="#s8">8 通信地址</a><a href="#s9">9 故障码</a><a href="#s10">10 现场接入</a><a href="#s11">11 排查</a><a href="#s12">12 DI/AI 端子控制</a></nav>
 
 <section id="s1"><h2>1 快速上手</h2>
 <div class="grid">
-<div class="tile"><b>启动</b><code>npm run start:lab</code> 起 6 进程 / 9 监听口。Web <code>:5201</code> 对外，网关 <code>:8081</code>、中继 <code>:8082</code>、三个虚拟 PLC <code>:1505 / :1503 / :1507</code> 全部绑回环。</div>
+<div class="tile"><b>启动</b><code>npm run start:lab</code> 只起 Web :5201、PLC 网关 :8081、状态中继 :8082；8081 / 8082 绑回环，仿真模式连外部 PLC 仿真软件或实物 PLC。内置虚拟 PLC 不随教学交付启动。</div>
 <div class="tile"><b>进入设备</b>主控本机 <code>http://127.0.0.1:5201/</code>，设备列表点「MD520 变频器」。观众用局域网 IP 访问，自动跟随、只读、零上行。</div>
-<div class="tile"><b>两种模式</b>手动模式直接操作变频器面板；仿真模式额外出现 PLC 连接面板，可连虚拟 PLC 或外部 PLC。</div>
+<div class="tile"><b>两种模式</b>手动模式直接操作变频器面板；仿真模式出现 PLC 连接面板，连外部 PLC（Modbus TCP / S7 / 三菱），或用 DI/AI 端子接线控制。</div>
 <div class="tile"><b>初始状态</b>默认停机 <code>outputHz=0</code>、命令源 <code>F0-02=0</code>（操作面板）、频率源 <code>F0-03=0</code>（数字设定）、预置频率 50Hz。</div>
 </div>
 <p class="notice">变频器是<strong>独立设备场景</strong>，与传送带分拣、自动配药完全解耦；改变频器链路不会碰到那两个已定稿场景。</p>
@@ -236,7 +236,7 @@ ${terminalSvg}
 <p>PLC 程序（AutoShop / 博途 / GX Works2 / 实物 PLC）通过网关直接打开变频器 DI、读回变频器 DO，并读写 485 数值字。<strong>实物 PLC 没有实际接线，统一使用 M 区</strong>：真实 PLC 的 X 会被 END 后的物理 I/O 刷新覆盖、Y 会被程序输出刷新覆盖，上位机写 X/Y 无效。</p>
 <table>${ioTable}</table>
 <p>Modbus TCP 是通用第四条路：任何支持 Modbus TCP 的 PLC 都可以用 coils <code>130~134 / 140~142</code> 加 15 个数值字直接读写虚拟变频器，不必走专有协议。</p>
-<p>虚拟 PLC 内置教学参考程序每 100ms 扫描一次；外部 PLC 写 <code>130~134</code> 后它会让位 2 秒，避免覆盖外部给定（<code>/status.externalDi</code> 可观察）。</p>
+<p>外部 PLC 程序按上表点位写 DI / 读 DO，并按第 8 章通信地址读写数值字；现场实物 PLC 的 IP 在连接面板填写，不固化在程序里。内置虚拟 PLC 仅开发 / 验收使用，不参与课堂链路。</p>
 </section>
 
 <section id="s8"><h2>8 18.3 Modbus 专用参数通信地址</h2>
@@ -286,28 +286,22 @@ ${terminalSvg}
 </table>
 </section>
 
-<section id="s12"><h2>12 B 档真实 485 主从</h2>
-<p>默认教学链路里，虚拟 PLC <code>:1507</code> 把「PLC 参考程序」和「变频器从站寄存器区」放在同一个进程，参考程序直接改内存。B 档把两者拆开：<strong>变频器是独立的纯从站</strong>，PLC 主站必须通过网络发真实 Modbus 帧才能改变它。这就是现场「PLC 主站轮询变频器」的形态。</p>
-<table><tr><th>项目</th><th>默认教学档（A 档）</th><th>B 档真实主从</th></tr>
-<tr><td>变频器从站</td><td>寄生在 <code>:1507</code> 虚拟 PLC 进程内</td><td>独立进程 <code>:1508</code>，独立寄存器区与线圈表</td></tr>
-<tr><td>PLC 主站</td><td>同进程内 <code>vfdPlcScan()</code> 直接改内存</td><td><code>vfd-485-master.cjs</code> 或外部 PLC，经 TCP 发 FC03/06/16/01/05/15 帧</td></tr>
-<tr><td>状态口</td><td><code>:5087/status</code></td><td><code>:5088/status</code>（含 <code>masterFrames</code> 主站帧计数）</td></tr>
-<tr><td>寄存器区</td><td>与参考程序共享一份</td><td>完全独立，与 :1507 互不影响</td></tr></table>
-<h3>端口与进程</h3>
+<section id="s12"><h2>12 外部 PLC 的 DI/AI 端子控制</h2>
+<p>除了第 7、8 章的通信控制（F0-02=2、F0-03=9），现场更常见的是<strong>端子控制</strong>：PLC 的数字量输出接变频器 DI 端子决定运行、方向与多段速，模拟量输出接 AI 端子给频率。两种方式都由外部 PLC 编程软件的 simulator 或实物 PLC 提供，教学交付不启动任何内置虚拟 PLC。</p>
+<table><tr><th>控制方式</th><th>参数设定</th><th>外部 PLC 侧</th></tr>
+<tr><td>通信控制</td><td><code>F0-02=2</code>、<code>F0-03=9</code></td><td>Modbus TCP / S7 / 三菱写 2000H、7310H、1000H，读 3000H、1001H、1009H</td></tr>
+<tr><td>端子运行</td><td><code>F0-02=1</code></td><td>数字量输出接 DI4（运行使能）、DI1/DI2（方向），1008H 位字可回读</td></tr>
+<tr><td>模拟量给定</td><td><code>F0-03=2</code> 或 <code>3</code></td><td>模拟量输出接 AI1（-10~10V）或 AI2（0~10V / 0~20mA），100AH 数值镜像</td></tr>
+<tr><td>多段速</td><td><code>F0-03=6</code></td><td>DI1~DI3 组合选段，FC-00~FC-07 是相对 F0-10 的百分比</td></tr></table>
+<h3>接线与调试</h3>
 <ul>
-<li><code>mock-vfd-slave.js :1508</code>：纯从站，绑 <code>127.0.0.1</code>，不含任何 PLC 参考程序；<code>/status</code> 与 <code>/reset</code> 在 <code>:5088</code>。</li>
-<li><code>vfd-485-master.cjs</code>：每 200ms 一轮真实轮询 —— 写 2000H/7310H/1000H 与 coils 130~134，读 3000H/1001H/1009H 与 coils 140~142；演示节拍为 4s 运行 / 2s 停机，频率 30/50Hz 交替。</li>
-<li><code>start-lab.cjs</code> 默认共起 8 个进程 / 10 个内部口；<code>assertInternalPorts()</code> 保证 :1508 不与 :1505 / :1503 / :1507 / :8081 / :8082 冲突。汇川龙门 XY 的仿真模式对接外部 PLC 仿真软件 :502，本机练习靶机 :1509+5089 默认不启（<code>DT_ENABLE_GANTRY_MOCK=1</code> 才额外拉起）。</li>
-<li>默认停机：<code>2000H=6</code>（按 F6-10）、<code>3000H=3</code>；<strong>不写 0</strong>，因为 2000H 没有 0 档。</li>
+<li>端子接线见第 6 章控制回路图：DI1~DI5、AI1/AI2、AO1、DO1/FM、485+/485-、STO1。</li>
+<li>切换 F0-02 / F0-03 前先停机，这两个参数属「停机更改」。</li>
+<li>两路方向信号同时有效为禁止态，保持上次方向，不要当成反转指令。</li>
+<li>现场 IP 在连接面板按实际网络填写；接实体 PLC 需在 <code>DT_PLC_HOSTS</code> 显式放行。</li>
 </ul>
-<h3>如何使用</h3>
-<ol>
-<li>在仿真模式的 PLC 连接面板选预设「MD520 485 从站 B档 (Modbus)」<code>127.0.0.1:1508</code>，面板与 3D 就直接跟随这份独立从站区。</li>
-<li>看 <code>:5088/status</code> 的 <code>masterFrames</code> 增长，即证明主站确实在发帧；也可观察 2000H 随演示节拍在 1 / 6 之间变化。</li>
-<li>接外部 PLC（AutoShop / 博途 / GX Works2 / 实物）当主站时，启动实验室前设 <code>DT_VFD_485_MASTER=0</code> 关闭内置主站，避免两个主站抢写同一从站。</li>
-<li>外部主站按第 8 章地址表发 FC06 / FC16 / FC03 即可；从站只响应帧，不会自己改寄存器。</li>
-</ol>
-<p class="notice">B 档从站与已定稿的配药 :1505、分拣 :1503 以及默认教学 :1507 全部隔离；改动 B 档不会影响那三条既有链路。</p>
+<h3>开发 / 验收说明</h3>
+<p class="notice">内置虚拟 PLC 靶机（<code>1503 / 1505 / 1507 / 1508</code>）只在 <code>npm run start:devlab</code> 下启用，供 security-check / plc-ports-check / plc-3d-link-check 等帧级回归脚本使用，不参与课堂交付，也不列入实验步骤。</p>
 </section>
 
 <footer>MD520 虚拟变频器教学手册 · 由 generate-handbook.cjs 从源码生成 · 教学子集，非全量表 · 配套 <a href="MD520实验指导书.html">MD520实验指导书.html</a>（30 个实验）</footer>

@@ -399,11 +399,13 @@ export class ModbusService {
     if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.connectWebSocket();
       await new Promise<void>((resolve) => {
+        // 30s 上限：WS 一直停在 CONNECTING 时不能让连接面板永久挂起
+        const started = Date.now();
         const check = () => {
-          if (this.connected || !this.reconnecting) resolve();
+          if (this.connected || !this.reconnecting || Date.now() - started >= 30000) resolve();
           else setTimeout(check, 100);
         };
-        setTimeout(check, 100);
+        check();
       });
       if (!this.connected) {
         return { success: false, error: 'WebSocket代理服务器连接失败，请确认服务器已启动(端口8081)' };

@@ -14,12 +14,12 @@
  * 完全分离：独立端口、独立线圈表、独立寄存器区、独立参考程序、独立状态口。
  *
  * 内含两段：
- *  1) 龙门从站寄存器区 HR200~210 / 线圈 C20~37（地址与 gantryVariables.ts 同源）；
+ *  1) 龙门从站寄存器区 HR0~10 / 线圈 C0~17（地址与 gantryVariables.ts 同源）；
  *  2) gantryPlcScan() 每 100ms 的教学 PLC 参考程序：按「启动」主令循环执行
  *     十步搬运，只写 position 坐标变量与信号，浏览器每 300ms 读回同一份寄存器。
  *
  * 读写分离：PLC 只写实际位置 / 目标位置 / 阶段 / 输出信号，浏览器只写主令线圈；
- * 外部 PLC 直接写 HR200~210 时，内置参考程序让位 2s，避免把外部给定覆盖掉。
+ * 外部 PLC 直接写 HR0~10 时，内置参考程序让位 2s，避免把外部给定覆盖掉。
  * 主令是一次性脉冲（true→false 可能短于扫描周期），故在 setCoil 捕获上升沿。
  *
  * ETHERCAT 仍只是前端 gantryVariables.ts 里的变量/信号映射表，本进程不实现
@@ -40,23 +40,23 @@ const HTTP_PORT = parseInt(process.env.DT_GANTRY_HTTP || '5089', 10);
  * 由 mock-addresses.js 的 checkGantryPlc() 锁死，改一处必须同步另一处。
  */
 const HR = {
-  GANTRY_X_POS: 200, GANTRY_X_POS_HI: 201,
-  GANTRY_Y_POS: 202, GANTRY_Y_POS_HI: 203,
-  GANTRY_X_TGT: 204, GANTRY_X_TGT_HI: 205,
-  GANTRY_Y_TGT: 206, GANTRY_Y_TGT_HI: 207,
-  GANTRY_Z_POS: 208, GANTRY_PHASE: 209, GANTRY_HELD_PIECE: 210,
+  GANTRY_X_POS: 0, GANTRY_X_POS_HI: 1,
+  GANTRY_Y_POS: 2, GANTRY_Y_POS_HI: 3,
+  GANTRY_X_TGT: 4, GANTRY_X_TGT_HI: 5,
+  GANTRY_Y_TGT: 6, GANTRY_Y_TGT_HI: 7,
+  GANTRY_Z_POS: 8, GANTRY_PHASE: 9, GANTRY_HELD_PIECE: 10,
   /** 吸取 / 放置目标格，row*3+col（0~8），浏览器据此完成棋子吸放 */
-  GANTRY_PICK_CELL: 211, GANTRY_PLACE_CELL: 212,
+  GANTRY_PICK_CELL: 11, GANTRY_PLACE_CELL: 12,
 };
 const REG_MIN = HR.GANTRY_X_POS;
 const REG_MAX = HR.GANTRY_PLACE_CELL;
 
 const COIL = {
-  X_ENABLE: 20, Y_ENABLE: 21, X_IN_POS: 22, Y_IN_POS: 23,
-  CYL_DOWN: 24, VACUUM: 25, HAS_PART: 26, START: 27, ESTOP: 28,
-  SENSOR_ORIGIN: 29, SENSOR_END_MINUS: 30, SENSOR_END_PLUS: 31,
-  SENSOR_X_ORIGIN: 32, SENSOR_X_END_MINUS: 33, SENSOR_X_END_PLUS: 34,
-  STOP: 35, RESET: 36, CONFIRM: 37,
+  X_ENABLE: 0, Y_ENABLE: 1, X_IN_POS: 2, Y_IN_POS: 3,
+  CYL_DOWN: 4, VACUUM: 5, HAS_PART: 6, START: 7, ESTOP: 8,
+  SENSOR_ORIGIN: 9, SENSOR_END_MINUS: 10, SENSOR_END_PLUS: 11,
+  SENSOR_X_ORIGIN: 12, SENSOR_X_END_MINUS: 13, SENSOR_X_END_PLUS: 14,
+  STOP: 15, RESET: 16, CONFIRM: 17,
 };
 
 /** 与前端 GANTRY_PHASE 十步同源 */
@@ -65,7 +65,10 @@ const PHASE = {
   MOVE_TO_PLACE: 5, Z_DOWN_PLACE: 6, VACUUM_OFF: 7, Z_UP_PLACE: 8, DONE: 9,
 };
 
-/** 与 gantryConstants.ts 的 GANTRY_AXIS / GANTRY_BOARD / GANTRY_SENSOR 同源 */
+/**
+ * 与 gantryConstants.ts 的 GANTRY_AXIS / GANTRY_BOARD / GANTRY_SENSOR 同源。
+ * 注意：以下全是毫米几何阈值，不是 PLC 地址；调整线圈 / 寄存器地址时不要平移这些数字。
+ */
 const AXIS = { X_TRAVEL: 500, Y_TRAVEL: 500, Z_STROKE: 50 };
 const BOARD = { OFFSET_X: 100, OFFSET_Y: 100, CELL_SPACING: 40 };
 const SENSOR = {
@@ -107,7 +110,7 @@ let vacuum = false;
 let cylinderDown = false;
 let held = 0;
 let plcScans = 0;
-/** 外部 PLC 程序直接写 HR200~210 后的让位窗口：内置参考程序暂不覆盖位置给定 */
+/** 外部 PLC 程序直接写 HR0~10 后的让位窗口：内置参考程序暂不覆盖位置给定 */
 let externalPosUntil = 0;
 
 /** 一次性主令脉冲：setCoil 捕获上升沿，扫描周期消费，避免 true→false 被 100ms 轮询漏掉 */

@@ -396,9 +396,9 @@ function checkVfdChain() {
 }
 
 /**
- * 场景独立：MD520 变频器是独立设备场景，拥有自己的虚拟 PLC :1507。
+ * 场景独立：MD520 变频器是独立设备场景；内置虚拟 PLC :1507 只是开发靶机，教学交付不启动。
  * 已定稿的自动配药 PLC 与传送带分拣 PLC 都不得残留任何变频器寄存器 / 从站逻辑；
- * 三个 PLC 各绑回环、各由 start:lab 独立启动，端口互不相同。
+ * 三个 PLC 各绑回环、仅在 start:devlab 下独立启动，端口互不相同。
  */
 function checkVfdIsolation() {
   const fs = require('fs');
@@ -434,11 +434,17 @@ function checkVfdIsolation() {
     console.error('[check][vfd-isolation] ❌ start-lab.cjs 未启动 MD520 独立虚拟 PLC :1507');
     return false;
   }
-  if (!registry.includes('md520VfdDevice')) {
-    console.error('[check][vfd-isolation] ❌ 平台壳未注册 MD520 独立设备');
+  const vfdDesc = readFile('../packages/md520-vfd/device.json');
+  const vfdEntry = readFile('../packages/md520-vfd/src/device.ts');
+  if (!vfdDesc.includes('"id": "md520-vfd"') || !vfdEntry.includes('md520VfdDevice')) {
+    console.error('[check][vfd-isolation] ❌ MD520 场景包自描述或统一入口缺失');
     return false;
   }
-  console.log('[check][vfd-isolation] ✅ 变频器只在独立设备场景 :1507，配药 / 分拣 PLC 零耦合');
+  if (!registry.includes('import.meta.glob')) {
+    console.error('[check][vfd-isolation] ❌ 平台壳未启用场景包自动发现');
+    return false;
+  }
+  console.log('[check][vfd-isolation] ✅ MD520 开发靶机 :1507 独立，配药 / 分拣 PLC 零耦合（教学交付不启用）');
   return true;
 }
 
@@ -542,7 +548,7 @@ function checkVfd485Slave() {
       return false;
     }
   }
-  console.log('[check][vfd-485] ✅ B 档独立从站 :1508 + 真实主站轮询，端口与场景隔离');
+  console.log('[check][vfd-485] ✅ B 档开发靶机 :1508 + 真实主站轮询，端口与场景隔离（教学交付不启用）');
   return true;
 }
 
@@ -563,15 +569,18 @@ function checkGantryIsolation() {
     console.error(`[check][gantry-isolation] ❌ 龙门场景文件缺失: ${e.message}`);
     return false;
   }
-  if (!registry.includes('inovanceGantryDevice')) {
-    console.error('[check][gantry-isolation] ❌ 平台壳未注册汇川龙门设备');
+  const gantryDesc = readFile('../packages/inovance-gantry/device.json');
+  const gantryEntry = readFile('../packages/inovance-gantry/src/device.ts');
+  if (!gantryDesc.includes('"id": "inovance-gantry"') || !gantryEntry.includes('inovanceGantryDevice')) {
+    console.error('[check][gantry-isolation] ❌ 龙门场景包自描述或统一入口缺失');
     return false;
   }
   const wiring = [
-    ['../packages/platform/package.json', '@digital-twin/inovance-gantry'],
-    ['../packages/platform/vite.config.ts', "'@digital-twin/inovance-gantry'"],
-    ['../packages/platform/tsconfig.app.json', '"@digital-twin/inovance-gantry"'],
-    ['../packages/platform/src/index.css', '../../inovance-gantry/src'],
+    ['../packages/platform/src/deviceCatalog.ts', 'import.meta.glob'],
+    ['../packages/platform/src/registry.ts', 'src/device.ts'],
+    ['../packages/platform/vite.config.ts', 'sceneAliases'],
+    ['../packages/platform/tsconfig.app.json', '"@digital-twin/*"'],
+    ['../packages/platform/src/index.css', '@source'],
   ];
   for (const [file, token] of wiring) {
     if (!readFile(file).includes(token)) {
@@ -733,16 +742,18 @@ function checkLiquidMixingIsolation() {
     console.error(`[check][liquid-isolation] ❌ 液体混装场景文件缺失: ${e.message}`);
     return false;
   }
-  if (!registry.includes('liquidMixingDevice')) {
-    console.error('[check][liquid-isolation] ❌ 平台壳未注册液体混装设备');
+  const liquidDesc = readFile('../packages/liquid-mixing/device.json');
+  const liquidEntry = readFile('../packages/liquid-mixing/src/device.ts');
+  if (!liquidDesc.includes('"id": "liquid-mixing"') || !liquidEntry.includes('liquidMixingDevice')) {
+    console.error('[check][liquid-isolation] ❌ 液体混装场景包自描述或统一入口缺失');
     return false;
   }
   const wiring = [
-    ['../packages/platform/package.json', '@digital-twin/liquid-mixing'],
-    ['../packages/platform/vite.config.ts', "'@digital-twin/liquid-mixing'"],
-    ['../packages/platform/tsconfig.app.json', '"@digital-twin/liquid-mixing"'],
-    ['../packages/platform/tsconfig.app.json', '"@digital-twin/liquid-mixing/*"'],
-    ['../packages/platform/src/index.css', '../../liquid-mixing/src'],
+    ['../packages/platform/src/deviceCatalog.ts', 'import.meta.glob'],
+    ['../packages/platform/src/registry.ts', 'src/device.ts'],
+    ['../packages/platform/vite.config.ts', 'sceneAliases'],
+    ['../packages/platform/tsconfig.app.json', '"@digital-twin/*"'],
+    ['../packages/platform/src/index.css', '@source'],
     ['../packages/liquid-mixing/vite.config.ts', 'test:'],
   ];
   for (const [file, token] of wiring) {
@@ -765,9 +776,9 @@ function checkLiquidMixingIsolation() {
       return false;
     }
   }
-  if (!/address: 300, words: 2/.test(vars) || !/address: 302, words: 2/.test(vars)
-    || !/address: 304, words: 2/.test(vars) || !/address: 306, words: 2/.test(vars)) {
-    console.error('[check][liquid-isolation] ❌ 四路 REAL 必须是 HR300/302/304/306 起的双字');
+  if (!/address: 0, words: 2/.test(vars) || !/address: 2, words: 2/.test(vars)
+    || !/address: 4, words: 2/.test(vars) || !/address: 6, words: 2/.test(vars)) {
+    console.error('[check][liquid-isolation] ❌ 四路 REAL 必须是 HR0/2/4/6 起的双字');
     return false;
   }
   if (!vars.includes("type: 'dint32'") || !real32.includes('IEEE754') || !real32.includes('low-first')) {

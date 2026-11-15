@@ -24,6 +24,7 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 const { verifyInternalRequest } = require('./runtime-role');
+const { sameSnapshot, mergeSnapshot, isSnapshotValue } = require('./snapshot-diff');
 
 const CONFIG_PATH = path.join(__dirname, 'edge-broadcast.json');
 const DEFAULT_CONFIG = { broadcastPort: 8082 };
@@ -31,6 +32,30 @@ const DEFAULT_CONFIG = { broadcastPort: 8082 };
 const BROADCAST_HOST = '127.0.0.1';
 /** 主控刷新 / 切模式会短暂断线，统一给 800ms 宽限，避免观众画面闪一下 */
 const RELEASE_GRACE_MS = 800;
+/** 正常快照远小于 64KB；超长帧直接由 ws 协议层拒绝 */
+const MAX_WS_FRAME = 64 * 1024;
+/** 观众端积压超过 512KB 视为慢连接，跳过本帧并终止，避免 10Hz 广播把内存堆满 */
+const MAX_BUFFERED = 512 * 1024;
+const WS_HEARTBEAT_MS = 30000;
+/** 静止期仍每 1s 发一帧完整快照：观众端「更新于」时间戳与链路保活，扇出比 10Hz 降 90% */
+const SNAPSHOT_KEEPALIVE_MS = 1000;
+/** 与网关侧同源的键名黑名单，防止 report 帧写入对象原型 */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * 只收合法键名与 boolean / 有限 number；delta 帧额外允许 null 作为删除标记。
+ * 非对象（字符串 / 数组）一律当空帧，避免 Object.entries 把字符拆成数字键。
+ */
+function sanitizeVars(raw, allowDelete) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (UNSAFE_KEYS.has(k)) continue;
+    if (allowDelete && v === null) { out[k] = null; continue; }
+    if (isSnapshotValue(v)) out[k] = v;
+  }
+  return out;
+}
 
 function loadConfig() {
   try {
@@ -52,28 +77,53 @@ class Relay {
     this.controller = null;
     this.leaveTimer = null;
     this.viewers = new Set();
+    this.wss = null;
+    this.heartbeat = null;
+    /** 完整快照镜像：主控只发变化键，合并后才扇出，观众端协议保持完整 vars 不变 */
+    this.vars = {};
+    this.lastPublishAt = 0;
   }
 
   start() {
     const wss = new WebSocket.Server({
       port: config.broadcastPort,
       host: BROADCAST_HOST,
+      maxPayload: MAX_WS_FRAME,
+      perMessageDeflate: false,
       verifyClient: (info) => {
         const verdict = verifyInternalRequest(info.req, { allowViewer: true });
         if (!verdict.ok) console.warn(`[relay] 拒绝越权接入 (${verdict.reason})`);
         return verdict.ok;
       },
     });
+    this.wss = wss;
     console.log(`[relay] 状态中继启动 ${BROADCAST_HOST}:${config.broadcastPort}（仅本机可达，不连接 PLC）`);
+    /** 半开连接检测：断电/WiFi 掉线不发 FIN 时，30s 内清出 viewers，避免广播风暴 */
+    this.heartbeat = setInterval(() => {
+      for (const ws of wss.clients) {
+        if (ws.isAlive === false) { ws.terminate(); continue; }
+        ws.isAlive = false;
+        try { ws.ping(); } catch { ws.terminate(); }
+      }
+    }, WS_HEARTBEAT_MS);
+    this.heartbeat.unref?.();
     wss.on('connection', (ws, req) => {
       const verdict = verifyInternalRequest(req, { allowViewer: true });
       ws.role = verdict.role;
-      this.viewers.add(ws);
+      ws.isAlive = true;
+      ws.on('pong', () => { ws.isAlive = true; });
+      // 单连接 error 必须有监听，否则协议错误/超长帧会以未捕获异常打死中继
+      ws.on('error', (err) => console.warn('[relay] 连接异常:', err && err.message ? err.message : err));
+      // 只有观众进订阅集合：主控不需要接收自己 10Hz 上报的快照回环
+      if (ws.role === 'viewer') this.viewers.add(ws);
       // 后加入的智能电视 / 手机 / 学生机浏览器立刻拿到当前画面
-      if (this.lastSnapshot) ws.send(JSON.stringify(this.lastSnapshot));
+      if (this.lastSnapshot && ws.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BUFFERED) {
+        ws.send(JSON.stringify(this.lastSnapshot));
+      }
 
       ws.on('message', (raw) => {
         let msg;
+        if (raw && typeof raw.length === 'number' && raw.length > MAX_WS_FRAME) return;
         try { msg = JSON.parse(raw.toString()); } catch { return; }
         if (!msg || typeof msg !== 'object') return;
         // 观众完全只读：任何上行帧（含伪造 report / leave / set-device）都直接丢弃
@@ -82,14 +132,31 @@ class Relay {
         if (msg.type === 'report') {
           // 第一个上报者成为主控；同一教室只认一台主控
           if (this.controller && this.controller !== ws && this.controller.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'rejected', error: '已有主控在演示' }));
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'rejected', error: '已有主控在演示' }));
+            }
             return;
           }
+          const incoming = sanitizeVars(msg.vars, msg.delta === true);
+          const deviceChanged = this.deviceId !== (msg.deviceId ?? null);
+          const modeChanged = this.mode !== (msg.mode ?? null);
           this.controller = ws;
           this.cancelRelease();
           this.deviceId = msg.deviceId ?? null;
           this.mode = msg.mode ?? null;
-          this.publish(this.snapshot(msg.vars || {}, { error: undefined }));
+          // 旧主控 / 安全自检 / 切设备 / 切模式：不带 delta 的全量帧无条件广播，行为与旧版一致
+          if (msg.delta !== true) {
+            // incoming 已按「合法键名 + boolean/有限 number」清洗，全量帧直接替换
+            this.vars = incoming;
+            this.publish(this.snapshot(this.vars, { error: undefined }));
+            return;
+          }
+          // 新主控差分帧：先合并成完整镜像，静止期只按 1s 保活扇出
+          const merged = mergeSnapshot(this.vars, incoming);
+          const changed = !sameSnapshot(merged, this.vars) || deviceChanged || modeChanged;
+          this.vars = merged;
+          if (!changed && Date.now() - this.lastPublishAt < SNAPSHOT_KEEPALIVE_MS) return;
+          this.publish(this.snapshot(this.vars, { error: undefined }));
           return;
         }
 
@@ -102,7 +169,9 @@ class Relay {
         // 兼容旧主控的 set-device 帧（只切设备，不带状态）
         if (msg.type === 'set-device' && (!this.controller || this.controller === ws)) {
           this.deviceId = msg.deviceId ?? null;
-          this.publish(this.snapshot({}, { error: undefined }));
+          this.mode = null; // 旧主控切设备时不应短暂沿用上一设备的模式
+          this.vars = {};
+          this.publish(this.snapshot(this.vars, { error: undefined }));
         }
       });
 
@@ -132,7 +201,9 @@ class Relay {
   clearController() {
     this.deviceId = null;
     this.mode = null;
-    this.publish(this.snapshot({}, { error: '主控已离开' }));
+    this.vars = {};
+    this.lastPublishAt = 0; // 不依赖 publish 的副作用重置保活窗口
+    this.publish(this.snapshot(this.vars, { error: '主控已离开' }));
   }
 
   snapshot(vars, extra) {
@@ -150,13 +221,41 @@ class Relay {
 
   publish(snapshot) {
     this.lastSnapshot = snapshot;
+    this.lastPublishAt = Date.now();
     const msg = JSON.stringify(snapshot);
     for (const ws of this.viewers) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      // 慢连接跳过本帧而不是无限排队；积压过多直接终止，由客户端重连
+      if (ws.bufferedAmount > MAX_BUFFERED) {
+        ws.terminate();
+        this.viewers.delete(ws);
+        continue;
+      }
+      ws.send(msg);
+    }
+  }
+
+  shutdown() {
+    if (this.heartbeat) { clearInterval(this.heartbeat); this.heartbeat = null; }
+    if (this.leaveTimer) { clearTimeout(this.leaveTimer); this.leaveTimer = null; }
+    if (this.wss) {
+      for (const ws of this.wss.clients) {
+        try { ws.terminate(); } catch {}
+      }
+      this.wss.close();
     }
   }
 }
 
-new Relay().start();
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT', () => process.exit(0));
+const relay = new Relay();
+relay.start();
+process.on('SIGTERM', () => { relay.shutdown(); process.exit(0); });
+process.on('SIGINT', () => { relay.shutdown(); process.exit(0); });
+process.on('unhandledRejection', (reason) => {
+  console.error('[relay] 未处理的 Promise 拒绝:', reason && reason.message ? reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[relay] 未捕获异常，中继退出:', err);
+  try { relay.shutdown(); } catch {}
+  process.exit(1);
+});

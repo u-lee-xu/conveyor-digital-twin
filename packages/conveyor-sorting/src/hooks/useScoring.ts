@@ -32,7 +32,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useDeviceStore } from '../stores';
-import { MODBUS_ADDRESSES, MODBUS_CONFIG, useModbusService } from '@digital-twin/shared';
+import { MODBUS_ADDRESSES, MODBUS_CONFIG, useModbusService } from '@digital-twin/shared/services/modbus';
 
 /**
  * 评分模式状态机步骤定义

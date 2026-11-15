@@ -269,6 +269,25 @@ export function clampVolume(tank: TankId, v: number): number {
   return clamp(v, 0, LIQUID_CAPACITY[tank]);
 }
 
+/** 配方上限：目标量按罐容量，搅拌时长 0..60s；面板输入与 PLC 帧共用同一口径 */
+export const LIQUID_RECIPE_LIMITS = { MAX_DURATION_SEC: 60 } as const;
+
+/**
+ * 配方守卫（面板输入与 PLC 帧共同入口）：
+ * 非法/NaN 值保留上次设定，负值归零，超量程钳到容量或时长上限。
+ * 避免空输入 / 负号让 FEED_A、FEED_B 瞬跳或让搅拌时长判定恒 false 锁死状态机。
+ */
+export function clampRecipe(patch: Partial<Recipe>, current: Recipe): Recipe {
+  const finite = (v: number | undefined, fallback: number): number =>
+    typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+  return {
+    targetA: clampVolume('a', finite(patch.targetA, current.targetA)),
+    targetB: clampVolume('b', finite(patch.targetB, current.targetB)),
+    stirForwardSec: clamp(finite(patch.stirForwardSec, current.stirForwardSec), 0, LIQUID_RECIPE_LIMITS.MAX_DURATION_SEC),
+    stirReverseSec: clamp(finite(patch.stirReverseSec, current.stirReverseSec), 0, LIQUID_RECIPE_LIMITS.MAX_DURATION_SEC),
+  };
+}
+
 /** 去皮后的显示读数（唯一公式） */
 export function liquidDisplay(tank: TankId, volumes: Volumes, tare: Volumes): number {
   return volumes[tank] - tare[tank];

@@ -1,9 +1,9 @@
 /**
  * MD520 虚拟变频器常驻链路（平台壳 effects，主控专用）。
  *
- * 场景独立：变频器是自己的设备包，485 从站寄存器区在专属 mock-vfd-server.js :1507，
- * 与自动配药 PLC :1505、传送带 PLC :1503 完全分离。PLC 参考程序以 100ms 主动写命令 /
- * 给定、读状态联锁；本链路每 300ms 读写同一份寄存器，形成双向闭环。
+ * 场景独立：变频器是自己的设备包。仿真模式由外部 PLC 仿真软件 / 实物 PLC 写命令、
+ * 给定并读状态联锁；本链路每 300ms 读写同一份寄存器，形成双向闭环。
+ * 内置虚拟 PLC 靶机（:1507 等）只在开发模式启用，不属于教学交付链路。
  *
  * 1. 每帧推进 F0-17/F0-18 加减速斜坡，产出频率倍率给 3D 带速消费。
  * 2. 每 300ms 读 2000H / 1000H / 7310H / 1008H / 100AH / 2001H / 7044H，
@@ -18,7 +18,8 @@
  * 观众端不挂载 effects，参数与状态走 exportSnapshot / applyBroadcast 数值镜像。
  */
 import { useEffect } from 'react';
-import { modbusService, isViewerRuntime } from '@digital-twin/shared';
+import { isViewerRuntime } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { useVfdStore } from '../stores/useVfdStore';
 import { MD520_SOURCE, MD520_COMMAND } from '../vfd/md520Spec';
 import {

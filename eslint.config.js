@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // 构建产物与未入库的本地实验素材不参与全量 lint（后者由 .gitignore 排除提交）
+  globalIgnores(['**/dist/**', '**/dist-electron/**', 'packages/inovance-control/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

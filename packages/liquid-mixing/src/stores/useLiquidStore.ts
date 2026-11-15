@@ -11,10 +11,13 @@
  *    但设备物理（流量积分、液位、传感器）照常在浏览器侧派生。
  */
 import { create } from 'zustand';
+// 子路径导入：不把 shared barrel 的 UI / 服务模块拉进设备分包
+import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
   LIQUID_PROCESS, LIQUID_CAPACITY, LIQUID_INITIAL_VOLUMES, LIQUID_DEFAULT_RECIPE,
   LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, TANK_IDS,
-  clamp, clampVolume, clampUniformity, liquidSensorStates, resolveStirDirection, liquidAlarmFlags,
+  clamp, clampVolume, clampUniformity, clampRecipe, LIQUID_RECIPE_LIMITS,
+  liquidSensorStates, resolveStirDirection, liquidAlarmFlags,
   type Volumes, type Outputs, type Recipe, type LiquidPhase, type TankId, type LiquidSensors,
 } from '../constants/liquidConstants';
 import {
@@ -131,7 +134,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
 
   setOutput: (name, on) => set((s) => ({ outputs: { ...s.outputs, [name]: on } })),
   setOutputs: (patch) => set((s) => ({ outputs: { ...s.outputs, ...patch } })),
-  setRecipe: (patch) => set((s) => ({ recipe: { ...s.recipe, ...patch } })),
+  /** 面板输入统一过守卫：非法值保留上次设定，绝不把 NaN / 负值放进演示状态机 */
+  setRecipe: (patch) => set((s) => ({ recipe: clampRecipe(patch, s.recipe) })),
   setVolume: (tank, value) => set((s) => {
     const next = clampVolume(tank, value);
     const emptied = next <= LIQUID_PROCESS.EPS;
@@ -175,10 +179,10 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       patch.recipe = { ...(patch.recipe ?? s.recipe), targetB: clamp(frame.recipeB / LIQUID_PLC_SCALE.RECIPE, 0, LIQUID_CAPACITY.b) };
     }
     if (typeof frame.stirForwardSec === 'number' && Number.isFinite(frame.stirForwardSec)) {
-      patch.recipe = { ...(patch.recipe ?? s.recipe), stirForwardSec: clamp(frame.stirForwardSec / LIQUID_PLC_SCALE.DURATION, 0, 60) };
+      patch.recipe = { ...(patch.recipe ?? s.recipe), stirForwardSec: clamp(frame.stirForwardSec / LIQUID_PLC_SCALE.DURATION, 0, LIQUID_RECIPE_LIMITS.MAX_DURATION_SEC) };
     }
     if (typeof frame.stirReverseSec === 'number' && Number.isFinite(frame.stirReverseSec)) {
-      patch.recipe = { ...(patch.recipe ?? s.recipe), stirReverseSec: clamp(frame.stirReverseSec / LIQUID_PLC_SCALE.DURATION, 0, 60) };
+      patch.recipe = { ...(patch.recipe ?? s.recipe), stirReverseSec: clamp(frame.stirReverseSec / LIQUID_PLC_SCALE.DURATION, 0, LIQUID_RECIPE_LIMITS.MAX_DURATION_SEC) };
     }
     if (typeof frame.estop === 'boolean') patch.estop = frame.estop;
     if (frame.reset) {
@@ -256,7 +260,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
 
     let outputs = s.outputs;
     let phase = s.phase;
-    let phaseElapsed = s.phaseElapsed + dt;
+    /** 阶段计时只在演示真正推进时累加：暂停 / 急停 / 报警期间冻结，恢复后不跳阶段 */
+    let phaseElapsed = s.phaseElapsed;
     let demoRunning = s.demoRunning;
     let stopRequested = s.stopRequested;
     let round = s.round;
@@ -266,6 +271,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
 
     /* 1) 演示状态机：A 进料 → B 进料 → 正转 → 反转 → 出料 → 完成（含回补）→ 下一轮 */
     if (running) {
+      phaseElapsed += dt;
       const step = (next: LiquidPhase, nextOutputs: Outputs) => {
         phase = next; phaseElapsed = 0; outputs = nextOutputs;
       };
@@ -414,14 +420,19 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       phase = LIQUID_PHASE.IDLE;
     }
     const sensors = liquidSensorStates(volumes, outputs, stirDirection);
-    if (s.alarm !== 0 && alarm === 0) alarm = 0;
+    // 报警锁存：停机后触发条件会自我消失（例如阀断电后低液位判据不再成立），
+    // 必须保持上一次报警，直到「报警复位」/ ALARM_RESET / 启动演示 / resetAll 显式清除。
+    if (s.alarm !== 0 && alarm === 0) alarm = s.alarm;
 
-    set({
+    const patch = {
       volumes, mixA, mixB, mixUniformity: uniformity, productA, productB,
       outputs, phase, phaseElapsed,
       demoRunning, stopRequested, round, batchStartA, batchStartB,
       agitatorAngle, stirDirection, sensors, alarm,
-    });
+    };
+    // 静止期 rAF 仍在跑，但值全同就不写 store，避免 60Hz 全量订阅者重渲染；
+    // 液面 / 搅拌角任一变化都会照常写入，连续性不变
+    if (patchChanged(s, patch)) set(patch);
   },
 
   /** 观众只读镜像：数值键成对、有限性守卫、缺字段保留上次值 */

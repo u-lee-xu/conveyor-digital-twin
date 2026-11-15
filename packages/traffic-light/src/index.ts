@@ -1,4 +1,4 @@
-import type { DeviceDefinition, PlatformModeState } from '@digital-twin/platform';
+import type { DeviceDefinition, PlatformModeState } from '@digital-twin/shared';
 import type { Mode } from '@digital-twin/shared';
 import { TrafficSceneContent } from './scenes/traffic-light/SceneContent';
 import { ManualModePanel } from './platform/ManualModePanel';

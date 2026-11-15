@@ -8,6 +8,8 @@
  * 观众端只读镜像：exportGantrySnapshot / applyBroadcast 键名成对，全部数值键。
  */
 import { create } from 'zustand';
+// 子路径导入：不把 shared barrel 的 UI / 服务模块拉进设备分包
+import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
   GANTRY_AXIS, GANTRY_BOARD, CHESS_POSITIONS, INITIAL_PIECES,
   cellToMm, computeSensors, GANTRY_DEMO_SEQUENCE,
@@ -230,8 +232,8 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     if (typeof frame.zPos === 'number' && Number.isFinite(frame.zPos)) {
       patch.z = clamp(frame.zPos, 0, GANTRY_AXIS.Z_STROKE);
     }
-    if (typeof frame.xTarget === 'number') patch.x = { ...(patch.x ?? s.x), target: clamp(frame.xTarget, 0, GANTRY_AXIS.X_TRAVEL) };
-    if (typeof frame.yTarget === 'number') patch.y = { ...(patch.y ?? s.y), target: clamp(frame.yTarget, 0, GANTRY_AXIS.Y_TRAVEL) };
+    if (typeof frame.xTarget === 'number' && Number.isFinite(frame.xTarget)) patch.x = { ...(patch.x ?? s.x), target: clamp(frame.xTarget, 0, GANTRY_AXIS.X_TRAVEL) };
+    if (typeof frame.yTarget === 'number' && Number.isFinite(frame.yTarget)) patch.y = { ...(patch.y ?? s.y), target: clamp(frame.yTarget, 0, GANTRY_AXIS.Y_TRAVEL) };
     if (typeof frame.cylinderDown === 'boolean') patch.cylinder = { extended: frame.cylinderDown };
     if (typeof frame.vacuum === 'boolean') patch.suction = { vacuum: frame.vacuum, hasPart: frame.vacuum };
     if (typeof frame.enableX === 'boolean') patch.x = { ...(patch.x ?? s.x), enabled: frame.enableX };
@@ -265,7 +267,8 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
 
   tick: (delta) => {
     const s = get();
-    const dt = Math.min(delta, 0.05);
+    // 时间回退 / 非有限 delta 不能让坐标反向漂移：下界同样要钳
+    const dt = Math.min(0.05, Math.max(0, Number.isFinite(delta) ? delta : 0));
     if (s.estop) return;
 
     // 1) position 坐标变量斜坡：本地自动流程时向 target 逼近；PLC 给定则直接采用外部值
@@ -400,7 +403,8 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
       }
     }
 
-    set(patch);
+    // 静止期坐标 / 传感器值全同就不写 store；斜坡推进时照常写入
+    if (patchChanged(s, patch)) set(patch);
   },
 
   /** 观众只读镜像：数值键，Number.isFinite 守卫，禁止 !! 布尔化 */
@@ -415,11 +419,12 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
     const yPos = num('GANTRY_Y_POS');
     const zPos = num('GANTRY_Z_POS');
     const phase = num('GANTRY_PHASE');
-    if (xPos !== undefined) patch.x = { ...s.x, position: xPos };
-    if (yPos !== undefined) patch.y = { ...s.y, position: yPos };
+    // 观众端也要挡住非法广播值：位置一律钳回行程，避免 NaN / 越界坐标污染 3D
+    if (xPos !== undefined) patch.x = { ...s.x, position: clamp(xPos, 0, GANTRY_AXIS.X_TRAVEL) };
+    if (yPos !== undefined) patch.y = { ...s.y, position: clamp(yPos, 0, GANTRY_AXIS.Y_TRAVEL) };
     // 两轴 6 路传感器统一按 position 坐标派生，保证不依赖快照字段是否齐全
     patch.sensors = computeSensors(yPos ?? s.y.position, xPos ?? s.x.position);
-    if (zPos !== undefined) patch.z = zPos;
+    if (zPos !== undefined) patch.z = clamp(zPos, 0, GANTRY_AXIS.Z_STROKE);
     if (phase !== undefined) patch.phase = clamp(Math.trunc(phase), 0, 9) as GantryPhase;
     // 主控快照优先（键名成对），缺字段时保留派生结果
     const sensorKeys = [
@@ -438,7 +443,19 @@ export const useGantryStore = create<GantryStore>((set, get) => ({
       };
     }
     if (num('GANTRY_CYL_DOWN') !== undefined) patch.cylinder = { extended: num('GANTRY_CYL_DOWN') === 1 };
-    if (num('GANTRY_VACUUM') !== undefined) patch.suction = { vacuum: num('GANTRY_VACUUM') === 1, hasPart: num('GANTRY_VACUUM') === 1 };
+    // 真空与有料是两路独立信号，两轴使能同样要镜像：全部按主控快照消费，不再由真空反推
+    const vacuum = num('GANTRY_VACUUM');
+    const hasPart = num('GANTRY_HAS_PART');
+    const xEnable = num('GANTRY_X_ENABLE');
+    const yEnable = num('GANTRY_Y_ENABLE');
+    if (vacuum !== undefined || hasPart !== undefined) {
+      patch.suction = {
+        vacuum: vacuum === undefined ? s.suction.vacuum : vacuum === 1,
+        hasPart: hasPart === undefined ? s.suction.hasPart : hasPart === 1,
+      };
+    }
+    if (xEnable !== undefined) patch.x = { ...(patch.x ?? s.x), enabled: xEnable === 1 };
+    if (yEnable !== undefined) patch.y = { ...(patch.y ?? s.y), enabled: yEnable === 1 };
     // 工件坐标系零点偏置也随快照镜像，观众端 position 读数与主控一致
     const zeroX = num('GANTRY_ZERO_X');
     const zeroY = num('GANTRY_ZERO_Y');

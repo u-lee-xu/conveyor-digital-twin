@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { HelpPanel, modbusService, useMobile } from '@digital-twin/shared';
+import { HelpPanel, useMobile } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { ControlPanel, StatusPanel, DemoPanel, ScoringPanel, SimPanel } from './components/panels';
 import { ConveyorPlcConnection } from './platform/ConveyorPlcConnection';
 import { ConveyorSceneWrapper } from './platform/ConveyorSceneWrapper';

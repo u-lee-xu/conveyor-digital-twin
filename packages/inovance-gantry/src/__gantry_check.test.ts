@@ -4,6 +4,7 @@
  * Z 轴可伸缩活塞杆、吸取流程、观众镜像、共享视觉令牌、程序化纹理。
  */
 import { beforeEach, describe, it, expect } from 'vitest';
+import { SCENE_DESCRIPTORS } from '../../platform/src/deviceCatalog';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,7 @@ import {
 } from './constants/gantryConstants';
 import {
   GANTRY_HOLDING_REGISTERS, GANTRY_COILS, ETHERCAT_PDO_MAP,
+  GANTRY_WORD_VARIABLES, GANTRY_ADDRESS_ROWS,
   GANTRY_PHASE, splitDint, joinDint,
 } from './constants/gantryVariables';
 
@@ -50,14 +52,23 @@ describe('常量与变量命名（单一来源）', () => {
     expect(INITIAL_PIECES).toHaveLength(3);
   });
 
-  it('position 坐标变量：X/Y DINT 低字在前，线圈与 PDO 映射齐备', () => {
-    expect(GANTRY_HOLDING_REGISTERS.GANTRY_X_POS_L).toBe(200);
-    expect(GANTRY_HOLDING_REGISTERS.GANTRY_Y_POS_H).toBe(203);
+  it('历史 DINT 草案只作溯源；运行时位置统一 uint16 单字且与面板同源', () => {
+    expect(GANTRY_HOLDING_REGISTERS.GANTRY_X_POS_L).toBe(0);
+    expect(GANTRY_HOLDING_REGISTERS.GANTRY_Y_POS_H).toBe(3);
     expect(Object.keys(GANTRY_COILS)).toContain('GANTRY_CYL_DOWN');
     expect(ETHERCAT_PDO_MAP.length).toBeGreaterThanOrEqual(14);
     const [lo, hi] = splitDint(0x12345678);
     expect([lo, hi]).toEqual([0x5678, 0x1234]);
     expect(joinDint(lo, hi)).toBe(0x12345678);
+    // connect 帧规格与面板地址表必须同为单字、地址逐项一致
+    for (const [name, spec] of Object.entries(GANTRY_WORD_VARIABLES)) {
+      expect(spec.type, name).toBe('uint16');
+      expect(spec.modbus.words, name).toBe(1);
+      expect(spec.s7.words, name).toBe(1);
+      expect(spec.mitsubishi.words, name).toBe(1);
+      expect(GANTRY_ADDRESS_ROWS.find((r) => r.modbus === `HR${spec.modbus.address}`), name).toBeDefined();
+    }
+    expect(ETHERCAT_PDO_MAP.some((r) => r.signal.endsWith('_DINT'))).toBe(false);
   });
 
   it('ETHERCAT 只是变量/信号映射声明，不含任何底层链路实现', () => {
@@ -385,19 +396,49 @@ describe('观众镜像与平台壳接线', () => {
     expect(useGantryStore.getState().x.position).toBe(300);
     expect(useGantryStore.getState().y.position).toBe(240);
     const store = read('packages/inovance-gantry/src/stores/useGantryStore.ts');
+    // 只看 applyBroadcast 函数体：查整份文件会因 export 里就有键名而恒真
+    const applySrc = store.slice(store.indexOf('applyBroadcast:'), store.indexOf('export function exportGantrySnapshot'));
     for (const k of Object.keys(changed).filter((k) => !k.startsWith('GANTRY_PIECE_'))) {
-      expect(store).toContain(k);
+      expect(applySrc, `${k} 未被观众端消费`).toContain(`'${k}'`);
     }
     expect(store).toContain('GANTRY_PIECE_${i + 1}_ROW');
   });
 
+  it('观众端消费有料与两轴使能三路独立信号，非法坐标被钳回行程', () => {
+    const s = useGantryStore.getState();
+    useGantryStore.setState({
+      suction: { vacuum: false, hasPart: true },
+      x: { ...s.x, enabled: true, position: 123 },
+      y: { ...s.y, enabled: true, position: 234 },
+    });
+    const snap = exportGantrySnapshot();
+    expect(snap.GANTRY_HAS_PART).toBe(1);
+    expect(snap.GANTRY_X_ENABLE).toBe(1);
+    expect(snap.GANTRY_Y_ENABLE).toBe(1);
+    useGantryStore.getState().resetAll();
+    useGantryStore.getState().applyBroadcast(snap);
+    const mirrored = useGantryStore.getState();
+    expect(mirrored.suction.vacuum).toBe(false);
+    expect(mirrored.suction.hasPart).toBe(true);
+    expect(mirrored.x.enabled).toBe(true);
+    expect(mirrored.y.enabled).toBe(true);
+    expect(mirrored.x.position).toBe(123);
+    expect(mirrored.y.position).toBe(234);
+    mirrored.applyBroadcast({ GANTRY_X_POS: -9999, GANTRY_Y_POS: Number.NaN, GANTRY_Z_POS: 1e9 });
+    expect(useGantryStore.getState().x.position).toBe(0);
+    expect(useGantryStore.getState().y.position).toBe(234);
+    expect(useGantryStore.getState().z).toBe(GANTRY_AXIS.Z_STROKE);
+  });
+
   it('平台壳五处接线齐全，其它场景零龙门残留', () => {
-    expect(read('packages/platform/src/registry.ts')).toContain('inovanceGantryDevice');
-    expect(read('packages/platform/package.json')).toContain('@digital-twin/inovance-gantry');
-    expect(read('packages/platform/vite.config.ts')).toContain("'@digital-twin/inovance-gantry'");
-    expect(read('packages/platform/tsconfig.app.json')).toContain('"@digital-twin/inovance-gantry"');
-    expect(read('packages/platform/src/index.css')).toContain('../../inovance-gantry/src');
-    for (const p of ['conveyor-sorting', 'auto-dispensing', 'md520-vfd']) {
+    expect(JSON.parse(read('packages/inovance-gantry/device.json')).id).toBe('inovance-gantry');
+    expect(read('packages/inovance-gantry/src/device.ts')).toContain('inovanceGantryDevice');
+    expect(read('packages/platform/src/deviceCatalog.ts')).toContain('import.meta.glob');
+    expect(read('packages/platform/src/registry.ts')).toContain('src/device.ts');
+    expect(read('packages/platform/vite.config.ts')).toContain('sceneAliases');
+    expect(read('packages/platform/tsconfig.app.json')).toContain('"@digital-twin/*"');
+    expect(read('packages/platform/src/index.css')).toContain('@source');
+    for (const p of SCENE_DESCRIPTORS.map((s) => s.pkg).filter((n) => n !== 'inovance-gantry')) {
       const idx = read(`packages/${p}/src/index.ts`);
       expect(idx).not.toContain('GANTRY_');
       expect(idx).not.toContain('inovance-gantry');

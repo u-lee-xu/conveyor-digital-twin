@@ -1,7 +1,8 @@
 /** 液体混装场景容器：自带 Canvas / 相机 / OrbitControls，不复用平台默认 PhysicsScene */
-import type { ComponentType } from 'react';
+import { Suspense, type ComponentType } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { isViewerRuntime, renderPixelRatio } from '@digital-twin/shared';
 import { LIQUID_VISUAL } from '../constants/liquidConstants';
 import { useLiquidViewStore } from '../stores/useLiquidViewStore';
 import { LiquidViewSwitcher } from './LiquidViewSwitcher';
@@ -15,11 +16,14 @@ export function LiquidSceneWrapper({
 }) {
   // 展台是近景：放开 OrbitControls 缩放下限，否则相机被推远看不清小件
   const activeStage = useLiquidViewStore((s) => s.activeStage);
+  // 观众只读大屏：关阴影、锁 dpr=1，避免高 DPR 电视满帧渲染
+  const isViewer = isViewerRuntime();
   return (
     <>
       <Canvas
         style={{ position: 'absolute', inset: 0 }}
-        shadows
+        shadows={!isViewer}
+        dpr={renderPixelRatio(isViewer)}
         camera={{ position: cameraPosition, fov: 40, near: 0.02, far: 60 }}
       >
         <color attach="background" args={[LIQUID_VISUAL.SCENE_BACKGROUND]} />
@@ -27,7 +31,7 @@ export function LiquidSceneWrapper({
         <OrbitControls makeDefault target={LIQUID_VISUAL.SCENE_TARGET} enableDamping
           dampingFactor={0.1} minDistance={activeStage ? 0.06 : 0.3} maxDistance={6}
           maxPolarAngle={Math.PI / 2.05} />
-        <SceneContent />
+        <Suspense fallback={null}><SceneContent /></Suspense>
       </Canvas>
       <LiquidViewSwitcher />
     </>

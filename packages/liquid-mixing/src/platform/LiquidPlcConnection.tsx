@@ -8,7 +8,8 @@
  * 也不列出任何本机练习靶机。
  */
 /* eslint-disable react-refresh/only-export-components */
-import { PlcConnectionPanel, modbusService, type PlcConnConfig } from '@digital-twin/shared';
+import { PlcConnectionPanel, type PlcConnConfig } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import {
   LIQUID_WORD_VARIABLES, liquidBoolVarsFor, encodeAction, LIQUID_ACTION,
 } from '../constants/liquidVariables';
@@ -25,7 +26,7 @@ const PRESETS: { label: string; config: PlcConnConfig }[] = [
 let actionSeq = 0;
 
 /**
- * 教学主令：写显式动作字（HR311 / MW1106 / D411），序号递增形成变化沿。
+ * 教学主令：写显式动作字（HR11 / MW22 / D11），序号递增形成变化沿。
  * 正常教学应由学生 PLC 程序写这个字，此处按钮仅用于本机演示与调试；
  * 未连接时绝不写任何地址。
  */

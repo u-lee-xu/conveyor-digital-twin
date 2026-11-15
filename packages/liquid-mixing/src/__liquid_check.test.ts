@@ -4,6 +4,7 @@
  * src/ → 仓库根需要 ../../..，与项目其它包自检同口径。
  */
 import { describe, expect, it } from 'vitest';
+import { SCENE_DESCRIPTORS } from '../../platform/src/deviceCatalog';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,27 +28,29 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
 
 describe('S1 六处接线', () => {
   const wiring: [string, string][] = [
-    ['packages/platform/src/registry.ts', 'liquidMixingDevice'],
-    ['packages/platform/package.json', '"@digital-twin/liquid-mixing"'],
-    ['packages/platform/vite.config.ts', "'@digital-twin/liquid-mixing'"],
-    ['packages/platform/tsconfig.app.json', '"@digital-twin/liquid-mixing"'],
-    ['packages/platform/tsconfig.app.json', '"@digital-twin/liquid-mixing/*"'],
-    ['packages/platform/tsconfig.app.json', '"../liquid-mixing/src"'],
-    ['packages/platform/src/index.css', '../../liquid-mixing/src'],
+    ['packages/liquid-mixing/device.json', '"id": "liquid-mixing"'],
+    ['packages/liquid-mixing/src/device.ts', 'liquidMixingDevice'],
+    ['packages/platform/src/deviceCatalog.ts', 'import.meta.glob'],
+    ['packages/platform/src/deviceMeta.ts', 'DEVICE_META'],
+    ['packages/platform/src/registry.ts', 'src/device.ts'],
+    ['packages/platform/vite.config.ts', 'sceneAliases'],
+    ['packages/platform/tsconfig.app.json', '"@digital-twin/*"'],
+    ['packages/platform/src/index.css', '@source'],
     ['packages/liquid-mixing/vite.config.ts', 'test:'],
-    ['packages/liquid-mixing/tsconfig.app.json', '"include"'],
   ];
   it.each(wiring)('%s 含 %s', (file, token) => {
     expect(read(file).includes(token)).toBe(true);
   });
 
-  it('注册表恰好 7 个设备，新设备排在末尾且已定稿 6 场景顺序不变', () => {
+  it('场景包由 device.json 自动发现，顺序由 order 决定', () => {
     const reg = read('packages/platform/src/registry.ts');
-    const ids = [...reg.matchAll(/^\s{2}(\w+Device),$/gm)].map((m) => m[1]);
-    expect(ids).toEqual([
-      'conveyorDevice', 'pneumaticDevice', 'trafficLightDevice',
-      'dispensingDevice', 'md520VfdDevice', 'inovanceGantryDevice', 'liquidMixingDevice',
-    ]);
+    expect(reg).toContain('import.meta.glob');
+    expect(reg).toContain('SCENE_DESCRIPTORS');
+    const desc = JSON.parse(read('packages/liquid-mixing/device.json'));
+    expect(desc.id).toBe('liquid-mixing');
+    expect(Number.isFinite(desc.order)).toBe(true);
+    expect(SCENE_DESCRIPTORS.map((s) => s.id)).toContain('liquid-mixing');
+    expect(read('packages/liquid-mixing/src/device.ts')).toContain('liquidMixingDevice');
   });
 });
 
@@ -81,7 +84,7 @@ describe('外部 PLC 仿真软件 / 零新增内置服务', () => {
     }
   });
   it('已定稿 6 个场景源码零液体混装残留', () => {
-    for (const pkg of ['auto-dispensing', 'conveyor-sorting', 'md520-vfd', 'inovance-gantry', 'pneumatic-robot', 'traffic-light']) {
+    for (const pkg of SCENE_DESCRIPTORS.map((s) => s.pkg).filter((p) => p !== 'liquid-mixing')) {
       const src = read(`packages/${pkg}/src/index.ts`);
       expect(src).not.toMatch(/LIQUID_|liquidMixing/);
     }
@@ -99,13 +102,43 @@ describe('S5 变量表单一来源与 32 位 REAL 双字', () => {
     }
   });
 
-  it('四路 REAL 地址 300~307 连续成对，且不与既有设备寄存器重叠', () => {
+  it('四路 REAL 在本场景内连续成对，且所有字变量互不占字', () => {
+    // 地址只在本场景命名空间内有意义：只校验场景内自洽，
+    // 禁止写「必须大于其它场景最大地址」这类跨场景避让判断（见地址分配规范 P1/P4）。
     const bases = LIQUID_REAL_NAMES.map((n) => LIQUID_WORD_VARIABLES[n].modbus.address);
-    expect(bases).toEqual([300, 302, 304, 306]);
-    for (const b of bases) {
-      expect(b).toBeGreaterThan(212); // 龙门 HR200~212
-      expect(b).not.toBe(120); // 配药 HR120·121
-      expect(b).toBeLessThan(4096); // MD520 0x1000 起
+    bases.forEach((b, i) => expect(b).toBe(bases[0] + i * 2));
+    const occupied = new Set<number>();
+    for (const [name, spec] of Object.entries(LIQUID_WORD_VARIABLES)) {
+      for (let w = 0; w < spec.modbus.words; w += 1) {
+        const addr = spec.modbus.address + w;
+        expect(occupied.has(addr), `${name} 与场景内其它字变量占用 HR${addr}`).toBe(false);
+        occupied.add(addr);
+      }
+    }
+  });
+
+  it('地址表 / 线圈表 / 三协议 BOOL 表同源，且本场景从 C0 起（P2）', () => {
+    // 只锁场景内自洽：地址不与其他场景比较，也不做跨场景避让（规范 P1/P4）。
+    expect(LIQUID_COILS.LIQUID_VALVE_A).toBe(0);
+    LIQUID_OUTPUT_COIL_NAMES.forEach((name, i) => {
+      expect(LIQUID_COILS[name], name).toBe(i);
+      expect(LIQUID_BOOL_MITSUBISHI[name], name).toBe(`Y${i}`);
+      expect(LIQUID_BOOL_S7[name], name).toBe(`M40.${i}`);
+    });
+    LIQUID_SENSOR_FEEDBACK.forEach((r, i) => {
+      expect(LIQUID_COILS[r.key], r.key).toBe(r.modbus);
+      expect(r.modbus, r.key).toBe(10 + i);
+      expect(LIQUID_BOOL_S7[r.key], r.key).toBe(r.s7);
+      expect(LIQUID_BOOL_MITSUBISHI[r.key], r.key).toBe(r.mitsubishi);
+    });
+    // 地址表面板列的每个线圈号都必须来自变量表，防「改了 COILS 忘了改字面量表」
+    const coilNumbers = new Set<number>(Object.values(LIQUID_COILS));
+    for (const row of LIQUID_ADDRESS_ROWS) {
+      const re = /C(\d+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(row.modbus)) !== null) {
+        expect(coilNumbers.has(Number(m[1])), `${row.signal} → C${m[1]}`).toBe(true);
+      }
     }
   });
 
@@ -152,7 +185,7 @@ describe('S5 模拟量 / 开关量双路与回写表', () => {
     expect(LIQUID_SENSOR_FEEDBACK).toHaveLength(14);
     expect(liquidSensorBits(liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0))).toHaveLength(14);
     const coils = LIQUID_SENSOR_FEEDBACK.map((r) => r.modbus);
-    expect(coils).toEqual(Array.from({ length: 14 }, (_, i) => 50 + i));
+    expect(coils).toEqual(Array.from({ length: 14 }, (_, i) => 10 + i));
     expect(LIQUID_COILS.LIQUID_SENSOR_A_HIGH).toBe(coils[0]);
   });
 
@@ -188,6 +221,10 @@ describe('S5 模拟量 / 开关量双路与回写表', () => {
     expect(effects).toContain('if (write.success) lastSensorMask = mask');
     expect(effects).toContain('isViewerRuntime()');
     expect(effects).toContain('if (!st.connected)');
+    // 读失败整轮跳过（不得用 0 兜底清配方 / 重置动作字边沿）+ 轮询不重入
+    expect(effects).toContain('if (!words.success || !words.values) return');
+    expect(effects).not.toContain('words.values ? words.values : {}');
+    expect(effects).toContain('if (busy || stopped) return');
   });
 });
 
@@ -209,6 +246,9 @@ describe('面板与阶段口径', () => {
     const demo = read('packages/liquid-mixing/src/platform/LiquidDemoPanel.tsx');
     expect(demo).toContain('requestStopDemo');
     expect(demo).toContain('data-dt-liquid-phase');
+    // 紧急停必须真正置 estop（报警 ESTOP 位与快照同源），不能只停演示
+    expect(demo).toContain('setEstop(true)');
+    expect(demo).not.toContain('stopDemo()');
   });
 
   it('去皮按钮调用 tareTo，且面板不直接写体积真值', () => {
@@ -418,7 +458,7 @@ describe('面板变量地址浮框（参考自动配药 AddressHint）', () => {
       for (const s of list) expect(signals.has(s), `${key} → ${s}`).toBe(true);
     }
     expect(vars).toContain('LIQUID_ADDRESS_ROWS.find((r) => r.signal === signal)');
-    // 组件与面板 JSX 里都不许出现 C40 / HR300 / M160.0 这类地址字面量
+    // 组件与面板 JSX 里都不许出现 C0 / HR0 / M40.0 这类地址字面量
     expect(hint).not.toMatch(/'[CHM DXY][0-9]{1,3}[·.]?[0-9]*'/);
     for (const src of [panel, manual, demo, sim]) {
       expect(src).not.toMatch(/hintKey="[A-Z]{1,2}[0-9]{2,3}/);
@@ -436,7 +476,7 @@ describe('面板变量地址浮框（参考自动配药 AddressHint）', () => {
       }
     }
     // 搅拌方向是正 / 反转两个线圈，各占一行
-    expect(liquidAddressRowsFor('stirDirection').map((r) => r.modbus)).toEqual(['C42', 'C43']);
+    expect(liquidAddressRowsFor('stirDirection').map((r) => r.modbus)).toEqual(['C2', 'C3']);
   });
 
   it('14 路开关量逐路地址与回写表同源', () => {

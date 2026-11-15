@@ -1,6 +1,7 @@
 /** 仿真模式 PLC 连接（统一 shared 面板 + 龙门自己的字变量表） */
 /* eslint-disable react-refresh/only-export-components */
-import { PlcConnectionPanel, modbusService, type PlcConnConfig } from '@digital-twin/shared';
+import { PlcConnectionPanel, type PlcConnConfig } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { GANTRY_WORD_VARIABLES, GANTRY_COILS, gantryBoolVarsFor } from '../constants/gantryVariables';
 import { useGantryAppStore } from '../stores/useGantryAppStore';
 import { useGantryStore } from '../stores/useGantryStore';

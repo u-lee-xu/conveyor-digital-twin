@@ -1,6 +1,7 @@
 /**
- * ③ B 档真实 485 主从防回退自检：
- * 独立纯从站 :1508、真实 Modbus 主站轮询、端口隔离、前端可切换预设。
+ * ③ 开发靶机与教学界面隔离防回退自检：
+ * 内置 485 纯从站 / 真实主站轮询只用于开发验收，教学交付默认不启动，
+ * 且 MD520 的仿真模式连接面板只列外部 PLC（Modbus TCP / S7 / 三菱或 DI/AI 端子）。
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -17,8 +18,9 @@ const master = read('websocket-server/vfd-485-master.cjs');
 const startLab = read('scripts/start-lab.cjs');
 const checkScript = read('websocket-server/mock-addresses.js');
 const conn = read('packages/md520-vfd/src/platform/VfdPlcConnection.tsx');
+const store = read('packages/md520-vfd/src/stores/useVfdAppStore.ts');
 
-describe('B 档独立 485 从站', () => {
+describe('开发靶机：独立 485 纯从站', () => {
   it('是纯从站：只响应主站帧，不含任何 PLC 参考程序', () => {
     expect(slave).toContain('pure-slave');
     expect(slave).toContain('VFD_REGISTERS');
@@ -45,7 +47,7 @@ describe('B 档独立 485 从站', () => {
   });
 });
 
-describe('真实 Modbus 主站轮询', () => {
+describe('开发靶机：真实 Modbus 主站轮询', () => {
   it('通过 TCP 帧读写，不直接改从站内存', () => {
     for (const token of ['connectTCP', 'writeRegister(', 'writeCoils(',
       'readHoldingRegisters(', 'readCoils(', 'client.setID']) {
@@ -61,7 +63,6 @@ describe('真实 Modbus 主站轮询', () => {
     }
     expect(master).toContain('writeCoils(130,');
     expect(master).toContain('readCoils(140, 3)');
-    // 2000H 无 0 档：停机写 6、运行写 1
     expect(master).toContain('const command = running ? 1 : 6');
   });
 
@@ -71,27 +72,28 @@ describe('真实 Modbus 主站轮询', () => {
   });
 });
 
-describe('启动、检查与前端接线', () => {
-  it('默认 8 进程 / 10 口，端口互不相同；龙门本机靶机按需启用', () => {
-    // 龙门仿真模式改为对接外部 PLC 仿真软件 :502，内置靶机默认不启
-    expect(startLab).toContain('默认起 8 个进程');
-    expect(startLab).toContain('1508 / 5088');
-    expect(startLab).toContain('DT_ENABLE_GANTRY_MOCK');
-    expect(startLab).toContain('B 档 485 从站端口不能与');
+describe('教学交付与开发靶机隔离', () => {
+  it('内置虚拟 PLC 默认不启动，仅 DT_ENABLE_MOCK 开发模式拉起', () => {
+    expect(startLab).toContain('MOCK_ENABLED');
+    expect(startLab).toContain('DT_ENABLE_MOCK');
+    expect(startLab).toContain('if (MOCK_ENABLED)');
     expect(startLab).toContain("launch('MD520 B 档 485 从站 :1508'");
     expect(startLab).toContain("launch('MD520 485 主站轮询'");
+    expect(startLab).toContain('B 档 485 从站端口不能与');
   });
 
-  it('地址表自检含第 12 项 B 档检查', () => {
+  it('地址表自检含 B 档开发靶机检查', () => {
     expect(checkScript).toContain('function checkVfd485Slave()');
     expect(checkScript).toContain('ok = checkVfd485Slave() && ok;');
   });
 
-  it('连接面板可切到 B 档独立从站', () => {
-    expect(conn).toContain('MD520 485 从站 B档 (Modbus)');
-    expect(conn).toContain('port: 1508');
-    // 默认教学虚拟 PLC :1507 仍是第一个预设，保证零回归
-    expect(conn).toContain('port: 1507');
-    expect(conn.indexOf('port: 1507')).toBeLessThan(conn.indexOf('port: 1508'));
+  it('MD520 连接面板与默认配置只指向外部 PLC，不含内置虚拟 PLC', () => {
+    expect(conn).toContain('port: 502');
+    expect(conn).toContain('DI/AI');
+    expect(conn).toContain('外部 PLC');
+    expect(conn).not.toContain('port: 1507');
+    expect(conn).not.toContain('port: 1508');
+    expect(store).toContain('port: 502');
+    expect(store).not.toContain('port: 1507');
   });
 });

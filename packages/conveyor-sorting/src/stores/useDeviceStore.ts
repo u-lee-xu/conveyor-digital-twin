@@ -332,7 +332,7 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
     const currentStatus = state.scoringStatus[itemId];
     if (currentStatus && currentStatus !== 'pending') return state;
 
-    const logId = Math.random().toString(36).substr(2, 9);
+    const logId = Math.random().toString(36).slice(2, 11);
     const now = Date.now();
 
     const newLogEntry: ScoringLogEntry = {
@@ -367,7 +367,7 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
 
       newStatus[item.itemId] = 'skipped';
       newLog.push({
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).slice(2, 11),
         itemId: item.itemId,
         label: item.label,
         status: 'skipped',
@@ -385,7 +385,7 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   addPassedItem: (message: string, points = 0) => set((state) => {
     const isDuplicate = state.passedItems.some(item => item.message === message);
     if (isDuplicate) return state;
-    const id = Math.random().toString(36).substr(2, 9);
+    const id = Math.random().toString(36).slice(2, 11);
     const now = Date.now();
     return {
       score: Math.min(100, state.score + points),

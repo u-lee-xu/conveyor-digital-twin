@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene, ModeSelector, HelpPanel, useMobile, relayWsUrl, loadViewerUrls } from '@digital-twin/shared';
+import { ModeSelector, HelpPanel, useMobile, relayWsUrl, loadViewerUrls, diffSnapshot, sanitizeSnapshot } from '@digital-twin/shared';
 import type { DeviceDefinition } from './types';
 
 interface WorkspaceShellProps {
@@ -63,6 +63,10 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
 
     const open = () => {
       if (closed) return;
+      // 每条 WS 连接独立维护差分基线：重连后首帧必须全量，否则会与中继释放后的空镜像合并
+      let lastVars: Record<string, boolean | number> = {};
+      let lastMode: string | null = null;
+      let sentFull = false;
       try {
         ws = new WebSocket(relayWsUrl());
       } catch {
@@ -73,12 +77,21 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
         setRelayRejected(false);
         const report = () => {
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          const next = device.exportSnapshot?.() ?? {};
+          const currentMode = String(modeRef.current);
+          // 首帧 / 重连 / 切模式一律发全量，避免旧设备或旧模式的键残留在新画面里
+          const full = !sentFull || currentMode !== lastMode;
           ws.send(JSON.stringify({
             type: 'report',
             deviceId: device.id,
-            mode: String(modeRef.current),
-            vars: device.exportSnapshot?.() ?? {},
+            mode: currentMode,
+            // 全量帧丢掉非有限值，避免 JSON 把 NaN 变 null 被中继误当删除标记
+            vars: full ? sanitizeSnapshot(next) : diffSnapshot(lastVars, next),
+            delta: !full,
           }));
+          lastVars = { ...next };
+          lastMode = currentMode;
+          sentFull = true;
         };
         report();
         reportTimer = setInterval(report, 100);
@@ -89,6 +102,8 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
           if (msg.type === 'rejected') {
             clearInterval(reportTimer);
             setRelayRejected(true);
+            // 原主控退出后自动接管：重建连接，onopen 会重新 report 并清除提示
+            if (!closed) reconnectTimer = setTimeout(() => ws?.close(), 3000);
           }
         } catch {
           // 忽略非法消息
@@ -121,12 +136,13 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const ModePanel = activeMode?.panel;
   const Extras = device.sidebarExtras;
   const Effects = device.effects;
-  const Scene = device.SceneWrapper ?? PhysicsScene;
+  // 7 个设备都自带 SceneWrapper；不再静态兜底 PhysicsScene，否则 Rapier 会进入每个设备分包
+  const Scene = device.SceneWrapper;
 
   return (
     <div className="w-screen h-screen bg-dark-900 overflow-hidden relative">
       <div className="absolute inset-0">
-        <Scene SceneContent={device.SceneContent} cameraPosition={device.cameraPosition} />
+        {Scene && <Scene SceneContent={device.SceneContent} cameraPosition={device.cameraPosition} />}
       </div>
 
       {Effects && <Effects />}

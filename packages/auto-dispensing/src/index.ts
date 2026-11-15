@@ -1,4 +1,4 @@
-import type { DeviceDefinition, PlatformModeDef } from '@digital-twin/platform';
+import type { DeviceDefinition, PlatformModeDef } from '@digital-twin/shared';
 import { DispensingSceneContent } from './scenes/auto-dispensing/SceneContent';
 import { buildDispensingHelpContent } from './scenes/auto-dispensing/helpContent';
 import { useDispenseLoop } from './scenes/auto-dispensing/hooks/useDispenseLoop';

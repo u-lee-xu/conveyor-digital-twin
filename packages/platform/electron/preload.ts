@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: {
     version: '1.0.0',
   },
+  // 主进程签发的一次性凭据：file:// 直连内部 WS 时携带，供网关区分 Electron 与 opaque origin
+  internalToken: process.env.DT_INTERNAL_TOKEN || '',
 });
 
 declare global {
@@ -14,6 +16,7 @@ declare global {
       platform: {
         version: string;
       };
+      internalToken?: string;
     };
   }
 }

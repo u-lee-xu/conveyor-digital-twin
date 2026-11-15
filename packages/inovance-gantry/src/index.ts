@@ -5,8 +5,9 @@
  * 平台壳不感知内部实现。运动由 position 坐标变量驱动，ETHERCAT 仅保留
  * gantryVariables.ts 里的变量 / 信号映射表，不实现底层硬件链路。
  */
-import type { DeviceDefinition, PlatformModeState } from '@digital-twin/platform';
-import { modbusService, type Mode } from '@digital-twin/shared';
+import type { DeviceDefinition, PlatformModeState } from '@digital-twin/shared';
+import type { Mode } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { GantrySceneContent } from './scenes/GantrySceneContent';
 import { GantrySceneWrapper } from './platform/GantrySceneWrapper';
 import { GantryModePanel } from './platform/GantryModePanel';

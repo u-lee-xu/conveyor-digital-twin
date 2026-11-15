@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useDeviceStore } from '../stores';
 import type { ScoringItemStatus } from '../stores/useDeviceStore';
-import { MODBUS_ADDRESSES } from '@digital-twin/shared';
-import { modbusService as globalModbus } from '@digital-twin/shared';
+import { MODBUS_ADDRESSES } from '@digital-twin/shared/services/modbus';
+import { modbusService as globalModbus } from '@digital-twin/shared/services/modbus-websocket';
 import { CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT, CYLINDER_RETRACT_POS, CYLINDER_LIMIT_ZONE } from '../components/scene/shared';
 
 const A = {
@@ -457,7 +457,13 @@ export function useConveyorScoring() {
     const scoringInterval = globalModbus.getProtocol() === 's7' ? 800 : 200;
     const publishInterval = setInterval(publishFeedback, scoringInterval);
     const processInterval = setInterval(tick, scoringInterval);
-    return () => { clearInterval(publishInterval); clearInterval(processInterval); clearAllTimeouts(); };
+    return () => {
+      // 组件卸载 / 停止评分时立即中止飞行中的 processStep，避免 await 回来后继续写 PLC / store
+      abortRef.current = true;
+      clearInterval(publishInterval);
+      clearInterval(processInterval);
+      clearAllTimeouts();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScoringRunning, publishFeedback]);
 

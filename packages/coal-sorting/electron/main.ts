@@ -108,7 +108,7 @@ function stopWebSocketServer(): void {
     try {
       wsServerProcess.stdin?.write(JSON.stringify({ type: 'shutdown' }) + '\n');
       wsServerProcess.stdin?.end();
-    } catch {}
+    } catch { /* 子进程可能已退出，忽略关闭时的写失败 */ }
     setTimeout(() => {
       if (wsServerProcess) {
         wsServerProcess.kill();

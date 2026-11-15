@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { PhysicsScene, relayWsUrl } from '@digital-twin/shared';
-import { devices } from './registry';
+import { relayWsUrl } from '@digital-twin/shared';
+import { DEVICE_META } from './deviceMeta';
+import { getDevice, loadDevice } from './registry';
+import type { DeviceDefinition } from './types';
 
 export type BridgeLink = 'connecting' | 'online' | 'offline';
 
@@ -14,6 +16,18 @@ interface Snapshot {
   error?: string;
 }
 
+/** 只存状态条需要的展示字段，且按秒级时间桶去重，避免 10Hz 快照驱动整树重渲染 */
+interface DisplaySnapshot {
+  ts: number;
+  deviceId: string | null;
+  protocol: string;
+  mode: string | null;
+  error: string | null;
+}
+
+/** 设备 chunk 加载失败后的退避窗口；期间仍按快照频率缓存 vars，不丢首帧 */
+const RETRY_DELAY_MS = 1500;
+
 /**
  * 观众工作区：只读跟随主控的 3D 镜像。
  *
@@ -21,20 +35,46 @@ interface Snapshot {
  * （智能电视 / 手机 / 学生机浏览器，均无软件）打开 http://<教师机IP>:5201/
  * 直接就是观众，不需要角色页、不需要参数、不需要点任何按钮。
  *
- * 观众端：零上行消息（不发 set-device、不切换设备）、无操作面板、
- * 自动重连、首次交互尝试全屏；连接失败必须给出可见原因，禁止无限停在
- * 「连接服务中…」（旧版 CSP 拦截 + 构造异常未捕获曾导致这个现象）。
+ * 按设备懒加载：只下载快照里那一个设备的实现；加载期间缓存最新 vars，
+ * 设备就绪后补一次 applyBroadcast，避免切设备或慢网络时丢首帧。
+ * 加载失败会回退设备 id 并按退避重试（下一帧快照驱动），不会永久卡住；
+ * 主控离开时清空设备与镜像，避免角标已「等待主控」却残留旧 3D 画面。
+ * 观众端零上行、无操作面板、自动重连、首次交互尝试全屏。
  */
 export function ViewerWorkspace() {
   const [link, setLink] = useState<BridgeLink>('connecting');
   const [linkError, setLinkError] = useState('');
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [display, setDisplay] = useState<DisplaySnapshot | null>(null);
+  const [device, setDevice] = useState<DeviceDefinition | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const deviceRef = useRef<DeviceDefinition | null>(null);
+  const deviceIdRef = useRef<string | null>(null);
+  const latestVarsRef = useRef<Record<string, boolean | number>>({});
+  const loadSeqRef = useRef(0);
+  const retryAtRef = useRef(0);
+  const retryIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let closed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const apply = (target: DeviceDefinition | null, vars: Record<string, boolean | number>) => {
+      try { target?.applyBroadcast?.(vars); } catch (e) { console.warn('applyBroadcast error:', e); }
+    };
+
+    /** 主控离开 / 快照清空设备：卸载旧场景并让在途加载结果失效 */
+    const clearDevice = () => {
+      deviceIdRef.current = null;
+      deviceRef.current = null;
+      latestVarsRef.current = {};
+      retryAtRef.current = 0;
+      retryIdRef.current = null;
+      loadSeqRef.current += 1;
+      setDevice(null);
+      setLoadError(null);
+    };
 
     const connect = () => {
       if (closed) return;
@@ -67,12 +107,69 @@ export function ViewerWorkspace() {
         try {
           const msg = JSON.parse(ev.data) as Snapshot & { type?: string };
           if (msg.type !== 'snapshot') return;
-          setSnapshot(msg);
-          const device = msg.deviceId ? devices.find((d) => d.id === msg.deviceId) : undefined;
-          try {
-            device?.applyBroadcast?.(msg.vars ?? {});
-          } catch (e) {
-            console.warn('applyBroadcast error:', e);
+          const shown: DisplaySnapshot = {
+            ts: Number(msg.ts) || Date.now(),
+            deviceId: msg.deviceId ?? null,
+            protocol: String(msg.protocol ?? ''),
+            mode: msg.mode ?? null,
+            error: msg.error ?? null,
+          };
+          setDisplay((prev) => (
+            prev
+              && Math.floor(prev.ts / 1000) === Math.floor(shown.ts / 1000)
+              && prev.deviceId === shown.deviceId
+              && prev.mode === shown.mode
+              && prev.protocol === shown.protocol
+              && prev.error === shown.error
+              ? prev : shown
+          ));
+          const id = msg.deviceId ?? null;
+          const vars = msg.vars ?? {};
+          latestVarsRef.current = vars;
+          if (!id) {
+            clearDevice();
+            return;
+          }
+
+          if (deviceIdRef.current !== id) {
+            // 同一设备加载失败后退避，避免 chunk 404 时每帧重复 import
+            if (retryIdRef.current === id && Date.now() < retryAtRef.current) return;
+            retryIdRef.current = null;
+            retryAtRef.current = 0;
+            deviceIdRef.current = id;
+            deviceRef.current = null;
+            setDevice(null);
+            setLoadError(null);
+            const seq = ++loadSeqRef.current;
+            const cached = getDevice(id);
+            if (cached) {
+              deviceRef.current = cached;
+              setDevice(cached);
+              apply(cached, vars);
+            } else {
+              loadDevice(id)
+                .then((loadedDevice) => {
+                  // 慢加载返回时主控可能已切到别的设备，丢弃过期结果
+                  if (seq !== loadSeqRef.current || deviceIdRef.current !== id) return;
+                  deviceRef.current = loadedDevice;
+                  setDevice(loadedDevice);
+                  setLoadError(null);
+                  apply(loadedDevice, latestVarsRef.current);
+                })
+                .catch((e) => {
+                  if (seq !== loadSeqRef.current || deviceIdRef.current !== id) return;
+                  // 回退 id，让下一帧快照重新进入加载分支；不再永久卡「场景加载中」
+                  deviceIdRef.current = null;
+                  deviceRef.current = null;
+                  retryIdRef.current = id;
+                  retryAtRef.current = Date.now() + RETRY_DELAY_MS;
+                  setDevice(null);
+                  setLoadError(String((e && e.message) || e));
+                  console.warn('[viewer] 设备加载失败，稍后重试:', e);
+                });
+            }
+          } else if (deviceRef.current?.id === id) {
+            apply(deviceRef.current, vars);
           }
         } catch {
           // 忽略非法消息
@@ -109,13 +206,23 @@ export function ViewerWorkspace() {
     return () => window.removeEventListener('pointerdown', tryFullscreen);
   }, []);
 
+  /** 立即重试：清退避与 id，下一帧快照就会重新加载设备 */
+  const retryNow = () => {
+    retryAtRef.current = 0;
+    retryIdRef.current = null;
+    deviceIdRef.current = null;
+    loadSeqRef.current += 1;
+    setLoadError(null);
+  };
+
   // 只跟随主控：设备完全由快照决定，观众端没有任何切换入口
-  const activeDeviceId = snapshot?.deviceId ?? null;
-  const activeDevice = activeDeviceId ? devices.find((d) => d.id === activeDeviceId) : undefined;
-  const Scene = activeDevice?.SceneWrapper ?? PhysicsScene;
+  const activeDeviceId = display?.deviceId ?? null;
+  const meta = activeDeviceId ? DEVICE_META.find((m) => m.id === activeDeviceId) : undefined;
+  // 双校验：主控离开（activeDeviceId 为空）或设备尚未加载完成时都不渲染旧场景
+  const Scene = activeDeviceId && device?.id === activeDeviceId ? device.SceneWrapper : undefined;
   const badge =
     link === 'online'
-      ? { text: activeDevice ? `跟随主控 · ${activeDevice.name}` : '已连接 · 等待主控', cls: 'border-green-500/40 text-green-400 bg-green-500/10' }
+      ? { text: meta ? `跟随主控 · ${meta.name}` : '已连接 · 等待主控', cls: 'border-green-500/40 text-green-400 bg-green-500/10' }
       : link === 'connecting'
         ? { text: '连接服务中…', cls: 'border-slate-500/40 text-slate-300 bg-slate-500/10' }
         : { text: `连接失败 · 重试中…`, cls: 'border-red-500/40 text-red-400 bg-red-500/10' };
@@ -126,24 +233,32 @@ export function ViewerWorkspace() {
       data-viewer-link={link}
       data-viewer-device={activeDeviceId ?? ''}
       data-viewer-error={linkError}
-      data-viewer-mode={snapshot?.mode ?? ''}
+      data-viewer-load-error={loadError ?? ''}
+      data-viewer-mode={display?.mode ?? ''}
     >
-      {!activeDevice ? (
+      {!Scene || !device ? (
         <div className="flex flex-col items-center justify-center h-full gap-4 px-8 text-center">
           <div className="w-10 h-10 rounded-full border-2 border-slate-700 border-t-blue-500 animate-spin" />
           <div className="text-slate-300 text-sm">
-            {link === 'online'
-              ? '等待主控进入设备…'
-              : link === 'connecting'
-                ? '连接服务中…'
-                : `连接失败：${linkError || '教师机未启动'} · 正在重试`}
+            {link !== 'online'
+              ? (link === 'connecting' ? '连接服务中…' : `连接失败：${linkError || '教师机未启动'} · 正在重试`)
+              : loadError ? `场景加载失败：${loadError} · 正在重试`
+                : activeDeviceId ? '场景加载中…' : '等待主控进入设备…'}
           </div>
+          {loadError && (
+            <button
+              type="button"
+              data-dt-viewer-retry
+              onClick={retryNow}
+              className="px-3 py-1.5 rounded-md border border-slate-600/60 bg-blue-700 text-white text-xs"
+            >立即重试</button>
+          )}
           <div className="text-slate-500 text-xs">
             本页为只读跟随模式 · 请在教师机上打开软件并进入设备
           </div>
         </div>
       ) : (
-        <Scene key={activeDeviceId} SceneContent={activeDevice.SceneContent} cameraPosition={activeDevice.cameraPosition} />
+        <Scene key={activeDeviceId} SceneContent={device.SceneContent} cameraPosition={device.cameraPosition} />
       )}
 
       {/* 观众端无返回、无设备切换、无模式按钮：只剩状态角标 */}
@@ -161,12 +276,12 @@ export function ViewerWorkspace() {
         style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
       >
         <span className="block truncate whitespace-nowrap font-mono text-[0.65rem] sm:text-xs lg:text-sm text-slate-400">
-          {snapshot ? (
+          {display ? (
             <>
-              <span className="sm:hidden">{snapshot.deviceId ?? '—'} · {new Date(snapshot.ts).toLocaleTimeString()}</span>
+              <span className="sm:hidden">{display.deviceId ?? '—'} · {new Date(display.ts).toLocaleTimeString()}</span>
               <span className="hidden sm:inline">
-                {snapshot.deviceId ?? '—'} · {snapshot.protocol} · 更新于 {new Date(snapshot.ts).toLocaleTimeString()}
-                {snapshot.error ? ` · ${snapshot.error}` : ''}
+                {display.deviceId ?? '—'} · {display.protocol} · 更新于 {new Date(display.ts).toLocaleTimeString()}
+                {display.error ? ` · ${display.error}` : ''}
               </span>
             </>
           ) : '等待数据…'}

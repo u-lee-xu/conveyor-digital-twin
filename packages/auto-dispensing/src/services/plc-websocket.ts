@@ -71,7 +71,7 @@ const CONNECT_WORDS = {
     type: 'dint32',
     wordOrder: ENCODER_DINT.WORD_ORDER,
     modbus: { address: ENCODER_DINT.MODBUS_ADDRESS, words: ENCODER_DINT.WORDS },
-    s7: { address: ENCODER_DINT.S7_ADDRESS, words: 1 },
+    s7: { address: ENCODER_DINT.S7_ADDRESS, words: ENCODER_DINT.WORDS },
     mitsubishi: { address: ENCODER_DINT.MITSUBISHI_ADDRESS, words: ENCODER_DINT.WORDS },
   },
 };
@@ -88,8 +88,13 @@ export class PlcWebSocketService {
   private heartbeatFailCount = 0;
   private reconnecting = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private waitTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private consecutiveErrors = 0;
+  /** 主动断开后禁止僵尸重连；下次显式 connect() 会重新置 false */
+  private _disposed = false;
+  /** 心跳 async 回调的 in-flight 守卫，慢响应时不并发叠加 */
+  private heartbeatRunning = false;
   private static readonly MAX_RECONNECT_ATTEMPTS = 20;
   private static readonly MAX_CONSECUTIVE_ERRORS = 20;
   private static readonly MAX_PENDING = 50;
@@ -126,16 +131,22 @@ export class PlcWebSocketService {
     const interval = this._protocol === 's7' ? 5000 : 3000;
     const maxFails = this._protocol === 's7' ? 2 : 3;
     this.heartbeatTimer = setInterval(async () => {
+      if (this.heartbeatRunning) return;
+      this.heartbeatRunning = true;
       try {
-        const result = this._protocol === 'modbus'
-          ? await this._sendRaw({ type: 'read-coils', address: 0, length: 1 })
-          : await this._sendRaw({ type: 'read-vars', names: ['BUTTON_START'] });
-        if (result.success) { this.heartbeatFailCount = 0; } else { this.heartbeatFailCount++; }
-      } catch { this.heartbeatFailCount++; }
-      if (this.heartbeatFailCount >= maxFails) {
-        console.warn('[PLC心跳] 连续无响应，判定断连');
-        this.stopHeartbeat();
-        this.onDisconnected?.();
+        try {
+          const result = this._protocol === 'modbus'
+            ? await this._sendRaw({ type: 'read-coils', address: 0, length: 1 })
+            : await this._sendRaw({ type: 'read-vars', names: ['BUTTON_START'] });
+          if (result.success) { this.heartbeatFailCount = 0; } else { this.heartbeatFailCount++; }
+        } catch { this.heartbeatFailCount++; }
+        if (this.heartbeatFailCount >= maxFails) {
+          console.warn('[PLC心跳] 连续无响应，判定断连');
+          this.stopHeartbeat();
+          this.onDisconnected?.();
+        }
+      } finally {
+        this.heartbeatRunning = false;
       }
     }, interval);
   }
@@ -145,9 +156,11 @@ export class PlcWebSocketService {
     this.heartbeatFailCount = 0;
   }
 
-  constructor() { this._connectWS(); }
+  /** 惰性连接：import 本模块不再自动建 WebSocket，只有显式 connect() 才建链 */
 
   private _connectWS() {
+    // 主动断开后不允许旧 socket 的关闭事件拉起僵尸重连
+    if (this._disposed) return;
     // 观众端只读镜像：绝不建立 PLC 控制通道（主控是唯一 PLC 客户端）
     if (!canOpenPlcChannel()) return;
     if (this.reconnecting) return;
@@ -165,6 +178,7 @@ export class PlcWebSocketService {
     try {
       this.ws = new WebSocket(WS_URL);
       this.ws.onopen = () => {
+        if (this._disposed) { this.ws?.close(); return; }
         console.log('[PLC WS] 已连接');
         this._connected = true;
         this.reconnecting = false;
@@ -192,7 +206,10 @@ export class PlcWebSocketService {
         this.stopHeartbeat();
         this.clearHandlers();
         if (this.reconnectAttempts <= PlcWebSocketService.MAX_RECONNECT_ATTEMPTS) {
-          this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this._connectWS(); }, 5000);
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            if (!this._disposed) this._connectWS();
+          }, 5000);
         } else {
           console.warn('[PLC WS] 达到最大重连次数');
         }
@@ -278,24 +295,48 @@ export class PlcWebSocketService {
     }
   }
 
+  /** 等待 WS 就绪，带 30s 上限；主动断开或超时立即返回，不让连接面板永久挂起 */
+  private _waitForConnection(timeoutMs = 30000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const check = () => {
+        this.waitTimer = null;
+        if (this._connected) { resolve(true); return; }
+        // 创建 WS 失败 / onclose 已触发时 reconnecting 会归 false，无需白等超时
+        if (!this.reconnecting && Date.now() - started > 500) { resolve(false); return; }
+        if (this._disposed || Date.now() - started >= timeoutMs) { resolve(false); return; }
+        this.waitTimer = setTimeout(check, 100);
+      };
+      check();
+    });
+  }
+
   async connect(config: PlcConfig): Promise<PlcResult> {
+    // 观众端只读镜像：连面板都不该进这条链路，更不该等 30s 连接超时
+    if (!canOpenPlcChannel()) return { success: false, error: '观众端只读，不建立 PLC 通道' };
+    this._disposed = false;
     this._protocol = config.protocol;
-    this._lastConfig = config;
 
     if (!this._connected) {
+      // 首次建链时 onopen 不应拿旧配置自动重连，否则会与本次握手重复发 connect 帧
+      this._lastConfig = null;
       this._connectWS();
-      await new Promise<void>((resolve) => {
-        const check = () => { if (this._connected || !this.reconnecting) resolve(); else setTimeout(check, 100); };
-        setTimeout(check, 100);
-      });
-      if (!this._connected) return { success: false, error: 'WebSocket代理连接失败(端口8081)' };
+      const ready = await this._waitForConnection();
+      if (!ready || !this._connected) {
+        return { success: false, error: 'WebSocket代理连接失败或超时(端口8081)' };
+      }
     }
 
-    return this._sendConnect(config);
+    const result = await this._sendConnect(config);
+    // 只有握手成功才记住配置，供 WS 意外断开后 onopen 自动重连 PLC
+    if (result.success) this._lastConfig = config;
+    return result;
   }
 
   async disconnect(): Promise<PlcResult> {
+    this._disposed = true;
     this.stopHeartbeat();
+    if (this.waitTimer) { clearTimeout(this.waitTimer); this.waitTimer = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.reconnecting = false;
     this.reconnectAttempts = 0;

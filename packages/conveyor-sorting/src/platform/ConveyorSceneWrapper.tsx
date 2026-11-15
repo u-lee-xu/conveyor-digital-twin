@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
-import { PhysicsScene } from '@digital-twin/shared';
+import { isViewerRuntime } from '@digital-twin/shared';
+import { PhysicsScene } from '@digital-twin/shared/components/PhysicsScene';
 import { useConveyorViewStore } from '../stores';
 import {
   VISUAL, SCENE_CAMERA, SCENE_TARGET, SCENE_FOV, PART_STAGES,
@@ -43,6 +44,7 @@ export function ConveyorSceneWrapper({
         timeStep={1 / 60}
         showGround={!stage}
         minDistance={stage ? 0.12 : 2}
+        shadows={!isViewerRuntime()}
       />
       <ConveyorViewSwitcher showPanelToggle={showPanelToggle} />
     </>

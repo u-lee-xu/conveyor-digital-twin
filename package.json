@@ -21,6 +21,7 @@
     "electron:build:win:coal": "npm run electron:build:win -w @digital-twin/coal-sorting",
     "websocket:start": "cd websocket-server && npm start",
     "start:lab": "node scripts/start-lab.cjs",
+    "start:devlab": "node scripts/start-devlab.cjs",
     "websocket:dev": "cd websocket-server && npm run dev",
     "start:conveyor": "concurrently \"npm run websocket:dev\" \"npm run dev:conveyor\"",
     "start:coal": "concurrently \"npm run websocket:dev\" \"npm run dev:coal\"",

@@ -5,8 +5,8 @@
  *  1. 对外只有 :5201；8081 / 8082 / 1505 / 5085 必须显式绑定 127.0.0.1，
  *     不能靠「防火墙默认拦住」或只在前端用 canOpenPlcChannel() 守卫；
  *  2. WebSocket.Server 的 host 是安全边界，不允许从配置或环境变量放开；
- *  3. CSP connect-src 只留 'self' 与 Electron file:// 回退所需的两条本机直连，
- *     不得再出现通配端口 / 已废弃端口；
+ *  3. Web 版 CSP connect-src 只留 'self'（不得直连内部口）；Electron file://
+ *     所需的两条本机直连由构建期生成的 index-electron.html 单独放行；
  *  4. 内部端口与 vite.config.ts 的 WS_PROXY 目标硬绑定，启动前必须校验，
  *     否则改端口会表现为「页面能开但 PLC 连不上」的静默断链。
  *
@@ -76,13 +76,32 @@ describe('内部服务绑定：只监听 127.0.0.1', () => {
 });
 
 describe('CSP 与代理：同源优先，file:// 回退不丢', () => {
-  it('connect-src 只剩 self 与两条本机直连', () => {
+  it('Web 版 connect-src 只留 self；Electron 直连由构建期专用 HTML 放行', () => {
     const csp = shellHtml.match(/connect-src[^;]*/)?.[0] ?? '';
     expect(csp).toContain("'self'");
-    expect(csp).toContain('ws://127.0.0.1:8081');
-    expect(csp).toContain('ws://127.0.0.1:8082');
-    expect(csp).not.toMatch(/ws:\/\/\*:8081|ws:\/\/\*:8082|ws:\/\/\*:8083|wss:\/\/\*:8084/);
-    expect(csp).not.toMatch(/ws:\/\/localhost:\*|ws:\/\/127\.0\.0\.1:\*|wss:\/\/\*:\*/);
+    // P1-3：Web 页面不得直连内部口，避免绕过代理鉴权
+    expect(csp).not.toContain('ws://127.0.0.1:8081');
+    expect(csp).not.toContain('ws://127.0.0.1:8082');
+    expect(csp).not.toMatch(/\*/);
+    const vite = read('../../platform/vite.config.ts');
+    expect(vite).toContain('index-electron.html');
+    expect(vite).toContain('ws://127.0.0.1:8081 ws://127.0.0.1:8082');
+  });
+
+  it('所有可交付入口的 CSP 都无通配端口（不只平台壳一份）', () => {
+    // packages/inovance-control 是未入库的本地素材，不属交付入口，故不纳入
+    const entries = [
+      '../../../index.html', '../../platform/index.html', '../index.html',
+      '../../coal-sorting/index.html', '../../conveyor-sorting/index.html',
+      '../../pneumatic-robot/index.html', '../../traffic-light/index.html',
+    ];
+    for (const file of entries) {
+      const csp = read(file).match(/connect-src[^;]*/)?.[0] ?? '';
+      expect(csp, file).toContain("'self'");
+      expect(csp, file).not.toContain('ws://127.0.0.1:8081');
+      expect(csp, file).not.toContain('ws://127.0.0.1:8082');
+      expect(csp, file).not.toMatch(/\*/);
+    }
   });
 
   it('运行态代理目标仍是本机 8081 / 8082', () => {

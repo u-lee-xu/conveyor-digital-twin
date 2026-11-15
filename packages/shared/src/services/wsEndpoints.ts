@@ -21,7 +21,14 @@ export const RELAY_WS_PORT = 8082;
 export function resolveWsUrl(path: string, fallbackPort: number): string {
   if (typeof location === 'undefined') return `ws://127.0.0.1:${fallbackPort}`;
   const { protocol, host } = location;
-  if (protocol === 'file:' || !host) return `ws://127.0.0.1:${fallbackPort}`;
+  if (protocol === 'file:' || !host) {
+    // Electron 打包版：主进程签发的一次性凭据随直连 URL 传给网关，用来把
+    // file:// 与 sandbox iframe / data: 的 opaque origin 区分开（两者 Origin 都是 null）
+    const token = typeof window !== 'undefined'
+      ? (window as unknown as { electronAPI?: { internalToken?: string } }).electronAPI?.internalToken
+      : '';
+    return `ws://127.0.0.1:${fallbackPort}${token ? `?dt_token=${encodeURIComponent(token)}` : ''}`;
+  }
   const scheme = protocol === 'https:' ? 'wss:' : 'ws:';
   return `${scheme}//${host}${path}`;
 }

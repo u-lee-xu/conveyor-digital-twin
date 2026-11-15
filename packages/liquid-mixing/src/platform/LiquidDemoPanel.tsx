@@ -17,7 +17,9 @@ export function LiquidDemoPanel() {
   const startDemo = useLiquidStore((s) => s.startDemo);
   const requestStopDemo = useLiquidStore((s) => s.requestStopDemo);
   const toggleDemoPause = useLiquidStore((s) => s.toggleDemoPause);
-  const stopDemo = useLiquidStore((s) => s.stopDemo);
+  const estop = useLiquidStore((s) => s.estop);
+  const setEstop = useLiquidStore((s) => s.setEstop);
+  const clearAlarm = useLiquidStore((s) => s.clearAlarm);
 
   return (
     <div data-dt-liquid-demo>
@@ -30,8 +32,9 @@ export function LiquidDemoPanel() {
           <button aria-label="停止本轮后" style={btn} onClick={() => requestStopDemo()}>停止本轮后</button>
           <button aria-label="演示暂停" style={{ ...btn, background: demoPaused ? '#b45309' : undefined }}
             onClick={() => toggleDemoPause()}>{demoPaused ? '继续' : '⏸ 暂停'}</button>
-          <button aria-label="紧急停" style={{ ...btn, background: '#b91c1c' }}
-            onClick={() => stopDemo()}>紧急停</button>
+          <button aria-label="紧急停" style={{ ...btn, background: estop ? '#b45309' : '#b91c1c' }}
+            data-dt-liquid-estop={estop ? '1' : '0'}
+            onClick={() => (estop ? clearAlarm() : setEstop(true))}>{estop ? '解除急停' : '紧急停'}</button>
         </div>
         <div style={{ fontFamily: 'monospace', marginTop: 6, lineHeight: 1.7 }}>
           <div data-dt-liquid-phase><LiquidHint hintKey="phase" title="工艺阶段">阶段</LiquidHint> {phase} {LIQUID_PHASE_LABEL[phase]}</div>

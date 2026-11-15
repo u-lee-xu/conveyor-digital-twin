@@ -112,6 +112,9 @@ describe('链路源码：位置只走数值通道', () => {
     expect(plcSource).toContain("type: 'write-words'");
     expect(plcSource).toContain("address: ENCODER_DINT.S7_ADDRESS");
     expect(plcSource).toContain("address: ENCODER_DINT.MITSUBISHI_ADDRESS");
+    // 三协议字数同源：S7 侧也曾误写成单字，元数据必须与 DINT 双字一致
+    expect(plcSource).toContain('s7: { address: ENCODER_DINT.S7_ADDRESS, words: ENCODER_DINT.WORDS }');
+    expect(plcSource).not.toContain('ENCODER_DINT.S7_ADDRESS, words: 1');
   });
 
   it('观众端直接读广播数值，不再按位重建脉冲', () => {

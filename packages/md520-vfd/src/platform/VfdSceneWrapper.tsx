@@ -2,9 +2,10 @@
  * MD520 独立场景容器：自带 Canvas / OrbitControls / 近景相机。
  * 不复用平台默认 PhysicsScene（本场景没有物理工件，也不需要整机地面）。
  */
-import type { ComponentType } from 'react';
+import { Suspense, type ComponentType } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { isViewerRuntime, renderPixelRatio } from '@digital-twin/shared';
 import { VfdLabGuide } from './VfdLabGuide';
 
 export function VfdSceneWrapper({
@@ -14,11 +15,14 @@ export function VfdSceneWrapper({
   SceneContent: ComponentType;
   cameraPosition?: [number, number, number];
 }) {
+  // 观众只读大屏：关阴影、锁 dpr=1，避免高 DPR 电视满帧渲染
+  const isViewer = isViewerRuntime();
   return (
     <>
       <Canvas
         style={{ position: 'absolute', inset: 0 }}
-        shadows
+        shadows={!isViewer}
+        dpr={renderPixelRatio(isViewer)}
         camera={{ position: cameraPosition, fov: 42, near: 0.1, far: 100 }}
       >
         <OrbitControls
@@ -29,10 +33,11 @@ export function VfdSceneWrapper({
           maxDistance={12}
           maxPolarAngle={Math.PI / 2.05}
         />
-        <SceneContent />
+        <Suspense fallback={null}><SceneContent /></Suspense>
       </Canvas>
       {/* 右侧可折叠实验指导：纯本地 UI，默认收起，不占真机面板、不广播 */}
-      <VfdLabGuide />
+      {/* 实验指导是主控侧可交互 UI，观众端只读大屏不挂载 */}
+      {!isViewer && <VfdLabGuide />}
     </>
   );
 }

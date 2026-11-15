@@ -1,6 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Physics } from '@react-three/rapier';
-import { PhysicsGround, isViewerRuntime } from '@digital-twin/shared';
+import { isViewerRuntime } from '@digital-twin/shared';
+import { PhysicsGround } from '@digital-twin/shared/components/PhysicsGround';
 import { useDispensingStore } from '../../stores/useDispensingStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { CameraRig } from './CameraRig';

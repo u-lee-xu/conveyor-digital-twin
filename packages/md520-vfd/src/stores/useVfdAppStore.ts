@@ -14,10 +14,10 @@ export interface VfdPlcConfig {
   slot: number;
 }
 
-/** 独立虚拟 PLC :1507；接实体 PLC 时从连接预设切换 */
+/** 教学交付默认连外部 PLC 仿真软件 / 实物 PLC 的 Modbus TCP :502；现场 IP 在连接面板填写 */
 const DEFAULT_CONFIG: VfdPlcConfig = {
   host: '127.0.0.1',
-  port: 1507,
+  port: 502,
   unitId: 1,
   protocol: 'modbus',
   rack: 0,

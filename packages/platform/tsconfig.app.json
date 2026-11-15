@@ -24,21 +24,9 @@
       "@digital-twin/shared/*": ["../shared/src/*"],
       "@digital-twin/platform": ["../platform/src"],
       "@digital-twin/platform/*": ["../platform/src/*"],
-      "@digital-twin/conveyor-sorting": ["../conveyor-sorting/src"],
-      "@digital-twin/conveyor-sorting/*": ["../conveyor-sorting/src/*"],
-      "@digital-twin/pneumatic-robot": ["../pneumatic-robot/src"],
-      "@digital-twin/pneumatic-robot/*": ["../pneumatic-robot/src/*"],
-      "@digital-twin/traffic-light": ["../traffic-light/src"],
-      "@digital-twin/traffic-light/*": ["../traffic-light/src/*"],
-      "@digital-twin/auto-dispensing": ["../auto-dispensing/src"],
-      "@digital-twin/auto-dispensing/*": ["../auto-dispensing/src/*"],
-      "@digital-twin/md520-vfd": ["../md520-vfd/src"],
-      "@digital-twin/md520-vfd/*": ["../md520-vfd/src/*"],
-      "@digital-twin/inovance-gantry": ["../inovance-gantry/src"],
-      "@digital-twin/inovance-gantry/*": ["../inovance-gantry/src/*"],
-      "@digital-twin/liquid-mixing": ["../liquid-mixing/src"],
-      "@digital-twin/liquid-mixing/*": ["../liquid-mixing/src/*"]
+      "@digital-twin/*": ["../*/src"]
     }
   },
-  "include": ["src", "../shared/src", "../conveyor-sorting/src", "../pneumatic-robot/src", "../traffic-light/src", "../auto-dispensing/src", "../md520-vfd/src", "../inovance-gantry/src", "../liquid-mixing/src"]
+  "include": ["src", "../shared/src", "../*/src"],
+  "exclude": ["../coal-sorting/src", "../inovance-control/src"]
 }

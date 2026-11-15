@@ -1,0 +1,18 @@
+{
+  "id": "auto-dispensing",
+  "order": 3,
+  "name": "自动配药",
+  "icon": "💊",
+  "gradient": "from-teal-500 to-cyan-600",
+  "version": "1.0",
+  "description": "自动配药教学设备：四仓选药 → 丝杆送料 → 旋转料斗翻转倒药，支持 PLC 联调与仿真控制。",
+  "modeCount": 3,
+  "protocols": [
+    "modbus",
+    "s7",
+    "mitsubishi"
+  ],
+  "hasPhysics": true,
+  "needsPlcService": false,
+  "exportName": "dispensingDevice"
+}
