@@ -102,9 +102,9 @@ function AssembledScene() {
       <group position={[valveXB, FEED_Y, TB.position[2]]}><BallValve open={valveB} /></group>
       <group position={[dischargeValveX, FEED_Y, 0]}><BallValve open={discharge} /></group>
       {/* 管路：圆柱拼接 + 拐点球接头 */}
-      <PipeRun points={PIPE_A} />
-      <PipeRun points={PIPE_B} />
-      <PipeRun points={PIPE_OUT} />
+      <PipeRun points={PIPE_A} supports />
+      <PipeRun points={PIPE_B} supports />
+      <PipeRun points={PIPE_OUT} supports />
     </group>
   );
 }
@@ -132,7 +132,8 @@ function renderBarePart(kind: LiquidPartKind, valveOpen: boolean): ReactNode {
     case 'pump':
       return <PumpUnit />;
     case 'pipe':
-      return <PipeRun points={STAGE_PIPE} />;
+      // 展台与整机同源：管卡 / 拐点法兰环 / 立管支架都要在放大视图里可见
+      return <PipeRun points={STAGE_PIPE} supports />;
     default:
       return null;
   }

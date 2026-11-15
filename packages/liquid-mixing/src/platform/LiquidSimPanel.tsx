@@ -40,10 +40,11 @@ export function LiquidSimPanel() {
         </div>
       </div>
 
-      <LiquidVariableTable />
+      {/* 关键读数上移；变量地址表默认折叠并放到末尾，避免 23 行地址挤掉液位读数 */}
       <LiquidLevelReadout />
       <LiquidStatusPanel />
       <LiquidAlarmPanel />
+      <LiquidVariableTable />
     </div>
   );
 }

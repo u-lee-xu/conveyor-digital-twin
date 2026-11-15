@@ -64,6 +64,12 @@ export const LM = {
   frame: new THREE.MeshStandardMaterial({ color: V.STRUCT_COLOR, metalness: 0.6, roughness: 0.45 }),
   /** 端盖 / 包边 / 观察窗金属框 */
   cap: new THREE.MeshStandardMaterial({ color: V.ENDCAP_COLOR, metalness: 0.8, roughness: 0.3 }),
+  /** 罐顶环形盖板：RingGeometry 是平面，需双面；与顶部法兰沿 Y 错开 ≥ GAP */
+  lid: new THREE.MeshStandardMaterial({
+    color: V.SILVER_COLOR, metalness: 0.85, roughness: 0.28, side: THREE.DoubleSide,
+  }),
+  /** 管卡 / 立管支架：比管路深色一档，远距也能读出「有固定件」 */
+  pipeClamp: new THREE.MeshStandardMaterial({ color: V.STRUCT_COLOR, metalness: 0.55, roughness: 0.5 }),
   /** 螺栓 / 接线盒 / 传感器本体 */
   bolt: new THREE.MeshStandardMaterial({ color: V.MAGSWITCH_COLOR, metalness: 0.45, roughness: 0.6 }),
   /** ① 半透明玻璃主壳：能看穿内部彩色液柱 */
@@ -98,18 +104,20 @@ export const LM = {
   valve: new THREE.MeshStandardMaterial({ color: V.CYL_BODY_COLOR, metalness: 0.7, roughness: 0.35 }),
   /**
    * 球阀状态色：成组单例，BallValve 按 open 二选一。
-   * 绝不改写 LM.pipe / LM.valve，否则管路与泵蜗壳会被连带染色；
-   * 三个阀门状态可各不相同，因此也不能用「逐帧改同一个材质」的写法。
+   * 阀体本身恒为金属银灰（LM.valve / LM.cap / LM.bolt），状态色只落在
+   * 阀位指示片、手柄端帽、赤道状态环与阀顶指示灯四处，
+   * 既保住「整机机位十几个像素也能看出开关」，又不再出现「整阀通红一坨」。
+   * 三个阀门状态可各不相同，因此不能用「逐帧改同一个材质」的写法。
    */
   valveOpen: new THREE.MeshStandardMaterial({
-    color: V.LAMP_GREEN, emissive: V.LAMP_GREEN, emissiveIntensity: 0.55,
-    metalness: 0.55, roughness: 0.35,
+    color: V.LAMP_GREEN, emissive: V.LAMP_GREEN, emissiveIntensity: 0.8,
+    metalness: 0.35, roughness: 0.35,
   }),
   valveClosed: new THREE.MeshStandardMaterial({
-    color: V.LAMP_RED, emissive: V.LAMP_RED, emissiveIntensity: 0.35,
-    metalness: 0.55, roughness: 0.35,
+    color: V.LAMP_RED, emissive: V.LAMP_RED, emissiveIntensity: 0.8,
+    metalness: 0.35, roughness: 0.35,
   }),
-  /** 阀位指示：手柄与赤道状态环，高自发光让整机机位也能一眼看出开关 */
+  /** 阀位指示：状态环与阀顶灯，高自发光让整机机位也能一眼看出开关 */
   valveLampOpen: new THREE.MeshStandardMaterial({
     color: V.LAMP_GREEN, emissive: V.LAMP_GREEN, emissiveIntensity: 2.0, roughness: 0.3,
   }),
@@ -250,7 +258,7 @@ function bakeBrushed(): BakedTextures {
 
 /** 挂纹理的金属键；玻璃 / 液柱 / 刻度 / LED 不挂，避免透明排序与质感失真 */
 const METAL_KEYS = [
-  'steel', 'frame', 'cap', 'pipe', 'valve', 'motor', 'rib', 'shaft',
+  'steel', 'frame', 'cap', 'lid', 'pipeClamp', 'pipe', 'valve', 'motor', 'rib', 'shaft',
 ] as const;
 
 let baked: BakedTextures | null = null;

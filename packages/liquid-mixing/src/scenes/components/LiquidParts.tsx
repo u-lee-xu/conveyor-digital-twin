@@ -54,6 +54,29 @@ const SWIRL_RADII = Array.from(
 /** 液面方向指针的归一化半径：与碗面高度共用同一公式，转动方向一眼可辨 */
 const SWIRL_POINTER_T = 0.9;
 
+/* 罐体工业结构件：全部由罐半径 / PIPE_R / GAP 派生，绝不写裸尺寸数字 */
+const LID_INNER_RATIO = 0.82;      // 顶盖中心观察孔：让液面 / 桨叶 / 偏心人孔都不与盖板相交
+const LID_BOLTS = 8;
+const MANHOLE_LID_H = GAP * 3;
+const MANHOLE_HANDLE_R = PUMP_R * 0.34;
+const LEG_R = PIPE_R * 1.45;        // 加粗支腿，远距可辨
+const FOOT_R = PIPE_R * 2.1;        // 支腿底脚板
+const FOOT_H = GAP * 3;
+
+/* 球阀结构件：阀体恒金属银灰，状态色只落在指示件上 */
+const VALVE_FLANGE_R = VALVE_R * 1.18;
+const VALVE_FLANGE_H = GAP * 4;
+const VALVE_FLANGE_X = VALVE_R + PIPE_INSET + VALVE_FLANGE_H / 2;
+const VALVE_BOLT_R = GAP * 1.6;
+const VALVE_BOLTS = 6;
+const VALVE_NUT_R = PIPE_R * 0.42;
+const VALVE_STEM_H = PIPE_R * 2.2;
+const VALVE_HANDLE_L = VALVE_R * 2.3;
+
+/* 管卡：环套在管外，法线沿管轴，与管壁错开 ≥ GAP */
+const CLAMP_R = PIPE_R + GAP * 2;
+const CLAMP_TUBE = GAP * 1.6;
+
 const SENSOR_HIGH: Record<TankId, keyof LiquidSensors> = {
   a: 'aHigh', b: 'bHigh', mix: 'mixHigh', product: 'productHigh',
 };
@@ -230,6 +253,10 @@ export function TankShell({ tank }: { tank: TankId }) {
     [legD, legY, legD], [-legD, legY, legD],
     [legD, legY, -legD], [-legD, legY, -legD],
   ];
+  /** 罐顶环形封盖：搭在顶部法兰之上，中心留大观察孔；人孔颈在孔内，不与盖面相交 */
+  const lidY = h - CAP_GAP + FLANGE_TUBE + GAP * 3;
+  const manholeTop = h + CAP_GAP + MANHOLE_NECK_H;
+  const lidTopY = manholeTop + GAP + MANHOLE_LID_H / 2;
   return (
     <group>
       {/* 玻璃主壳：openEnded，能看穿内部彩色液柱 */}
@@ -247,22 +274,45 @@ export function TankShell({ tank }: { tank: TankId }) {
       <mesh position={[0, h - CAP_GAP, 0]} rotation={[Math.PI / 2, 0, 0]} material={LM.steel}>
         <torusGeometry args={[r + FLANGE_OUT, FLANGE_TUBE, 10, 40]} />
       </mesh>
+      {/* 罐顶环形封盖 + 一圈盖板螺栓：把「敞口玻璃量筒」变成带检修口的工业罐顶 */}
+      <mesh position={[0, lidY, 0]} rotation={[-Math.PI / 2, 0, 0]} material={LM.lid}>
+        <ringGeometry args={[r * LID_INNER_RATIO, r + FLANGE_OUT - GAP, 40]} />
+      </mesh>
+      {Array.from({ length: LID_BOLTS }, (_, i) => {
+        const a = (i / LID_BOLTS) * Math.PI * 2;
+        const br = r + FLANGE_OUT * 0.6;
+        return (
+          <mesh key={`lid-bolt-${i}`}
+            position={[Math.cos(a) * br, lidY + GAP * 3, Math.sin(a) * br]}
+            material={LM.bolt}>
+            <cylinderGeometry args={[BOLT_R, BOLT_R, GAP * 2, 8]} />
+          </mesh>
+        );
+      })}
       {/* 顶部人孔：偏心布置，把罐顶中心让给搅拌轴 / 电机 */}
       <mesh position={[MANHOLE_X, h + CAP_GAP + MANHOLE_NECK_H / 2, 0]} material={LM.steel}>
         <cylinderGeometry args={[PUMP_R, PUMP_R, MANHOLE_NECK_H, 24]} />
       </mesh>
-      <mesh position={[MANHOLE_X, h + CAP_GAP + MANHOLE_NECK_H - GAP, 0]}
+      <mesh position={[MANHOLE_X, manholeTop - GAP, 0]}
         rotation={[Math.PI / 2, 0, 0]} material={LM.cap}>
         <torusGeometry args={[PUMP_R + FLANGE_TUBE + GAP, FLANGE_TUBE, 8, 24]} />
       </mesh>
-      {/* 人孔盖螺栓：底面与盖面错开 ≥ GAP */}
+      {/* 人孔实心盖板 + 提手：盖面与颈顶错开 ≥ GAP */}
+      <mesh position={[MANHOLE_X, lidTopY, 0]} material={LM.cap}>
+        <cylinderGeometry args={[PUMP_R + FLANGE_TUBE, PUMP_R + FLANGE_TUBE, MANHOLE_LID_H, 24]} />
+      </mesh>
+      <mesh position={[MANHOLE_X, lidTopY + MANHOLE_LID_H / 2 + MANHOLE_HANDLE_R, 0]}
+        material={LM.bolt}>
+        <torusGeometry args={[MANHOLE_HANDLE_R, GAP * 1.6, 6, 16]} />
+      </mesh>
+      {/* 盖板螺栓：底面与盖面错开 ≥ GAP */}
       {[0, 1, 2, 3].map((i) => {
         const a = (i / 4) * Math.PI * 2;
         return (
           <mesh key={i}
             position={[
               MANHOLE_X + Math.cos(a) * (PUMP_R - BOLT_R),
-              h + CAP_GAP + MANHOLE_NECK_H + 2 * GAP,
+              lidTopY + MANHOLE_LID_H / 2 + GAP * 2,
               Math.sin(a) * (PUMP_R - BOLT_R),
             ]}
             material={LM.bolt}>
@@ -270,11 +320,16 @@ export function TankShell({ tank }: { tank: TankId }) {
           </mesh>
         );
       })}
-      {/* 四根支腿 */}
+      {/* 四根加粗支腿 + 底脚板 */}
       {legs.map((p, i) => (
-        <mesh key={i} position={p} material={LM.frame}>
-          <cylinderGeometry args={[PIPE_R, PIPE_R, legH, 12]} />
-        </mesh>
+        <group key={i}>
+          <mesh position={p} material={LM.frame}>
+            <cylinderGeometry args={[LEG_R, LEG_R, legH, 12]} />
+          </mesh>
+          <mesh position={[p[0], -standH + FOOT_H / 2 + GAP, p[2]]} material={LM.cap}>
+            <cylinderGeometry args={[FOOT_R, FOOT_R, FOOT_H, 16]} />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -506,38 +561,84 @@ export function Agitator() {
 }
 
 /* --------------------------------------------------------------------------
- * 球阀：阀体球 + 两侧短接 + 阀杆 + 手柄 + 赤道状态环。
- * 开 / 关同时表达在「手柄 90° 旋转」与「整阀状态色」两处：
- * 整机机位下阀门只有十几像素，单靠旋转根本看不出来，必须靠绿 / 红色块。
- * 材质按 open 二选一（成组单例），不改写共享的 LM.pipe / LM.valve。
+ * 球阀：金属阀体 + 两端法兰螺栓 + 阀杆压盖 + 90° 手柄 + 四处状态色指示。
+ * 阀体恒银灰金属，不再整阀染红 / 绿（此前整机看是「一坨红塑料」）；
+ * 状态色只落在赤道状态环、阀顶指示盘、手柄端帽、阀位指示片，
+ * 颜色仍由 liquidValveStateColor() 单一真值派生，整机机位十几个像素也能辨开关。
  * ------------------------------------------------------------------------ */
 export function BallValve({ open }: { open: boolean }) {
-  const body = open ? LM.valveOpen : LM.valveClosed;
+  const indicator = open ? LM.valveOpen : LM.valveClosed;
   const lamp = open ? LM.valveLampOpen : LM.valveLampClosed;
+  const stemTop = VALVE_R + VALVE_STEM_H;
+  const handleY = stemTop + GAP * 5;
   return (
     <group>
-      <mesh material={body} castShadow>
-        <sphereGeometry args={[VALVE_R, 20, 14]} />
+      {/* 金属阀体球 + 中部圆柱阀腔，恒银灰 */}
+      <mesh material={LM.valve} castShadow>
+        <sphereGeometry args={[VALVE_R, 24, 16]} />
       </mesh>
-      {/* 赤道状态环：环最内侧与球面错开 ≥ GAP，避免共面闪烁；高自发光便于远距辨认 */}
+      <mesh rotation={[0, 0, Math.PI / 2]} material={LM.cap}>
+        <cylinderGeometry args={[VALVE_R * 0.82, VALVE_R * 0.82, VALVE_R * 2.1, 24]} />
+      </mesh>
+      {/* 阀体合缝环：绕管轴 X，与阀腔侧面错开 ≥ GAP */}
+      <mesh rotation={[0, Math.PI / 2, 0]} material={LM.cap}>
+        <torusGeometry args={[VALVE_R * 0.86 + GAP * 2, GAP * 1.8, 8, 28]} />
+      </mesh>
+      {/* 两侧短接 + 法兰 + 一圈法兰螺栓 */}
+      {[-1, 1].map((s) => (
+        <group key={s}>
+          <mesh position={[s * VALVE_R * 0.9, 0, 0]}
+            rotation={[0, 0, Math.PI / 2]} material={LM.pipe}>
+            <cylinderGeometry args={[PIPE_R, PIPE_R, VALVE_R * 1.3, 12]} />
+          </mesh>
+          <mesh position={[s * VALVE_FLANGE_X, 0, 0]}
+            rotation={[0, 0, Math.PI / 2]} material={LM.cap}>
+            <cylinderGeometry args={[VALVE_FLANGE_R, VALVE_FLANGE_R, VALVE_FLANGE_H, 24]} />
+          </mesh>
+          {Array.from({ length: VALVE_BOLTS }, (_, i) => {
+            const a = (i / VALVE_BOLTS) * Math.PI * 2;
+            return (
+              <mesh key={i}
+                position={[
+                  s * (VALVE_FLANGE_X + VALVE_FLANGE_H / 2 + GAP * 2),
+                  Math.cos(a) * VALVE_FLANGE_R * 0.76,
+                  Math.sin(a) * VALVE_FLANGE_R * 0.76,
+                ]}
+                rotation={[0, 0, Math.PI / 2]} material={LM.bolt}>
+                <cylinderGeometry args={[VALVE_BOLT_R, VALVE_BOLT_R, GAP * 2, 6]} />
+              </mesh>
+            );
+          })}
+        </group>
+      ))}
+      {/* 阀杆 + 六角压盖螺母 */}
+      <mesh position={[0, VALVE_R + VALVE_STEM_H / 2, 0]} material={LM.shaft}>
+        <cylinderGeometry args={[VALVE_NUT_R, VALVE_NUT_R, VALVE_STEM_H, 12]} />
+      </mesh>
+      <mesh position={[0, stemTop - GAP, 0]} material={LM.cap}>
+        <cylinderGeometry args={[VALVE_NUT_R * 1.6, VALVE_NUT_R * 1.6, GAP * 3, 6]} />
+      </mesh>
+      {/* 阀顶阀位指示盘：整机机位最易读的一块状态色 */}
+      <mesh position={[0, stemTop + GAP * 1.5, 0]} material={lamp}>
+        <cylinderGeometry args={[VALVE_NUT_R * 1.35, VALVE_NUT_R * 1.35, GAP * 2, 16]} />
+      </mesh>
+      {/* 赤道状态环：环内缘与球面错开 ≥ GAP，高自发光便于远距辨认 */}
       <mesh rotation={[Math.PI / 2, 0, 0]} material={lamp}>
         <torusGeometry args={[VALVE_R + GAP * 4, GAP * 2.4, 8, 28]} />
       </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * (VALVE_R + PIPE_INSET), 0, 0]}
-          rotation={[0, 0, Math.PI / 2]} material={body}>
-          <cylinderGeometry args={[PIPE_R, PIPE_R, PIPE_R * 2, 12]} />
+      {/* 开 → 手柄与管轴平行；关 → 旋转 90°；金属杆 + 状态色端帽 */}
+      <group position={[0, handleY, 0]} rotation={[0, open ? 0 : Math.PI / 2, 0]}>
+        <mesh material={LM.cap} castShadow>
+          <boxGeometry args={[VALVE_HANDLE_L, GAP * 4, PIPE_R * 0.9]} />
         </mesh>
-      ))}
-      <mesh position={[0, VALVE_R + PIPE_R, 0]} material={LM.cap}>
-        <cylinderGeometry args={[PIPE_R * 0.6, PIPE_R * 0.6, PIPE_R * 2, 12]} />
-      </mesh>
-      {/* 开 → 手柄与管轴平行；关 → 旋转 90°；手柄同步状态色 */}
-      <group position={[0, VALVE_R + PIPE_R * 2, 0]} rotation={[0, open ? 0 : Math.PI / 2, 0]}>
-        <mesh material={lamp} castShadow>
-          <boxGeometry args={[VALVE_R * 2.4, GAP * 4, PIPE_R * 0.8]} />
+        <mesh position={[VALVE_HANDLE_L / 2 - GAP * 2, 0, 0]} material={indicator} castShadow>
+          <boxGeometry args={[VALVE_HANDLE_L * 0.24, GAP * 6, PIPE_R * 1.15]} />
         </mesh>
       </group>
+      {/* 阀位指示片：贴在阀体正面，正面机位下也是一块明确的状态色 */}
+      <mesh position={[0, 0, VALVE_R + GAP * 3]} material={indicator}>
+        <boxGeometry args={[VALVE_R * 0.9, VALVE_R * 0.42, GAP * 2]} />
+      </mesh>
     </group>
   );
 }
@@ -585,10 +686,14 @@ export function PumpUnit() {
 /* --------------------------------------------------------------------------
  * 管路：相邻点之间用圆柱拼接，拐点用小球接头，避免端面共面 / 留缝
  * ------------------------------------------------------------------------ */
-export function PipeRun({ points }: { points: Vec3[] }) {
+export function PipeRun({ points, supports = false }: { points: Vec3[]; supports?: boolean }) {
   const segments = useMemo(() => {
     const up = new THREE.Vector3(0, 1, 0);
-    const out: { mid: Vec3; len: number; quat: THREE.Quaternion }[] = [];
+    const fwd = new THREE.Vector3(0, 0, 1);
+    const out: {
+      mid: Vec3; len: number; quat: THREE.Quaternion;
+      clampQuat: THREE.Quaternion; vertical: boolean; lowY: number;
+    }[] = [];
     for (let i = 0; i < points.length - 1; i += 1) {
       const a = new THREE.Vector3(...points[i]);
       const b = new THREE.Vector3(...points[i + 1]);
@@ -596,8 +701,15 @@ export function PipeRun({ points }: { points: Vec3[] }) {
       const len = dir.length();
       if (len <= 0) continue;
       const mid = a.clone().add(b).multiplyScalar(0.5);
-      const quat = new THREE.Quaternion().setFromUnitVectors(up, dir.normalize());
-      out.push({ mid: [mid.x, mid.y, mid.z], len, quat });
+      const unit = dir.clone().normalize();
+      out.push({
+        mid: [mid.x, mid.y, mid.z],
+        len,
+        quat: new THREE.Quaternion().setFromUnitVectors(up, unit),
+        clampQuat: new THREE.Quaternion().setFromUnitVectors(fwd, unit),
+        vertical: Math.abs(unit.y) > 0.9,
+        lowY: Math.min(points[i][1], points[i + 1][1]),
+      });
     }
     return out;
   }, [points]);
@@ -608,10 +720,45 @@ export function PipeRun({ points }: { points: Vec3[] }) {
           <cylinderGeometry args={[PIPE_R, PIPE_R, s.len, 12]} />
         </mesh>
       ))}
-      {points.map((p, i) => (
-        <mesh key={`joint-${i}`} position={p} material={LM.pipe}>
-          <sphereGeometry args={[PIPE_R, 12, 8]} />
+      {/* 管卡：每段中点一道，环面法线沿管轴，与管壁错开 ≥ GAP */}
+      {supports && segments.map((s, i) => (
+        <mesh key={`clamp-${i}`} position={s.mid} quaternion={s.clampQuat} material={LM.pipeClamp}>
+          <torusGeometry args={[CLAMP_R, CLAMP_TUBE, 6, 16]} />
         </mesh>
+      ))}
+      {/* 立管支架：竖管旁的细立柱 + 横抱箍，把悬空折线变成有支承的管廊。
+          高度只由竖段长度派生，整机与 1:1 部件展台同源；不依赖机架台面的绝对 Y，
+          否则展台局部坐标系里支架会被整体过滤掉，只剩一根光秃秃的折线。 */}
+      {supports && segments
+        .filter((s) => s.vertical && s.len > PIPE_R * 6)
+        .map((s, i) => {
+          const postH = s.len * 0.7;
+          const postX = s.mid[0] - PIPE_R * 2.6;
+          const braceY = s.lowY + postH - PIPE_R * 1.5;
+          return (
+            <group key={`riser-${i}`}>
+              <mesh position={[postX, s.lowY + postH / 2, s.mid[2]]} material={LM.pipeClamp}>
+                <cylinderGeometry args={[PIPE_R * 0.5, PIPE_R * 0.5, postH, 10]} />
+              </mesh>
+              <mesh position={[(postX + s.mid[0]) / 2, braceY, s.mid[2]]}
+                rotation={[0, 0, Math.PI / 2]} material={LM.pipeClamp}>
+                <cylinderGeometry args={[PIPE_R * 0.4, PIPE_R * 0.4, PIPE_R * 2.6, 8]} />
+              </mesh>
+            </group>
+          );
+        })}
+      {points.map((p, i) => (
+        <group key={`joint-${i}`} position={p}>
+          <mesh material={LM.pipe}>
+            <sphereGeometry args={[PIPE_R, 12, 8]} />
+          </mesh>
+          {/* 拐点接头法兰环：与球接头错开 ≥ GAP */}
+          {supports && (
+            <mesh rotation={[Math.PI / 2, 0, 0]} material={LM.pipeClamp}>
+              <torusGeometry args={[PIPE_R + GAP * 2, CLAMP_TUBE, 6, 16]} />
+            </mesh>
+          )}
+        </group>
       ))}
     </group>
   );
@@ -671,8 +818,8 @@ const STAGE_CAMERAS: Record<LiquidPartKind, RigGoal> = {
   tank: { camera: [0.60, 0.52, 0.86], target: [0, 0.28, 0] },
   window: { camera: [0.26, 0.40, 0.58], target: [0, 0.28, 0] },
   agitator: { camera: [0.44, 0.80, 0.66], target: [0, 0.42, 0] },
-  valve: { camera: [0.26, 0.22, 0.34], target: [0, 0, 0] },
-  pump: { camera: [0.34, 0.26, 0.42], target: [0, 0, 0] },
+  valve: { camera: [0.17, 0.14, 0.22], target: [0, 0.01, 0] },
+  pump: { camera: [0.24, 0.19, 0.30], target: [0, 0, 0] },
   pipe: { camera: [0.52, 0.44, 0.66], target: [0, 0.14, 0] },
 };
 

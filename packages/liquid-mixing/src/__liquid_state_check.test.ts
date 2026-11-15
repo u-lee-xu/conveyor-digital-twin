@@ -9,7 +9,7 @@ import {
   LIQUID_PHASE, LIQUID_ALARM, LIQUID_CAPACITY, LIQUID_PROCESS, LIQUID_TANKS, LIQUID_GEOM,
   liquidSensorStates, liquidLevelHeight, liquidLevelRatio, resolveStirDirection,
   liquidDisplay, LIQUID_EMPTY_OUTPUTS, liquidAlarmFlags, LIQUID_VISUAL, LIQUID_VIEW_PRESETS,
-  liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
+  LIQUID_INITIAL_COMPONENTS, liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
   liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
   liquidValveStateColor, clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
@@ -282,9 +282,11 @@ describe('搅拌可视化四层：混合均匀度真值（纯本地教学量）'
   it('正反转同时有效属禁止态：不积分均匀度、桨叶不转', () => {
     S().setVolume('mix', 40);
     S().setOutputs({ stirForward: true, stirReverse: true });
+    const before = S().mixUniformity;
     const angle = S().agitatorAngle;
     run(40);
-    expect(S().mixUniformity).toBe(0);
+    // 展示初值不是 0，禁止态的语义是「保持原值不推进」，不是「归零」
+    expect(S().mixUniformity).toBe(before);
     expect(S().agitatorAngle).toBe(angle);
   });
 
@@ -324,20 +326,21 @@ describe('搅拌可视化四层：混合均匀度真值（纯本地教学量）'
     expect(S().mixUniformity).toBe(0);
   });
 
-  it('复位与动作字复位都清均匀度，停机不清（保持当前值）', () => {
+  it('复位与动作字复位回到展示初值，停机不清（保持当前值）', () => {
     S().setVolume('mix', 40);
     S().setOutput('stirForward', true);
     run(20);
     S().stopDemo();
     expect(S().mixUniformity).toBeGreaterThan(0);
+    // 初始展示态与「全部复位 / PLC RESET」是同一个状态，语义才自洽
     S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 3) });
-    expect(S().mixUniformity).toBe(0);
+    expect(S().mixUniformity).toBe(LIQUID_PROCESS.INITIAL_UNIFORMITY);
     S().setVolume('mix', 40);
     S().setOutput('stirForward', true);
     run(20);
     expect(S().mixUniformity).toBeGreaterThan(0);
     S().resetAll();
-    expect(S().mixUniformity).toBe(0);
+    expect(S().mixUniformity).toBe(LIQUID_PROCESS.INITIAL_UNIFORMITY);
   });
 
   it('快照与观众镜像成对：均匀度可导出、可回放、越界与 NaN 被守卫', () => {
@@ -418,6 +421,8 @@ describe('成品罐颜色与混合后的液体同源', () => {
     useLiquidStore.setState({
       volumes: { a: 80, b: 80, mix: 50, product: 0 },
       mixA: 30, mixB: 20, mixUniformity: 1,
+      // 展示初值里成品罐已有组分，造批时必须显式清零，否则「组分和 = 体积」不成立
+      productA: 0, productB: 0,
     });
   };
 
@@ -455,7 +460,7 @@ describe('成品罐颜色与混合后的液体同源', () => {
       .toBe(liquidBlendColor(30, 20));
   });
 
-  it('成品组分进快照 / 观众镜像，复位与排空都清零', () => {
+  it('成品组分进快照 / 观众镜像，复位回到展示初值、排空清零', () => {
     feedAndStir();
     S().setOutput('discharge', true);
     run(20);
@@ -465,8 +470,8 @@ describe('成品罐颜色与混合后的液体同源', () => {
     expect(snap.LIQUID_PRODUCT_A).toBeCloseTo(S().productA, 3);
     expect(snap.LIQUID_PRODUCT_B).toBeCloseTo(S().productB, 3);
     S().resetAll();
-    expect(S().productA).toBe(0);
-    expect(S().productB).toBe(0);
+    expect(S().productA).toBe(LIQUID_INITIAL_COMPONENTS.productA);
+    expect(S().productB).toBe(LIQUID_INITIAL_COMPONENTS.productB);
     S().applyBroadcast(snap);
     expect(liquidProductColor(S().productA, S().productB)).toBe(color);
     S().setVolume('product', 0);
@@ -496,7 +501,7 @@ describe('快照 / 观众只读镜像', () => {
     S().applyBroadcast({ LIQUID_B: NaN, LIQUID_A: Infinity, LIQUID_MIX: -1 });
     expect(S().volumes.b).toBe(55);
     expect(S().volumes.a).toBe(LIQUID_PROCESS.INITIAL_A);
-    expect(S().volumes.mix).toBe(0);
+    expect(S().volumes.mix).toBe(LIQUID_PROCESS.INITIAL_MIX);
   });
 
   it('快照键全为有限数值，掩码与 14 路开关量同源', () => {

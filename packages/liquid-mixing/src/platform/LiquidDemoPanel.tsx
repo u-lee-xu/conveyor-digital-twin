@@ -45,10 +45,11 @@ export function LiquidDemoPanel() {
           </div>
         </div>
       </div>
-      <LiquidRecipeEditor />
+      {/* 关键读数上移，配方设定下沉：常规视口首屏即可读全四罐液位 */}
       <LiquidLevelReadout />
       <LiquidStatusPanel />
       <LiquidAlarmPanel />
+      <LiquidRecipeEditor />
     </div>
   );
 }

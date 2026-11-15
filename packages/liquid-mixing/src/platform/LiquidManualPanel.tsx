@@ -70,6 +70,11 @@ export function LiquidManualPanel() {
         </div>
       </div>
 
+      {/* 关键读数上移：常规视口首屏就能看到四罐液位与状态，设定类控件下沉 */}
+      <LiquidLevelReadout />
+      <LiquidStatusPanel />
+      <LiquidAlarmPanel />
+
       <LiquidRecipeEditor />
 
       <div style={box}>
@@ -105,9 +110,6 @@ export function LiquidManualPanel() {
         </div>
       </div>
 
-      <LiquidLevelReadout />
-      <LiquidStatusPanel />
-      <LiquidAlarmPanel />
     </div>
   );
 }

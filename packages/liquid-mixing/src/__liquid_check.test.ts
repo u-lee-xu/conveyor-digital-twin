@@ -19,6 +19,7 @@ import {
 import {
   liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
   LIQUID_VISUAL, liquidValveStateColor,
+  LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
 } from './constants/liquidConstants';
 import { LIQUID_REAL32_WORD_ORDER } from './constants/real32';
 
@@ -410,8 +411,17 @@ describe('阀门开关状态色：3D / 面板 / 展台同源', () => {
     expect(materials).toContain('valveLampClosed:');
     // 旧「恒红手柄」材质必须删掉，否则开阀仍是红的
     expect(materials).not.toContain('handle: new THREE.MeshStandardMaterial');
-    expect(parts).toContain('const body = open ? LM.valveOpen : LM.valveClosed;');
+    // 阀体恒金属银灰，状态色只落在指示件：此前整阀染色，展台看是「一坨红塑料」
+    expect(parts).toContain('const indicator = open ? LM.valveOpen : LM.valveClosed;');
     expect(parts).toContain('const lamp = open ? LM.valveLampOpen : LM.valveLampClosed;');
+    expect(parts).toContain('<mesh material={LM.valve} castShadow>');
+    expect(parts).not.toContain('material={body}');
+    expect(parts).toContain('阀位指示片');
+    // 工业结构件：两端法兰 / 法兰螺栓 / 阀杆压盖 / 罐顶封盖 / 管卡支架
+    expect(parts).toContain('VALVE_FLANGE_X');
+    expect(parts).toContain('VALVE_BOLTS');
+    expect(parts).toContain('ringGeometry');
+    expect(parts).toContain('supports');
     expect(parts).not.toContain('LM.pipe.color.set');
     expect(parts).not.toContain('LM.valve.color.set');
     // 机械语义保留：开平行于管轴、关旋转 90°
@@ -523,5 +533,82 @@ describe('面板变量地址浮框（参考自动配药 AddressHint）', () => {
     // 均匀度是纯本地教学量，不在 PLC 链路上；演示启动 / 停止是本地状态机主令
     expect(panel).not.toMatch(/LiquidHint[^>]*>[^<]*混合均匀度/);
     expect(demo).not.toMatch(/LiquidHint[^>]*>[^<]*(启动|停止本轮后|暂停|紧急停)/);
+  });
+});
+
+/** 精修红线：工业结构件、教学首屏展示态、面板可读性，防止后续改回「量筒 + 红球 + 截断面板」 */
+describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', () => {
+  const constants = read('packages/liquid-mixing/src/constants/liquidConstants.ts');
+  const parts = read('packages/liquid-mixing/src/scenes/components/LiquidParts.tsx');
+  const scene = read('packages/liquid-mixing/src/scenes/LiquidSceneContent.tsx');
+  const materials = read('packages/liquid-mixing/src/scenes/shared/liquidMaterials.ts');
+  const mode = read('packages/liquid-mixing/src/platform/LiquidModePanel.tsx');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const manual = read('packages/liquid-mixing/src/platform/LiquidManualPanel.tsx');
+  const demo = read('packages/liquid-mixing/src/platform/LiquidDemoPanel.tsx');
+  const sim = read('packages/liquid-mixing/src/platform/LiquidSimPanel.tsx');
+  const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+
+  it('四罐首屏都有液体，组分与体积同源，均匀度是 0..1 的过渡态', () => {
+    expect(Object.values(LIQUID_INITIAL_VOLUMES).every((v) => v > 0)).toBe(true);
+    expect(LIQUID_INITIAL_COMPONENTS.mixA + LIQUID_INITIAL_COMPONENTS.mixB)
+      .toBe(LIQUID_INITIAL_VOLUMES.mix);
+    expect(LIQUID_INITIAL_COMPONENTS.productA + LIQUID_INITIAL_COMPONENTS.productB)
+      .toBe(LIQUID_INITIAL_VOLUMES.product);
+    expect(LIQUID_INITIAL_COMPONENTS.mixUniformity).toBeGreaterThan(0);
+    expect(LIQUID_INITIAL_COMPONENTS.mixUniformity).toBeLessThan(1);
+  });
+
+  it('展示初值在初始化 / 全部复位 / PLC RESET 三处同源', () => {
+    expect(store).toContain('const initialComponents = () => ({ ...LIQUID_INITIAL_COMPONENTS });');
+    expect((store.match(/\.\.\.initialComponents\(\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((store.match(/Object\.assign\(patch, initialComponents\(\)\)/g) ?? []).length).toBe(2);
+  });
+
+  it('展示初值仍是纯本地教学量，不进 PLC 变量表与地址表', () => {
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(23);
+    expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /UNIFORM|MIX_A|PRODUCT_A/i.test(k))).toBe(false);
+    expect(constants).toContain('不进 PLC 地址表');
+  });
+
+  it('罐顶封盖 / 人孔 / 支腿底脚全部由几何常量派生', () => {
+    for (const k of ['LID_INNER_RATIO', 'LID_BOLTS', 'MANHOLE_LID_H', 'MANHOLE_HANDLE_R',
+      'LEG_R', 'FOOT_R', 'FOOT_H']) expect(parts).toContain(k);
+    expect(parts).toContain('ringGeometry args={[r * LID_INNER_RATIO');
+    expect(materials).toContain('lid: new THREE.MeshStandardMaterial');
+    expect(materials).toContain("'lid'");
+    expect(materials).toContain("'pipeClamp'");
+  });
+
+  it('球阀阀体恒金属色，状态色只落在四处指示件', () => {
+    expect(parts).toContain('<mesh material={LM.valve} castShadow>');
+    for (const k of ['VALVE_FLANGE_X', 'VALVE_BOLTS', 'VALVE_STEM_H', '阀位指示片']) {
+      expect(parts).toContain(k);
+    }
+    expect(parts).not.toContain('material={body}');
+    expect(parts).not.toContain('LM.valve.color.set');
+  });
+
+  it('整机三路与部件展台都启用管卡 / 法兰环 / 立管支架', () => {
+    expect((scene.match(/<PipeRun points=\{PIPE_[A-Z]+\} supports \/>/g) ?? []).length).toBe(3);
+    expect(scene).toContain('<PipeRun points={STAGE_PIPE} supports />');
+    // 支架高度只能由竖段长度派生；依赖机架台面绝对 Y 会让展台支架被整体过滤掉
+    expect(parts).toContain('s.vertical && s.len > PIPE_R * 6');
+    expect(parts).toContain('const postH = s.len * 0.7;');
+    expect(parts).not.toContain('platformTop');
+  });
+
+  it('面板关键读数上移、自身可滚动、地址表默认折叠', () => {
+    expect(mode).toContain("maxHeight: 'calc(100vh - 96px)'");
+    expect(mode).toContain("overflowY: 'auto'");
+    expect(panel).toContain('useState(false)');
+    for (const src of [manual, demo, sim]) {
+      const readouts = src.indexOf('<LiquidLevelReadout />');
+      const recipe = src.indexOf('<LiquidRecipeEditor />');
+      const table = src.indexOf('<LiquidVariableTable />');
+      expect(readouts).toBeGreaterThan(-1);
+      if (recipe > -1) expect(readouts).toBeLessThan(recipe);
+      if (table > -1) expect(readouts).toBeLessThan(table);
+    }
   });
 });

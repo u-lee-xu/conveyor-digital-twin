@@ -66,8 +66,18 @@ export const LIQUID_PROCESS = {
   CAPACITY_PRODUCT: 300,
   INITIAL_A: 80,
   INITIAL_B: 80,
-  INITIAL_MIX: 0,
-  INITIAL_PRODUCT: 0,
+  /** 教学首屏展示态：上一批刚结束，混合罐留一批待出料、成品罐已有部分成品。
+   *  四罐都有液体才能一眼看到液面、分层色带与成品颜色同源；仍是四罐 REAL 唯一真值，
+   *  去皮 / 演示 / PLC 语义不变。演示出料阶段会排空混合罐、完成阶段会转出成品。 */
+  INITIAL_MIX: 45,
+  INITIAL_PRODUCT: 60,
+  /** 展示态的组分真值（L）：A/B 按 3:2 配比，颜色与混合罐同源 */
+  INITIAL_MIX_A: 27,
+  INITIAL_MIX_B: 18,
+  INITIAL_PRODUCT_A: 36,
+  INITIAL_PRODUCT_B: 24,
+  /** 展示态均匀度：0.42 让首屏就能看见分层带与液面涡流碗的过渡 */
+  INITIAL_UNIFORMITY: 0.42,
   FEED_RATE: 12,
   DISCHARGE_RATE: 15,
   /** 演示每轮结束后回补 A/B 原液、转出成品，保证「启动后一直循环」不会自己停 */
@@ -102,6 +112,15 @@ export const LIQUID_INITIAL_VOLUMES: Volumes = {
   mix: LIQUID_PROCESS.INITIAL_MIX,
   product: LIQUID_PROCESS.INITIAL_PRODUCT,
 };
+
+/** 展示态组分与均匀度：store 初始化 / resetAll / PLC 复位同源，不进 PLC 地址表 */
+export const LIQUID_INITIAL_COMPONENTS = {
+  mixA: LIQUID_PROCESS.INITIAL_MIX_A,
+  mixB: LIQUID_PROCESS.INITIAL_MIX_B,
+  productA: LIQUID_PROCESS.INITIAL_PRODUCT_A,
+  productB: LIQUID_PROCESS.INITIAL_PRODUCT_B,
+  mixUniformity: LIQUID_PROCESS.INITIAL_UNIFORMITY,
+} as const;
 
 export const LIQUID_DEFAULT_RECIPE: Recipe = {
   targetA: 30,
@@ -210,7 +229,8 @@ export const LIQUID_GEOM = {
   LEG_H: 0.10,
   PIPE_R: 0.018,
   PIPE_INSET: 0.006,
-  VALVE_R: 0.036,
+  /** 球阀放大到与泵 / 罐体协调；PUMP_R 保持原值，避免人孔与搅拌电机穿模 */
+  VALVE_R: 0.048,
   PUMP_R: 0.052,
   STIR_SHAFT_R: 0.012,
   STIR_BLADE_L: 0.15,

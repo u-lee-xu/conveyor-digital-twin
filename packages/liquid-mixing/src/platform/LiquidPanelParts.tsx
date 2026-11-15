@@ -14,7 +14,7 @@ import {
 } from '../constants/liquidVariables';
 import { LiquidHint, LiquidSensorHint } from './LiquidAddressHint';
 
-export const box: CSSProperties = { background: 'rgba(30,41,59,.9)', border: '1px solid rgba(100,116,139,.4)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 };
+export const box: CSSProperties = { background: 'rgba(30,41,59,.9)', border: '1px solid rgba(100,116,139,.4)', borderRadius: 8, padding: '6px 9px', marginBottom: 6 };
 export const btn: CSSProperties = { padding: '3px 7px', borderRadius: 5, cursor: 'pointer', background: 'rgba(71,85,105,.6)', border: '1px solid rgba(100,116,139,.5)', color: '#e2e8f0', fontSize: 11 };
 export const inputStyle: CSSProperties = { width: 62, padding: '2px 5px', background: '#0f172a', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 4, fontSize: 11 };
 
@@ -62,7 +62,7 @@ export function LiquidLevelReadout() {
           const ratio = liquidLevelRatio(tank, volumes[tank]);
           const keys = HIGH_LOW[tank];
           return (
-            <div key={tank} style={{ fontFamily: 'monospace', marginTop: 5 }}>
+            <div key={tank} style={{ fontFamily: 'monospace', marginTop: 3 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap' }}>
                 <span><LiquidHint hintKey={LEVEL_HINT[tank]} title={`${LIQUID_TANKS[tank].label}液位`}>{LIQUID_TANKS[tank].label}</LiquidHint></span>
                 <span style={{ color: '#93c5fd' }}>{shown.toFixed(2)} / {LIQUID_CAPACITY[tank]} L</span>
@@ -103,7 +103,7 @@ export function LiquidStatusPanel() {
         <span data-dt-liquid-valve style={{ display: 'none' }}>
           {`valveA=${outputs.valveA ? 1 : 0}:${liquidValveStateColor(outputs.valveA)}|valveB=${outputs.valveB ? 1 : 0}:${liquidValveStateColor(outputs.valveB)}|discharge=${outputs.discharge ? 1 : 0}:${liquidValveStateColor(outputs.discharge)}`}
         </span>
-        <div data-dt-liquid-status style={{ fontFamily: 'monospace', marginTop: 5, lineHeight: 1.7 }}>
+        <div data-dt-liquid-status style={{ fontFamily: 'monospace', marginTop: 4, lineHeight: 1.55 }}>
           <div>
             <LiquidHint hintKey="phase" title="工艺阶段">阶段</LiquidHint> {phase} {LIQUID_PHASE_LABEL[phase]}
             {' '}<LiquidHint hintKey="round" title="循环轮次">轮次</LiquidHint> {round}
@@ -149,7 +149,8 @@ export function LiquidStatusPanel() {
 
 /** 仿真模式常驻的三协议变量地址表（表头恒「信号 / 三菱 FX / Modbus TCP / Siemens S7」） */
 export function LiquidVariableTable() {
-  const [open, setOpen] = useState(true);
+  // 默认折叠：仿真模式首屏优先让四罐读数 / 状态 / 开关量完整可见，需要时再展开地址表
+  const [open, setOpen] = useState(false);
   return (
     <div style={box}>
       <button aria-label="变量地址表" style={{ ...btn, width: '100%' }} onClick={() => setOpen((v) => !v)}>

@@ -14,7 +14,8 @@ import { create } from 'zustand';
 // 子路径导入：不把 shared barrel 的 UI / 服务模块拉进设备分包
 import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
-  LIQUID_PROCESS, LIQUID_CAPACITY, LIQUID_INITIAL_VOLUMES, LIQUID_DEFAULT_RECIPE,
+  LIQUID_PROCESS, LIQUID_CAPACITY, LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
+  LIQUID_DEFAULT_RECIPE,
   LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, TANK_IDS,
   clamp, clampVolume, clampUniformity, clampRecipe, LIQUID_RECIPE_LIMITS,
   liquidSensorStates, resolveStirDirection, liquidAlarmFlags,
@@ -98,6 +99,8 @@ interface LiquidStore {
 
 const emptyVolumes = (): Volumes => ({ a: 0, b: 0, mix: 0, product: 0 });
 const initialVolumes = (): Volumes => ({ ...LIQUID_INITIAL_VOLUMES });
+/** 教学首屏展示态的组分 / 均匀度：初始化、PLC 复位、全部复位三处同源 */
+const initialComponents = () => ({ ...LIQUID_INITIAL_COMPONENTS });
 
 /** 当前混合罐 A 液占比 0..1（纯函数，面板 / 快照 / PLC 同源） */
 export function liquidRatioA(mixA: number, mixB: number): number {
@@ -115,11 +118,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   phaseElapsed: 0,
   agitatorAngle: 0,
   stirDirection: 0,
-  mixA: 0,
-  mixB: 0,
-  mixUniformity: 0,
-  productA: 0,
-  productB: 0,
+  ...initialComponents(),
   demoRunning: false,
   stopRequested: false,
   demoPaused: false,
@@ -188,8 +187,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (frame.reset) {
       patch.volumes = initialVolumes();
       patch.tare = emptyVolumes();
-      patch.mixA = 0; patch.mixB = 0; patch.mixUniformity = 0;
-      patch.productA = 0; patch.productB = 0; patch.round = 0;
+      Object.assign(patch, initialComponents());
+      patch.round = 0;
       patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
     }
     if (typeof frame.actionWord === 'number' && Number.isFinite(frame.actionWord)) {
@@ -204,8 +203,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
           case LIQUID_ACTION.RESET:
             patch.volumes = initialVolumes();
             patch.tare = emptyVolumes();
-            patch.mixA = 0; patch.mixB = 0; patch.mixUniformity = 0;
-            patch.productA = 0; patch.productB = 0; patch.round = 0;
+            Object.assign(patch, initialComponents());
+            patch.round = 0;
             patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
             break;
           case LIQUID_ACTION.ALARM_RESET:
@@ -246,7 +245,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     outputs: { ...LIQUID_EMPTY_OUTPUTS },
     sensors: liquidSensorStates(initialVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
     phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, agitatorAngle: 0, stirDirection: 0,
-    mixA: 0, mixB: 0, mixUniformity: 0, productA: 0, productB: 0,
+    ...initialComponents(),
     demoRunning: false, stopRequested: false, demoPaused: false, round: 0,
     alarm: 0, estop: false, controlSource: 'local', connected: false,
     actionSeq: 0,
