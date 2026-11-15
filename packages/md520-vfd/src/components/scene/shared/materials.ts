@@ -3,6 +3,7 @@
  * 避免独立设备包反向依赖传送带分拣场景）。贴面薄片带 polygonOffset 防 z-fighting。
  */
 import * as THREE from 'three';
+import { applySurfaceTextures } from '@digital-twin/shared/three/surfaceTextures';
 
 const C = {
   BASE_COLOR: '#8b949e',
@@ -93,3 +94,18 @@ export const materials = {
     emissiveIntensity: C.LED_EMISSIVE_INTENSITY, roughness: 0.3, metalness: 0.1,
   }),
 } as const;
+
+/**
+ * 与汇川龙门场景一致的 Saltline 程序化表面细节：只挂电机 / 传动金属件。
+ * 贴面（profileSlot/vfdStripe/vfdNameplate）、柜体门板、橡胶皮带与四路状态 LED 不挂；
+ * LED 频率牌使用独立 CanvasTexture 动态重绘，也不在本列表内。
+ */
+const VFD_METAL_KEYS = [
+  'base', 'brightSilver', 'endCap', 'axle',
+  'vfdMotor', 'vfdMotorFin', 'vfdFanBlade', 'vfdRoller', 'vfdRollerFace',
+] as const;
+
+/** 幂等惰性：由场景入口在首次渲染时调用一次 */
+export function applyProceduralTextures(): void {
+  applySurfaceTextures(materials, VFD_METAL_KEYS);
+}

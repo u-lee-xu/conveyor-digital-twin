@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applySurfaceTextures } from '@digital-twin/shared/three/surfaceTextures';
 import { VISUAL } from '../../../scenes/conveyor-sorting/constants';
 
 /**
@@ -209,3 +210,20 @@ export const materials = {
     color: VISUAL.PANEL_COLOR, metalness: 0.0, roughness: 0.85,
   }),
 } as const;
+
+/**
+ * 与汇川龙门场景一致的 Saltline 程序化表面细节：只挂金属结构件。
+ * wood 是兼容旧引用的物料台键，实际已是铝板，按金属处理而非挂木纹。
+ * 贴面（profileSlot/decal/decalDark/sensorOptics/binInterior）、橡胶皮带、
+ * 工件、地面、传感器塑料与全部 LED / 状态色不挂，避免加剧 z-fighting 或改状态色。
+ */
+const CONVEYOR_METAL_KEYS = [
+  'base', 'darkMetal', 'brightSilver', 'endCap', 'axle',
+  'cylinderBody', 'cylinderRod', 'cylinderPort', 'brass',
+  'sensorBracket', 'roller', 'rollerRunning', 'panel', 'wood', 'chutePlate',
+] as const;
+
+/** 幂等惰性：由场景入口在首次渲染时调用一次 */
+export function applyProceduralTextures(): void {
+  applySurfaceTextures(materials, CONVEYOR_METAL_KEYS);
+}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Physics } from '@react-three/rapier';
+import { applyProceduralTextures } from '../../components/scene/shared/materials';
 import { isViewerRuntime } from '@digital-twin/shared';
 import { PhysicsGround } from '@digital-twin/shared/components/PhysicsGround';
 import { useDispensingStore } from '../../stores/useDispensingStore';
@@ -238,6 +239,9 @@ function ViewerDiagnostics() {
 }
 
 export function DispensingSceneContent() {
+  // 与龙门场景一致：程序化表面纹理只在首次渲染本场景时惰性烘焙一次
+  // 必须放在观众端提前返回之前，保证主从两端的材质表现一致
+  useMemo(() => { applyProceduralTextures(); return true; }, []);
   const stage = useAppStore((s) => s.activeStage);
   const part = useAppStore((s) => s.activePart);
   // 观众端（智能电视 / 手机）是只读镜像，不加载 Rapier WASM、不建刚体与碰撞体

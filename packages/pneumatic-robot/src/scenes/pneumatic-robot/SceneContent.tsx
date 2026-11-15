@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Ground } from '@digital-twin/shared/components/Ground';
 import { SceneContainer } from './components/SceneContainer';
 import { RobotArm } from './components/RobotArm';
+import { applyProceduralTextures } from './components/robotMaterials';
 import { PhysicsLabel } from './components/PhysicsLabel';
 import { computeKinematics } from './constants';
 import { useRobotStore } from './useRobotStore';
@@ -48,6 +49,8 @@ function useLabelTexture(text: string, size: number, color: string) {
 }
 
 export function PneumaticRobotSceneContent() {
+  // 与龙门场景一致：程序化表面纹理只在首次渲染本场景时惰性烘焙一次
+  useMemo(() => { applyProceduralTextures(); return true; }, []);
   const aTex = useLabelTexture('A', 128, '#f59e0b');
   const bTex = useLabelTexture('B', 128, '#3b82f6');
   const kin = computeKinematics(0, 0);

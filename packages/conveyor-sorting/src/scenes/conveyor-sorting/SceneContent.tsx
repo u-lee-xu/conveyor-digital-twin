@@ -1,4 +1,5 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
+import { applyProceduralTextures } from '../../components/scene/shared/materials';
 import { useDeviceStore, useConveyorViewStore } from '../../stores';
 import type { CylinderName, SensorName } from '../../types/device';
 import {
@@ -194,6 +195,8 @@ function PartStageView({ kind }: { kind: PartKind }) {
  * 因此界面上切换机位 / 展台无需刷新页面；CameraRig 常驻做相机平滑过渡。
  */
 export function ConveyorSortingSceneContent() {
+  // 与龙门场景一致：程序化表面纹理只在首次渲染本场景时惰性烘焙一次
+  useMemo(() => { applyProceduralTextures(); return true; }, []);
   const activeStage = useConveyorViewStore((s) => s.activeStage);
   return (
     <>

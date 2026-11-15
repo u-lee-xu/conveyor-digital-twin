@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { RoundedBox } from '@react-three/drei';
+import { TRAFFIC_MATERIALS, applyProceduralTextures } from './materials';
 import { Ground } from '@digital-twin/shared/components/Ground';
 import { SceneContainer } from './components/SceneContainer';
 import { PhysicsLabel } from './components/PhysicsLabel';
@@ -110,28 +111,24 @@ function TrafficPole({ corner, direction, armDir, facing }: { corner: [number, n
   return (
     <group position={[x, 0, z]}>
       {/* 底座 */}
-      <mesh position={[0, 0.03, 0]}>
+      <mesh position={[0, 0.03, 0]} material={TRAFFIC_MATERIALS.poleBase}>
         <boxGeometry args={[0.24, 0.06, 0.24]} />
-        <meshStandardMaterial color="#3a4756" roughness={0.6} />
       </mesh>
       {/* 灯杆 */}
-      <mesh position={[0, POLE_HEIGHT / 2, 0]}>
+      <mesh position={[0, POLE_HEIGHT / 2, 0]} material={TRAFFIC_MATERIALS.pole}>
         <cylinderGeometry args={[0.03, 0.04, POLE_HEIGHT, 16]} />
-        <meshStandardMaterial color="#4a5868" roughness={0.5} metalness={0.4} />
       </mesh>
       {/* 横臂（垂直道路挂向路口内，沿 armDir 方向） */}
       <group position={[0, POLE_HEIGHT - ARM_OFFSET, 0]} rotation={[0, armDir, 0]}>
-        <mesh position={[0, 0, ARM_LENGTH / 2]}>
+        <mesh position={[0, 0, ARM_LENGTH / 2]} material={TRAFFIC_MATERIALS.arm}>
           <boxGeometry args={[0.03, 0.03, ARM_LENGTH]} />
-          <meshStandardMaterial color="#4a5868" roughness={0.5} metalness={0.4} />
         </mesh>
       </group>
       {/* 吊架 + 灯头（悬于横臂端下方，灯面朝 facing = 本车道来车方向；灯头整体等比缩放） */}
       <group position={[armEndX - x, hangY, armEndZ - z]} rotation={[0, facing, 0]} scale={HEAD_SCALE}>
         {/* 吊架（顶在灯壳顶面，悬挂于横臂端） */}
-        <mesh position={[0, HEAD_HEIGHT / 2 + HEAD_HANG_DEPTH / 2, 0]}>
+        <mesh position={[0, HEAD_HEIGHT / 2 + HEAD_HANG_DEPTH / 2, 0]} material={TRAFFIC_MATERIALS.hanger}>
           <boxGeometry args={[0.08, HEAD_HANG_DEPTH, 0.05]} />
-          <meshStandardMaterial color="#3a4756" roughness={0.5} metalness={0.3} />
         </mesh>
         <LampHead lampKeys={lampKeys} />
       </group>
@@ -194,6 +191,8 @@ function StopLine({ x, z, axis }: { x: number; z: number; axis: 'x' | 'z' }) {
 }
 
 export function TrafficSceneContent() {
+  // 与龙门场景一致：程序化表面纹理只在首次渲染本场景时惰性烘焙一次
+  useMemo(() => { applyProceduralTextures(); return true; }, []);
   const halfRoad = ROAD_LENGTH / 2;
   return (
     <SceneContainer>

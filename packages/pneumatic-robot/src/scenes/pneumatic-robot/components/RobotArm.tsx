@@ -1,28 +1,16 @@
 import { useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useRobotStore, type CylinderName } from '../useRobotStore';
-import { COMPONENT, VISUAL, ANIMATION, STRUCT, rodTipLocalY } from '../constants';
+import { COMPONENT, ANIMATION, STRUCT, rodTipLocalY } from '../constants';
 import * as THREE from 'three';
+import { ROBOT_MATERIALS } from './robotMaterials';
 
-// ========== 共享材质 ==========
-const matPost = mkMat(VISUAL.FRAME_COLOR, 0.75, 0.25);
-const matCantilever = mkMat(VISUAL.BEAM_COLOR, 0.7, 0.3);
-const matBase = mkMat(VISUAL.BASE_COLOR, 0.6, 0.4);
-const matCylBody = mkMat(VISUAL.CYLINDER_BODY_COLOR, 0.7, 0.3);
-const matCylRod = mkMat(VISUAL.CYLINDER_ROD_COLOR, 0.9, 0.1);
-const matEndCap = mkMat(VISUAL.CYLINDER_END_CAP_COLOR, 0.65, 0.35);
-const matPlate = mkMat(VISUAL.MOUNT_PLATE_COLOR, 0.65, 0.35);
-const matGripBody = mkMat(VISUAL.GRIPPER_BODY_COLOR, 0.6, 0.35);
-const matGripFinger = mkMat(VISUAL.GRIPPER_FINGER_COLOR, 0.55, 0.4);
-const matWorkpiece = mkMat(0xD4A574, 0.5, 0.5);
-const matSensorOn = new THREE.MeshStandardMaterial({
-  color: VISUAL.MAG_SENSOR_ON, emissive: VISUAL.MAG_SENSOR_ON, emissiveIntensity: 1.5,
-});
-const matSensorOff = new THREE.MeshStandardMaterial({ color: VISUAL.MAG_SENSOR_OFF });
-
-function mkMat(color: number, metalness: number, roughness: number) {
-  return new THREE.MeshStandardMaterial({ color, metalness, roughness });
-}
+// ========== 共享材质（独立文件，本文件只导出组件） ==========
+const {
+  matPost, matCantilever, matBase, matCylBody, matCylRod,
+  matEndCap, matPlate, matGripBody, matGripFinger,
+  matWorkpiece, matSensorOn, matSensorOff,
+} = ROBOT_MATERIALS;
 
 const CYLINDER_NAMES: CylinderName[] = ['forward', 'lift', 'clamp'];
 

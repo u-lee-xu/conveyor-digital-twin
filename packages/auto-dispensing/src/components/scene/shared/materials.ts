@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applySurfaceTextures } from '@digital-twin/shared/three/surfaceTextures';
 import { VISUAL } from '../../../scenes/auto-dispensing/constants';
 
 /**
@@ -253,3 +254,20 @@ export const materials = {
     metalness: 0.1,
   }),
 } as const;
+
+/**
+ * 与汇川龙门场景一致的 Saltline 程序化表面细节：只挂金属结构件。
+ * 贴面（profileSlot/decal/decalDark）、功能色塑料件（flange/slider/hopper/bin）、
+ * 编码器芯线与 Z 相标记、聚氨酯弹性体、柜门面板及指示灯一律不挂。
+ */
+const DISPENSING_METAL_KEYS = [
+  'base', 'darkMetal', 'brightSilver', 'endCap', 'axle',
+  'cylinderBody', 'cylinderRod', 'brass', 'sleeve',
+  'motorBody', 'motorRib', 'motorFan', 'terminalBox',
+  'encoderBody', 'encoderTrim', 'encoderHub', 'encoderBellows', 'cabinet',
+] as const;
+
+/** 幂等惰性：由场景入口在首次渲染时调用一次 */
+export function applyProceduralTextures(): void {
+  applySurfaceTextures(materials, DISPENSING_METAL_KEYS);
+}

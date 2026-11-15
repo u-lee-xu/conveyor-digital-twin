@@ -2,9 +2,13 @@
  * MD520 独立场景内容：变频器柜 + 三相电机 + 短皮带。
  * 纯视觉装置，不挂 Rapier 刚体；网格与地面只作标尺，不参与任何业务闭环。
  */
+import { useMemo } from 'react';
+import { applyProceduralTextures } from '../../components/scene/shared/materials';
 import { PhysicsVfdDrive } from './PhysicsVfdDrive';
 
 export function VfdSceneContent() {
+  // 与龙门场景一致：程序化表面纹理只在首次渲染本场景时惰性烘焙一次
+  useMemo(() => { applyProceduralTextures(); return true; }, []);
   return (
     <>
       <color attach="background" args={['#1b2431']} />
