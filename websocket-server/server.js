@@ -6,6 +6,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { clampDint32, splitDint32, joinDint32, toSigned16, toUnsigned16 } = require('./dint32');
 const { verifyInternalRequest } = require('./runtime-role');
+const { LATENCY_META, printLatencyStats } = require('./latency-report');
 
 // 获取桌面路径，用于输出延迟测试报告
 function getDesktopPath() {
@@ -128,20 +129,40 @@ class SimpleModbusTCP {
     this.latencyLogFile = path.join(getDesktopPath(), 'latency_modbus.log');
   }
 
+  /** 16 位事务号单一来源：所有帧统一回绕，避免越界抛错或与旧帧撞号 */
+  _nextTid() {
+    this.transactionId = (this.transactionId + 1) & 0xffff;
+    return this.transactionId;
+  }
+
+  /** 连接重建 / 异常 / 关闭时立即结清在途请求，不让前端白等 2s 超时 */
+  _flushPending(error) {
+    for (const [, req] of this.pendingRequests) {
+      clearTimeout(req.timeout);
+      req.resolve({ success: false, error });
+    }
+    this.pendingRequests.clear();
+    this.receiveBuffer = Buffer.alloc(0);
+  }
+
   async connect(host, port) {
     return new Promise((resolve, reject) => {
       // 幂等：重复 connect 前释放旧 socket（多客户端共享网关场景）
       if (this.client) {
         try { this.client.destroy(); } catch {}
       }
+      this._flushPending('PLC 连接已重置');
       this.connected = false;
-      this.client = new net.Socket();
-      
-      this.client.on('connect', () => {
+      const socket = new net.Socket();
+      this.client = socket;
+
+      socket.on('connect', () => {
         this.connected = true;
         console.log(`ModbusTCP连接成功: ${host}:${port}`);
         
-        this.client.on('data', (data) => {
+        socket.on('data', (data) => {
+          // 旧 socket 迟到的数据不能污染新会话的响应匹配
+          if (this.client !== socket) return;
           this.receiveBuffer = Buffer.concat([this.receiveBuffer, data]);
 
           while (this.receiveBuffer.length >= 8) {
@@ -177,9 +198,10 @@ class SimpleModbusTCP {
                     this.latencyStats.last10Write.shift();
                   }
                 }
-                // 每10次打印一次统计
-                const total = this.latencyStats.read.length + this.latencyStats.write.length;
-                if (total % 50 === 0) {
+                // 每 500 次响应打一次统计：不能用数组长度取模，封顶后长度恒定会每帧触发
+                this._latencyTick = (this._latencyTick || 0) + 1;
+                if (this._latencyTick >= 500) {
+                  this._latencyTick = 0;
                   this._printLatencyStats();
                 }
               }
@@ -224,26 +246,35 @@ class SimpleModbusTCP {
         resolve({ success: true });
       });
 
-      this.client.on('error', (error) => {
+      socket.on('error', (error) => {
+        if (this.client !== socket) return;
         console.error('ModbusTCP连接失败:', error);
-        this.receiveBuffer = Buffer.alloc(0);
+        this._flushPending('PLC 连接异常');
+        this.connected = false;
         reject({ success: false, error: error.message });
       });
 
-      this.client.on('close', () => {
-        this.receiveBuffer = Buffer.alloc(0);
+      socket.on('close', () => {
+        if (this.client !== socket) return;
+        this._flushPending('PLC 连接已关闭');
+        this.connected = false;
       });
 
-      this.client.connect(port, host);
+      socket.connect(port, host);
     });
   }
 
   async disconnect() {
-    if (this.connected && this.client) {
+    this._flushPending('PLC 连接已断开');
+    const socket = this.client;
+    if (this.connected && socket) {
       return new Promise((resolve) => {
-        this.client.end(() => {
-          this.connected = false;
-          this.client = null;
+        socket.end(() => {
+          // 旧会话的 end 回调不能把新会话刚建好的 socket 抹成 null
+          if (this.client === socket) {
+            this.connected = false;
+            this.client = null;
+          }
           console.log('ModbusTCP连接已断开');
           this._printLatencyStats(true); // 断开连接时输出最终汇总报告
           resolve({ success: true });
@@ -256,77 +287,8 @@ class SimpleModbusTCP {
   }
 
   _printLatencyStats(isFinal = false) {
-    const read = this.latencyStats.read;
-    const write = this.latencyStats.write;
-    if (read.length + write.length === 0) return;
-
-    const calcStats = (arr) => {
-      if (arr.length === 0) return { avg: 0, min: 0, max: 0, p95: 0 };
-      const sorted = [...arr].sort((a, b) => a - b);
-      return {
-        avg: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
-        min: sorted[0],
-        max: sorted[sorted.length - 1],
-        p95: sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1]
-      };
-    };
-
-    const readStats = calcStats(read);
-    const writeStats = calcStats(write);
-
-    const timestamp = new Date().toISOString();
-    const output =
-      '\n' +
-      '='.repeat(60) + '\n' +
-      `[ModbusTCP 通信延迟统计] ${timestamp}\n` +
-      `读请求次数: ${read.length}, 平均: ${readStats.avg}ms, 最小: ${readStats.min}ms, 最大: ${readStats.max}ms, P95: ${readStats.p95}ms\n` +
-      `写请求次数: ${write.length}, 平均: ${writeStats.avg}ms, 最小: ${writeStats.min}ms, 最大: ${writeStats.max}ms, P95: ${writeStats.p95}ms\n` +
-      '='.repeat(60) + '\n';
-
-    // 输出到控制台
-    console.log(output);
-    // 输出到日志文件
-    fs.appendFileSync(this.latencyLogFile, output);
-
-    // 断开连接时输出格式化汇总报告到桌面
-    if (isFinal) {
-      const now = new Date();
-      const dateStr = now.getFullYear() +
-        String(now.getMonth() + 1).padStart(2, '0') +
-        String(now.getDate()).padStart(2, '0') + '_' +
-        String(now.getHours()).padStart(2, '0') +
-        String(now.getMinutes()).padStart(2, '0');
-      const reportFile = path.join(__dirname, `延迟测试报告_ModbusTCP_${dateStr}.txt`);
-      const report =
-        `通信延迟测试报告 - ModbusTCP协议\n` +
-        `测试时间: ${now.toLocaleString('zh-CN')}\n` +
-        `测试环境: AutoShop仿真\n` +
-        `${'='.repeat(50)}\n` +
-        `\n` +
-        `读操作:\n` +
-        `  请求次数: ${read.length}\n` +
-        `  平均延迟: ${readStats.avg}ms\n` +
-        `  P95延迟:  ${readStats.p95}ms\n` +
-        `  最小延迟: ${readStats.min}ms\n` +
-        `  最大延迟: ${readStats.max}ms\n` +
-        `\n` +
-        `写操作:\n` +
-        `  请求次数: ${write.length}\n` +
-        `  平均延迟: ${writeStats.avg}ms\n` +
-        `  P95延迟:  ${writeStats.p95}ms\n` +
-        `  最小延迟: ${writeStats.min}ms\n` +
-        `  最大延迟: ${writeStats.max}ms\n` +
-        `\n` +
-        `${'='.repeat(50)}\n` +
-        `论文表3填写参考:\n` +
-        `  读操作平均延迟: ${readStats.avg}ms\n` +
-        `  读操作P95延迟:  ${readStats.p95}ms\n` +
-        `  写操作平均延迟: ${writeStats.avg}ms\n` +
-        `  写操作P95延迟:  ${writeStats.p95}ms\n` +
-        `  最大延迟: ${Math.max(readStats.max, writeStats.max)}ms\n`;
-      fs.writeFileSync(reportFile, report, 'utf-8');
-      console.log(`\n延迟测试报告已保存到: ${reportFile}`);
-    }
+    // 统计口径由 latency-report.js 单一来源维护，本类只提供协议文案与日志路径
+    printLatencyStats(this.latencyStats, LATENCY_META.modbus, { isFinal, logFile: this.latencyLogFile });
   }
 
   async readCoils(address, length) {
@@ -334,8 +296,7 @@ class SimpleModbusTCP {
 
     return new Promise((resolve) => {
       try {
-        this.transactionId++;
-        const tid = this.transactionId;
+        const tid = this._nextTid();
         const buffer = Buffer.alloc(12);
         buffer.writeUInt16BE(tid, 0);
         buffer.writeUInt16BE(0, 2);
@@ -361,8 +322,7 @@ class SimpleModbusTCP {
 
     return new Promise((resolve) => {
       try {
-        this.transactionId++;
-        const tid = this.transactionId;
+        const tid = this._nextTid();
         const buffer = Buffer.alloc(12);
         buffer.writeUInt16BE(tid, 0);
         buffer.writeUInt16BE(0, 2);
@@ -388,8 +348,7 @@ class SimpleModbusTCP {
 
     return new Promise((resolve) => {
       try {
-        this.transactionId = (this.transactionId + 1) % 65536;
-        const tid = this.transactionId;
+        const tid = this._nextTid();
         const count = values.length;
         const byteCount = Math.ceil(count / 8);
         const buffer = Buffer.alloc(13 + byteCount);
@@ -428,8 +387,7 @@ class SimpleModbusTCP {
     if (!this.connected) return { success: false, error: 'Modbus未连接' };
     return new Promise((resolve) => {
       try {
-        this.transactionId = (this.transactionId + 1) % 65536;
-        const tid = this.transactionId;
+        const tid = this._nextTid();
         const buffer = Buffer.alloc(12);
         buffer.writeUInt16BE(tid, 0);
         buffer.writeUInt16BE(0, 2);
@@ -455,8 +413,7 @@ class SimpleModbusTCP {
     if (!this.connected) return { success: false, error: 'Modbus未连接' };
     return new Promise((resolve) => {
       try {
-        this.transactionId = (this.transactionId + 1) % 65536;
-        const tid = this.transactionId;
+        const tid = this._nextTid();
         const count = values.length;
         const byteCount = count * 2;
         const buffer = Buffer.alloc(13 + byteCount);
@@ -602,6 +559,16 @@ class SimpleS7Client {
     this.latencyLogFile = path.join(getDesktopPath(), 'latency_s7.log');
   }
 
+  /** 断线 / 超时 / 主动断开时结清排队中的读写 Promise，避免前端永久挂起 */
+  _rejectQueue(error) {
+    const pending = this._opQueue;
+    this._opQueue = [];
+    for (const item of pending) {
+      try { item.reject(error); } catch {}
+    }
+    this._processing = false;
+  }
+
   _cleanup() {
     if (this._connCheckInterval) {
       clearInterval(this._connCheckInterval);
@@ -616,8 +583,7 @@ class SimpleS7Client {
     this.connected = false;
     this.connecting = false;
     this.itemsRegistered = false;
-    this._opQueue = [];
-    this._processing = false;
+    this._rejectQueue(new Error('S7 连接已重置，操作已取消'));
   }
 
   _enqueue(fn) {
@@ -660,77 +626,8 @@ class SimpleS7Client {
   }
 
   _printLatencyStats(isFinal = false) {
-    const read = this.latencyStats.read;
-    const write = this.latencyStats.write;
-    if (read.length + write.length === 0) return;
-
-    const calcStats = (arr) => {
-      if (arr.length === 0) return { avg: 0, min: 0, max: 0, p95: 0 };
-      const sorted = [...arr].sort((a, b) => a - b);
-      return {
-        avg: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
-        min: sorted[0],
-        max: sorted[sorted.length - 1],
-        p95: sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1]
-      };
-    };
-
-    const readStats = calcStats(read);
-    const writeStats = calcStats(write);
-
-    const timestamp = new Date().toISOString();
-    const output =
-      '\n' +
-      '='.repeat(60) + '\n' +
-      `[S7 通信延迟统计] ${timestamp}\n` +
-      `读请求次数: ${read.length}, 平均: ${readStats.avg}ms, 最小: ${readStats.min}ms, 最大: ${readStats.max}ms, P95: ${readStats.p95}ms\n` +
-      `写请求次数: ${write.length}, 平均: ${writeStats.avg}ms, 最小: ${writeStats.min}ms, 最大: ${writeStats.max}ms, P95: ${writeStats.p95}ms\n` +
-      '='.repeat(60) + '\n';
-
-    // 输出到控制台
-    console.log(output);
-    // 输出到日志文件
-    fs.appendFileSync(this.latencyLogFile, output);
-
-    // 断开连接时输出格式化汇总报告到桌面
-    if (isFinal) {
-      const now = new Date();
-      const dateStr = now.getFullYear() +
-        String(now.getMonth() + 1).padStart(2, '0') +
-        String(now.getDate()).padStart(2, '0') + '_' +
-        String(now.getHours()).padStart(2, '0') +
-        String(now.getMinutes()).padStart(2, '0');
-      const reportFile = path.join(__dirname, `延迟测试报告_S7_${dateStr}.txt`);
-      const report =
-        `通信延迟测试报告 - S7 Communication协议\n` +
-        `测试时间: ${now.toLocaleString('zh-CN')}\n` +
-        `测试环境: TIA Portal + PLCSIM + NetToPLCSim\n` +
-        `${'='.repeat(50)}\n` +
-        `\n` +
-        `读操作:\n` +
-        `  请求次数: ${read.length}\n` +
-        `  平均延迟: ${readStats.avg}ms\n` +
-        `  P95延迟:  ${readStats.p95}ms\n` +
-        `  最小延迟: ${readStats.min}ms\n` +
-        `  最大延迟: ${readStats.max}ms\n` +
-        `\n` +
-        `写操作:\n` +
-        `  请求次数: ${write.length}\n` +
-        `  平均延迟: ${writeStats.avg}ms\n` +
-        `  P95延迟:  ${writeStats.p95}ms\n` +
-        `  最小延迟: ${writeStats.min}ms\n` +
-        `  最大延迟: ${writeStats.max}ms\n` +
-        `\n` +
-        `${'='.repeat(50)}\n` +
-        `论文表3填写参考:\n` +
-        `  读操作平均延迟: ${readStats.avg}ms\n` +
-        `  读操作P95延迟:  ${readStats.p95}ms\n` +
-        `  写操作平均延迟: ${writeStats.avg}ms\n` +
-        `  写操作P95延迟:  ${writeStats.p95}ms\n` +
-        `  最大延迟: ${Math.max(readStats.max, writeStats.max)}ms\n`;
-      fs.writeFileSync(reportFile, report, 'utf-8');
-      console.log(`\n延迟测试报告已保存到: ${reportFile}`);
-    }
+    // 统计口径由 latency-report.js 单一来源维护，本类只提供协议文案与日志路径
+    printLatencyStats(this.latencyStats, LATENCY_META.s7, { isFinal, logFile: this.latencyLogFile });
   }
 
   _startConnCheck() {
@@ -837,8 +734,7 @@ class SimpleS7Client {
     this.nodes7 = null;
     this.connecting = false;
     this.itemsRegistered = false;
-    this._opQueue = [];
-    this._processing = false;
+    this._rejectQueue(new Error('S7 连接已断开，操作已取消'));
     if (this._connCheckInterval) {
       clearInterval(this._connCheckInterval);
       this._connCheckInterval = null;
@@ -895,9 +791,10 @@ class SimpleS7Client {
               if (this.latencyStats.last10Read.length > 10) {
                 this.latencyStats.last10Read.shift();
               }
-              // 每50次打印统计
-              const total = this.latencyStats.read.length + this.latencyStats.write.length;
-              if (total % 50 === 0) {
+              // 每 500 次响应打一次：数组封顶后长度恒定，不能用长度取模
+              this._latencyTick = (this._latencyTick || 0) + 1;
+              if (this._latencyTick >= 500) {
+                this._latencyTick = 0;
                 this._printLatencyStats();
               }
 
@@ -977,9 +874,10 @@ class SimpleS7Client {
               if (this.latencyStats.last10Write.length > 10) {
                 this.latencyStats.last10Write.shift();
               }
-              // 每50次打印统计
-              const total = this.latencyStats.read.length + this.latencyStats.write.length;
-              if (total % 50 === 0) {
+              // 每 500 次响应打一次：数组封顶后长度恒定，不能用长度取模
+              this._latencyTick = (this._latencyTick || 0) + 1;
+              if (this._latencyTick >= 500) {
+                this._latencyTick = 0;
                 this._printLatencyStats();
               }
 
@@ -1032,9 +930,10 @@ class SimpleS7Client {
               if (this.latencyStats.last10Write.length > 10) {
                 this.latencyStats.last10Write.shift();
               }
-              // 每50次打印统计
-              const total = this.latencyStats.read.length + this.latencyStats.write.length;
-              if (total % 50 === 0) {
+              // 每 500 次响应打一次：数组封顶后长度恒定，不能用长度取模
+              this._latencyTick = (this._latencyTick || 0) + 1;
+              if (this._latencyTick >= 500) {
+                this._latencyTick = 0;
                 this._printLatencyStats();
               }
 
@@ -1098,74 +997,8 @@ class MitsubishiMX {
   }
 
   _printLatencyStats(isFinal = false) {
-    const read = this.latencyStats.read;
-    const write = this.latencyStats.write;
-    if (read.length + write.length === 0) return;
-
-    const calcStats = (arr) => {
-      if (arr.length === 0) return { avg: 0, min: 0, max: 0, p95: 0 };
-      const sorted = [...arr].sort((a, b) => a - b);
-      return {
-        avg: Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length),
-        min: sorted[0],
-        max: sorted[sorted.length - 1],
-        p95: sorted[Math.floor(sorted.length * 0.95)] || sorted[sorted.length - 1]
-      };
-    };
-
-    const readStats = calcStats(read);
-    const writeStats = calcStats(write);
-
-    const timestamp = new Date().toISOString();
-    const output =
-      '\n' +
-      '='.repeat(60) + '\n' +
-      `[三菱MX 通信延迟统计] ${timestamp}\n` +
-      `读请求次数: ${read.length}, 平均: ${readStats.avg}ms, 最小: ${readStats.min}ms, 最大: ${readStats.max}ms, P95: ${readStats.p95}ms\n` +
-      `写请求次数: ${write.length}, 平均: ${writeStats.avg}ms, 最小: ${writeStats.min}ms, 最大: ${writeStats.max}ms, P95: ${writeStats.p95}ms\n` +
-      '='.repeat(60) + '\n';
-
-    console.log(output);
-    fs.appendFileSync(this.latencyLogFile, output);
-
-    if (isFinal) {
-      const now = new Date();
-      const dateStr = now.getFullYear() +
-        String(now.getMonth() + 1).padStart(2, '0') +
-        String(now.getDate()).padStart(2, '0') + '_' +
-        String(now.getHours()).padStart(2, '0') +
-        String(now.getMinutes()).padStart(2, '0');
-      const reportFile = path.join(__dirname, `延迟测试报告_三菱MX_${dateStr}.txt`);
-      const report =
-        `通信延迟测试报告 - 三菱MX Component\n` +
-        `测试时间: ${now.toLocaleString('zh-CN')}\n` +
-        `测试环境: 三菱FX3U via MX Component + GX Simulator 2\n` +
-        `${'='.repeat(50)}\n` +
-        `\n` +
-        `读操作:\n` +
-        `  请求次数: ${read.length}\n` +
-        `  平均延迟: ${readStats.avg}ms\n` +
-        `  P95延迟:  ${readStats.p95}ms\n` +
-        `  最小延迟: ${readStats.min}ms\n` +
-        `  最大延迟: ${readStats.max}ms\n` +
-        `\n` +
-        `写操作:\n` +
-        `  请求次数: ${write.length}\n` +
-        `  平均延迟: ${writeStats.avg}ms\n` +
-        `  P95延迟:  ${writeStats.p95}ms\n` +
-        `  最小延迟: ${writeStats.min}ms\n` +
-        `  最大延迟: ${writeStats.max}ms\n` +
-        `\n` +
-        `${'='.repeat(50)}\n` +
-        `论文表3填写参考:\n` +
-        `  读操作平均延迟: ${readStats.avg}ms\n` +
-        `  读操作P95延迟:  ${readStats.p95}ms\n` +
-        `  写操作平均延迟: ${writeStats.avg}ms\n` +
-        `  写操作P95延迟:  ${writeStats.p95}ms\n` +
-        `  最大延迟: ${Math.max(readStats.max, writeStats.max)}ms\n`;
-      fs.writeFileSync(reportFile, report, 'utf-8');
-      console.log(`\n延迟测试报告已保存到: ${reportFile}`);
-    }
+    // 统计口径由 latency-report.js 单一来源维护，本类只提供协议文案与日志路径
+    printLatencyStats(this.latencyStats, LATENCY_META.mitsubishi, { isFinal, logFile: this.latencyLogFile });
   }
 
   /**
@@ -1432,12 +1265,11 @@ class MitsubishiMX {
       if (this._ps && this._ready) {
         try {
           await this._sendCommand({ type: 'exit' });
-        } catch {}
+        } catch { /* exit 无响应时统一走下面的强杀 */ }
       }
-      // PS 进程已在 exit 命令中自行清理退出，不调用 _killPS() 强杀
-      this._ps = null;
-      this.connected = false;
-      this._ready = false;
+      // exit 失败 / 超时 / 进程未自行退出都会留下 Hold COM 逻辑站的孤儿 PowerShell；
+      // 无论上面结果如何都强杀并清空引用，下次 connect 才能重新拉起干净的实例。
+      this._killPS();
       return { success: true };
     } finally { this._unlock(); }
   }
@@ -1462,8 +1294,11 @@ class MitsubishiMX {
       this.latencyStats.read.push(latency);
       this.latencyStats.last10Read.push(latency);
       if (this.latencyStats.last10Read.length > 10) this.latencyStats.last10Read.shift();
-      const total = this.latencyStats.read.length + this.latencyStats.write.length;
-      if (total % 50 === 0) this._printLatencyStats();
+      this._latencyTick = (this._latencyTick || 0) + 1;
+      if (this._latencyTick >= 500) {
+        this._latencyTick = 0;
+        this._printLatencyStats();
+      }
 
       const values = {};
       let trueCount = 0;
@@ -1504,8 +1339,11 @@ class MitsubishiMX {
       this.latencyStats.write.push(latency);
       this.latencyStats.last10Write.push(latency);
       if (this.latencyStats.last10Write.length > 10) this.latencyStats.last10Write.shift();
-      const total = this.latencyStats.read.length + this.latencyStats.write.length;
-      if (total % 50 === 0) this._printLatencyStats();
+      this._latencyTick = (this._latencyTick || 0) + 1;
+      if (this._latencyTick >= 500) {
+        this._latencyTick = 0;
+        this._printLatencyStats();
+      }
 
       console.log('[三菱MX] 写入成功:', varName, '=', value, '延迟=' + latency + 'ms');
       return { success: true };
@@ -1531,8 +1369,11 @@ class MitsubishiMX {
       this.latencyStats.write.push(latency);
       this.latencyStats.last10Write.push(latency);
       if (this.latencyStats.last10Write.length > 10) this.latencyStats.last10Write.shift();
-      const total = this.latencyStats.read.length + this.latencyStats.write.length;
-      if (total % 50 === 0) this._printLatencyStats();
+      this._latencyTick = (this._latencyTick || 0) + 1;
+      if (this._latencyTick >= 500) {
+        this._latencyTick = 0;
+        this._printLatencyStats();
+      }
 
       if (result.ok) {
         console.log('[三菱MX] 批量写入成功:', varNames.join(','), '延迟=' + latency + 'ms');
@@ -1829,9 +1670,15 @@ function validateNumberValues(raw, expected, label) {
   });
 }
 
+/** 单帧上限：正常快照/connect 帧远小于 64KB，超长帧直接由 ws 协议层拒绝 */
+const MAX_WS_FRAME = 64 * 1024;
+const WS_HEARTBEAT_MS = 30000;
+
 const wss = new WebSocket.Server({
   port: WS_PORT,
   host: WS_HOST,
+  maxPayload: MAX_WS_FRAME,
+  perMessageDeflate: false,
   // 第二道防线：代理层已按 localAddress 拦截 LAN；网关再复核一次角色与一次性 token
   verifyClient: (info) => {
     const verdict = verifyInternalRequest(info.req, { allowViewer: false });
@@ -1840,11 +1687,26 @@ const wss = new WebSocket.Server({
   },
 });
 
+/** 半开连接检测：30s 未回 pong 直接 terminate，避免 controller 被僵尸连接占死 */
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) { ws.terminate(); continue; }
+    ws.isAlive = false;
+    try { ws.ping(); } catch { ws.terminate(); }
+  }
+}, WS_HEARTBEAT_MS);
+heartbeat.unref?.();
+
 const clients = {
   modbus: new SimpleModbusTCP(),
   s7: new SimpleS7Client(),
   mitsubishi: new MitsubishiMX(),
 };
+/**
+ * 遗留兼容缺省点位表：仅为既有场景在未显式下发 variables 时保留，值不改动。
+ * 单独开发的新场景包必须在 connect 帧显式提供 variables / wordVariables，
+ * 不得依赖这里继承的气动 / S7 / 三菱点位（详见 AGENTS.md 场景包导入契约）。
+ */
 const DEFAULT_VARS = {
   modbus: Object.assign(Object.create(null), PNEUMATIC_MODBUS_VARS),
   s7: Object.assign(Object.create(null), S7_VARIABLES),
@@ -1854,6 +1716,9 @@ const DEFAULT_VARS = {
 /** per-connection session；controller 是当前唯一持有 PLC 链路的 WS 连接 */
 const sessions = new Map();
 let controller = null;
+/** 同步占坑：正在建立 / 释放 PLC 会话的 WS，防 async connect 之间的 TOCTOU 串改全局 client */
+let pendingConnect = null;
+let releasing = null;
 
 function sessionOf(ws) {
   let s = sessions.get(ws);
@@ -1866,19 +1731,25 @@ function sessionOf(ws) {
 function activeSession() { return controller ? sessions.get(controller) || null : null; }
 
 async function releaseController(ws) {
-  if (!ws || controller !== ws) return;
+  // 同一主控的 close / disconnect 帧可能并发进来，重复 disconnect 会抹掉新会话的 socket
+  if (!ws || controller !== ws || releasing === ws) return;
+  releasing = ws;
   const s = sessions.get(ws);
   controller = null;
-  if (s) {
-    if (s.client) {
-      try { await s.client.disconnect(); } catch { /* 断开失败也要释放会话 */ }
+  try {
+    if (s) {
+      if (s.client) {
+        try { await s.client.disconnect(); } catch { /* 断开失败也要释放会话 */ }
+      }
+      s.protocol = null;
+      s.variables = null;
+      s.wordVariables = null;
+      s.client = null;
     }
-    s.protocol = null;
-    s.variables = null;
-    s.wordVariables = null;
-    s.client = null;
+    console.log('[WS] PLC 主控会话已释放');
+  } finally {
+    if (releasing === ws) releasing = null;
   }
-  console.log('[WS] PLC 主控会话已释放');
 }
 
 console.log(`WebSocket服务器启动在 ${WS_HOST}:${WS_PORT}（仅本机可达）`);
@@ -1892,6 +1763,11 @@ async function gracefulShutdown() {
     try { await s.client.disconnect(); } catch { /* noop */ }
   }
   clients.mitsubishi.shutdown();
+  clearInterval(heartbeat);
+  // wss.close() 只停止接受新连接；半开连接要主动 terminate，否则进程可能一直挂在这里
+  for (const ws of wss.clients) {
+    try { ws.terminate(); } catch {}
+  }
   wss.close();
   process.exit(0);
 }
@@ -1908,6 +1784,16 @@ process.stdin.on('data', (data) => {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 process.on('exit', () => { clients.mitsubishi.shutdown(); });
+// 兜底：单次请求的 Promise 拒绝只记录；未捕获异常必须记录后安全退出，
+// 由 start-lab.cjs 的子进程监控拉起，不能带着半初始化的状态继续跑。
+process.on('unhandledRejection', (reason) => {
+  console.error('[WS] 未处理的 Promise 拒绝:', reason && reason.message ? reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[WS] 未捕获异常，网关退出:', err);
+  try { clients.mitsubishi.shutdown(); } catch {}
+  process.exit(1);
+});
 
 /** 帧分发：所有分支显式 switch，不允许 null / 未知协议落到 else 兜底 */
 async function dispatch(ws, d) {
@@ -1923,46 +1809,57 @@ async function dispatch(ws, d) {
   }
 
   if (type === 'connect') {
+    // 同步占坑：async connect 期间不允许其它连接覆写模块级 client 的地址表 / socket
+    if (pendingConnect && pendingConnect !== ws) return fail('另一个连接正在建立 PLC 链路，请稍后重试');
+    if (releasing && releasing !== ws) return fail('上一个 PLC 会话正在释放，请稍后重试');
     if (controller && controller !== ws && controller.readyState === WebSocket.OPEN) {
       return fail('已有主控连接 PLC，请先断开原连接');
     }
-    if (controller && controller !== ws) await releaseController(controller);
-    const cfg = validateConnect(d);
-    if (controller === ws) await releaseController(ws);
+    // 同步占坑必须早于任何 await：否则并发 connect 会在对方让出事件循环时插入，
+    // 互相覆写模块级 client 的地址表（P2-6 残余 TOCTOU）。validateConnect 也放进
+    // try，抛错时 finally 会清理占坑，避免后续连接被永久挡住。
+    pendingConnect = ws;
+    try {
+      if (controller && controller !== ws) await releaseController(controller);
+      const cfg = validateConnect(d);
+      if (controller === ws) await releaseController(ws);
+      const client = clients[cfg.protocol];
+      const variables = cfg.variables || DEFAULT_VARS[cfg.protocol];
+      const wordVariables = cfg.wordVariables || Object.create(null);
+      client.variables = variables;
+      client.wordVariables = wordVariables;
 
-    const client = clients[cfg.protocol];
-    const variables = cfg.variables || DEFAULT_VARS[cfg.protocol];
-    const wordVariables = cfg.wordVariables || Object.create(null);
-    client.variables = variables;
-    client.wordVariables = wordVariables;
+      let result;
+      switch (cfg.protocol) {
+        case 'modbus':
+          result = await client.connect(cfg.host, cfg.port);
+          break;
+        case 's7':
+          result = await client.connect(cfg.host, cfg.port, cfg.rack, cfg.slot);
+          break;
+        case 'mitsubishi':
+          result = await client.connect(cfg.host, cfg.port);
+          break;
+        default:
+          return fail('未知协议');
+      }
+      if (!result || !result.success) return result || fail('连接失败');
 
-    let result;
-    switch (cfg.protocol) {
-      case 'modbus':
-        result = await client.connect(cfg.host, cfg.port);
-        break;
-      case 's7':
-        result = await client.connect(cfg.host, cfg.port, cfg.rack, cfg.slot);
-        break;
-      case 'mitsubishi':
-        result = await client.connect(cfg.host, cfg.port);
-        break;
-      default:
-        return fail('未知协议');
+      controller = ws;
+      const session = sessionOf(ws);
+      session.protocol = cfg.protocol;
+      session.variables = variables;
+      session.wordVariables = wordVariables;
+      session.client = client;
+      console.log(`[WS] PLC 主控已建立: ${cfg.protocol} @ ${cfg.host}:${cfg.port}`);
+      return { success: true };
+    } finally {
+      if (pendingConnect === ws) pendingConnect = null;
     }
-    if (!result || !result.success) return result || fail('连接失败');
-
-    controller = ws;
-    const session = sessionOf(ws);
-    session.protocol = cfg.protocol;
-    session.variables = variables;
-    session.wordVariables = wordVariables;
-    session.client = client;
-    console.log(`[WS] PLC 主控已建立: ${cfg.protocol} @ ${cfg.host}:${cfg.port}`);
-    return { success: true };
   }
 
   if (type === 'disconnect') {
+    if (pendingConnect && pendingConnect !== ws) return fail('PLC 链路正在建立，请稍后重试');
     if (controller && controller !== ws) return fail('当前连接不是 PLC 主控');
     if (!controller) return { success: true };
     await releaseController(controller);
@@ -2026,21 +1923,32 @@ async function dispatch(ws, d) {
 
 wss.on('connection', (ws) => {
   sessionOf(ws);
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+  // 单连接 error 必须有监听：协议错误/超长帧触发 emit('error') 时不能变成未捕获异常
+  ws.on('error', (err) => console.warn('[WS] 连接异常:', err && err.message ? err.message : err));
   ws.on('message', async (message) => {
     let parsedData = null;
     try {
+      if (message && typeof message.length === 'number' && message.length > MAX_WS_FRAME) {
+        throw new Error('帧过大');
+      }
       parsedData = JSON.parse(message);
       if (!isRecord(parsedData) || typeof parsedData.type !== 'string' || !ALLOWED_TYPES.has(parsedData.type)) {
         throw new Error(`未知消息类型: ${String(parsedData && parsedData.type)}`);
       }
       const result = await dispatch(ws, parsedData);
-      ws.send(JSON.stringify({ id: parsedData.id, type: parsedData.type, ...result }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ id: parsedData.id, type: parsedData.type, ...result }));
+      }
     } catch (error) {
-      ws.send(JSON.stringify({
-        id: (parsedData && parsedData.id) || 'unknown',
-        success: false,
-        error: error.message,
-      }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          id: (parsedData && parsedData.id) || 'unknown',
+          success: false,
+          error: error.message,
+        }));
+      }
     }
   });
 

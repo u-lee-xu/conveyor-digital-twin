@@ -14,6 +14,8 @@
  *    切换模式与恢复出厂参数会解除接管。
  */
 import { create } from 'zustand';
+// 子路径导入：不把 shared barrel 的 UI / 服务模块拉进设备分包
+import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
   MD520_PARAMS, MD520_PARAM_MAP, MD520_DI, MD520_DO, MD520_COMMAND,
   MD520_STATUS, MD520_SOURCE, MD520_AI,
@@ -443,17 +445,15 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       : !running ? MD520_STATUS.STOP
         : (s.direction === -1 ? MD520_STATUS.REV : MD520_STATUS.FWD);
 
-    set({
-      outputHz,
-      runDirection,
-      outputCurrent,
-      outputPower,
-      running,
-      command,
-      status,
-      doFlags,
-      params: { ...s.params, 'U0-00': Math.round(outputHz * 100) / 100 },
-    });
+    // U0-00 只在两位小数变化时更新；静止期复用整张参数表，省掉每帧 39 项复制
+    const u0 = Math.round(outputHz * 100) / 100;
+    const params = Object.is(s.params['U0-00'], u0) ? s.params : { ...s.params, 'U0-00': u0 };
+    const patch = {
+      outputHz, runDirection, outputCurrent, outputPower,
+      running, command, status, doFlags, params,
+    };
+    // 静止期不写 store；斜坡 / 换向 / 频率变化时照常写入，连续性不变
+    if (patchChanged(s, patch)) set(patch);
     return outputHz / NOMINAL_HZ;
   },
 

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { useGantryStore, exportGantrySnapshot } from './stores/useGantryStore';
 import { GANTRY_DEMO_SEQUENCE } from './constants/gantryConstants';
 import {
-  GANTRY_WORD_VARIABLES, GANTRY_ADDRESS_ROWS, GANTRY_SENSOR_FEEDBACK,
+  GANTRY_WORD_VARIABLES, GANTRY_ADDRESS_ROWS, GANTRY_SENSOR_FEEDBACK, GANTRY_COILS,
   gantrySensorBits, gantryBoolVarsFor,
 } from './constants/gantryVariables';
 
@@ -21,6 +21,27 @@ const PANEL = 'packages/inovance-gantry/src/platform/';
 const IDX = 'packages/inovance-gantry/src/index.ts';
 
 beforeEach(() => { useGantryStore.getState().resetAll(); });
+
+describe('地址分配规范：场景内独立命名空间（P1/P2/P5）', () => {
+  it('地址表 / 线圈表同源且从 C0 起，传感器回写地址连续', () => {
+    // 只锁本场景自洽，不与其他场景比较，也不写跨场景避让判断（规范 P4）。
+    expect(GANTRY_COILS.GANTRY_X_ENABLE).toBe(0);
+    GANTRY_SENSOR_FEEDBACK.forEach((r, i) => {
+      expect(r.modbus, r.key).toBe(9 + i);
+      expect(GANTRY_COILS[r.key], r.key).toBe(r.modbus);
+      expect(gantryBoolVarsFor('s7')![r.key], r.key).toBe(r.s7);
+      expect(gantryBoolVarsFor('mitsubishi')![r.key], r.key).toBe(r.mitsubishi);
+    });
+    const coilNumbers = new Set<number>(Object.values(GANTRY_COILS));
+    for (const row of GANTRY_ADDRESS_ROWS) {
+      const re = /C(\d+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(row.modbus)) !== null) {
+        expect(coilNumbers.has(Number(m[1])), `${row.signal} → C${m[1]}`).toBe(true);
+      }
+    }
+  });
+});
 
 describe('三模式注册与切换收口', () => {
   it('手动 / 演示 / 仿真三档，仿真需要连接，评分不做', () => {
@@ -283,7 +304,7 @@ describe('仿真模式与 PLC 交互', () => {
     const vars = read('packages/inovance-gantry/src/constants/gantryVariables.ts');
     expect(vars).toContain('GANTRY_PICK_CELL');
     expect(vars).toContain('GANTRY_PLACE_CELL');
-    expect(read('websocket-server/mock-gantry-server.js')).toContain('GANTRY_PICK_CELL: 211');
+    expect(read('websocket-server/mock-gantry-server.js')).toContain('GANTRY_PICK_CELL: 11');
     expect(read(`${PANEL}GantryDeviceEffects.tsx`)).toContain('pickCell: num(');
     const store = read('packages/inovance-gantry/src/stores/useGantryStore.ts');
     expect(store).toContain("if (s.controlSource === 'plc')");
@@ -328,14 +349,14 @@ describe('仿真模式与 PLC 交互', () => {
 
   it('6 路接近开关按 sensor→PLC 回写：Modbus 走 coils，S7 / 三菱走变量名', () => {
     expect(GANTRY_SENSOR_FEEDBACK).toHaveLength(6);
-    expect(GANTRY_SENSOR_FEEDBACK[0].modbus).toBe(29);
-    expect(GANTRY_SENSOR_FEEDBACK[5].modbus).toBe(34);
+    expect(GANTRY_SENSOR_FEEDBACK[0].modbus).toBe(9);
+    expect(GANTRY_SENSOR_FEEDBACK[5].modbus).toBe(14);
     expect(gantrySensorBits({
       origin: true, endMinus: false, endPlus: false,
       xOrigin: false, xEndMinus: true, xEndPlus: false,
     })).toEqual([true, false, false, false, true, false]);
     expect(gantryBoolVarsFor('modbus')).toBeUndefined();
-    expect(gantryBoolVarsFor('s7')?.['GANTRY_SENSOR_ORIGIN']).toBe('M140.1');
+    expect(gantryBoolVarsFor('s7')?.['GANTRY_SENSOR_ORIGIN']).toBe('M40.1');
     expect(gantryBoolVarsFor('mitsubishi')?.['GANTRY_SENSOR_X_END_PLUS']).toBe('X6');
     // 只在状态变化时发帧；写失败不更新掩码以便下轮重试
     const effects = read(`${PANEL}GantryDeviceEffects.tsx`);
@@ -347,5 +368,22 @@ describe('仿真模式与 PLC 交互', () => {
     expect(conn).toContain('boolVariables');
     expect(conn).toContain('gantryBoolVarsFor');
     expect(GANTRY_ADDRESS_ROWS.find((r) => r.signal.includes('原点与限位'))?.direction).toBe('设备 → PLC');
+  });
+});
+
+describe('rAF 写入守卫', () => {
+  it('静止期 tick 不写 store，给定目标后坐标斜坡照常推进', () => {
+    const before = useGantryStore.getState();
+    before.tick(0.05);
+    expect(useGantryStore.getState().x).toBe(before.x);
+    expect(useGantryStore.getState().sensors).toBe(before.sensors);
+
+    useGantryStore.setState({
+      controlSource: 'local',
+      x: { ...before.x, target: before.x.position + 100 },
+    });
+    const moving = useGantryStore.getState();
+    moving.tick(0.05);
+    expect(useGantryStore.getState().x.position).toBeGreaterThan(moving.x.position);
   });
 });

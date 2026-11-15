@@ -1,0 +1,18 @@
+{
+  "id": "md520-vfd",
+  "order": 4,
+  "name": "MD520 变频器",
+  "icon": "⚡",
+  "gradient": "from-slate-600 to-sky-600",
+  "version": "1.0",
+  "description": "汇川 MD520 虚拟变频器独立教学设备：三级菜单参数设定、面板 / DI 多段速 / AI 模拟量 / 485 通信四种给定，PLC 双向联调与三维电机联动。",
+  "modeCount": 2,
+  "protocols": [
+    "modbus",
+    "s7",
+    "mitsubishi"
+  ],
+  "hasPhysics": false,
+  "needsPlcService": true,
+  "exportName": "md520VfdDevice"
+}

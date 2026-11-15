@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDeviceStore } from '../stores';
 import type { CylinderName } from '../types';
-import { MODBUS_ADDRESSES } from '@digital-twin/shared';
-import { modbusService as globalModbus } from '@digital-twin/shared';
+import { MODBUS_ADDRESSES } from '@digital-twin/shared/services/modbus';
+import { modbusService as globalModbus } from '@digital-twin/shared/services/modbus-websocket';
 import { CYLINDER_RETRACT_POS, CYLINDER_EXTEND_POS_FEED, CYLINDER_EXTEND_POS_SORT, CYLINDER_LIMIT_ZONE } from '../components/scene/shared';
 
 export type SimStep = 'DISCONNECTED' | 'CONNECTED' | 'RUNNING' | 'ERROR';

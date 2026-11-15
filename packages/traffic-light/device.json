@@ -1,0 +1,18 @@
+{
+  "id": "traffic-light",
+  "order": 2,
+  "name": "交通灯",
+  "icon": "🚦",
+  "gradient": "from-red-500 to-amber-500",
+  "version": "1.0",
+  "description": "十字路口交通灯数字孪生教学设备：东西/南北双向信号灯联调与自动评分。支持 Modbus / S7 / 三菱 MX 协议。",
+  "modeCount": 4,
+  "protocols": [
+    "modbus",
+    "s7",
+    "mitsubishi"
+  ],
+  "hasPhysics": false,
+  "needsPlcService": false,
+  "exportName": "trafficLightDevice"
+}

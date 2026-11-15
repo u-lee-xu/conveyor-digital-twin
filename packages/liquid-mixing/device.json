@@ -1,0 +1,18 @@
+{
+  "id": "liquid-mixing",
+  "order": 6,
+  "name": "液体混装",
+  "icon": "◍",
+  "gradient": "from-cyan-700 to-teal-700",
+  "version": "1.0",
+  "description": "A/B 双液依次定量进料、正反转交替搅拌、底部出料转入成品储液罐；四罐液位为 32 位 REAL 模拟量并带上下限开关量反馈。",
+  "modeCount": 3,
+  "protocols": [
+    "modbus",
+    "s7",
+    "mitsubishi"
+  ],
+  "hasPhysics": false,
+  "needsPlcService": true,
+  "exportName": "liquidMixingDevice"
+}

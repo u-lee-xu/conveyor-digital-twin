@@ -2,8 +2,11 @@
 /**
  * P0 安全边界运行时验收（可重复执行，不依赖固定 IP）。
  *
- *   npm run start:lab            # 另开终端
+ *   npm run start:devlab         # 另开终端：开发/验收模式，启用内置虚拟 PLC 靶机
  *   node websocket-server/security-check.cjs
+ *
+ * 教学交付请用 start:lab（不含内置虚拟 PLC）；本脚本的协议读写用例连 :1505 靶机，
+ * 因此必须在 start:devlab 下运行。
  *
  * 覆盖：正常主控读写链路、恶意 connect 帧、显式协议 switch、会话隔离、
  * 代理层 LAN / 伪造 Host / 跨 Origin 拒绝、观众只读中继。
@@ -106,6 +109,17 @@ async function main() {
   try { await open(PLC, { origin: 'http://evil.example' }); denied = { status: 200 }; }
   catch (e) { denied = e; }
   check('跨 Origin 的 PLC 握手被拒绝', denied.status === 403 && denied.deny === 'origin', denied);
+
+  // A2 内部口直连：回环绑定只挡 LAN，本机跨站网页也必须被网关挡在 teacher 之外
+  try { await open('ws://127.0.0.1:8081', { origin: 'http://evil.example' }); denied = { status: 200 }; }
+  catch (e) { denied = e; }
+  check('跨 Origin 直连 8081 被拒绝', Number(denied.status) >= 400, denied);
+
+  let direct;
+  try { direct = await open('ws://127.0.0.1:8081'); } catch (e) { direct = e; }
+  const directOk = direct && direct.readyState === WebSocket.OPEN;
+  check('本机无 Origin 直连 8081 放行（Electron 兼容）', directOk, direct && direct.message);
+  if (directOk) direct.close();
 
   // B 未连接时不再静默兜底到 S7
   const wsA = await open(PLC);
@@ -210,6 +224,53 @@ async function main() {
     }).on('error', (e) => resolve(`ERR ${e.message}`));
   });
   check('虚拟 PLC 状态口仍在线', statusText.startsWith('200'), statusText);
+
+  // G 新增 hardening 验收（P2-7）：差分帧、帧长上限、伪造信任头、并发 connect
+  teacherRelay.send(JSON.stringify({ type: 'report', deviceId: 'auto-dispensing', mode: 'demo',
+    vars: { MOTOR_FWD: false, LAMP_GREEN: 1 }, delta: true }));
+  await sleep(350);
+  check('delta 差分帧合并后扇出完整 vars',
+    snapshots.some((s) => s.vars && s.vars.MOTOR_FWD === false && s.vars.LAMP_GREEN === 1), snapshots.slice(-1));
+
+  let bigClose = null;
+  try {
+    const big = await open('ws://127.0.0.1:8081');
+    bigClose = await new Promise((resolve) => {
+      let done = false;
+      const finish = (code) => { if (!done) { done = true; resolve(code); } };
+      big.on('close', (code) => finish(code));
+      big.send('x'.repeat(70000));
+      setTimeout(() => finish(null), 2500);
+    });
+  } catch (e) { bigClose = `ERR ${e.error || e.status}`; }
+  check('超长帧被协议层拒绝', bigClose === 1009, { bigClose });
+  let gatewayAlive = false;
+  try { const probe = await open('ws://127.0.0.1:8081'); probe.close(); gatewayAlive = true; } catch { /* 未恢复 */ }
+  check('超长帧后网关仍可连接', gatewayAlive);
+
+  let forged;
+  try {
+    await open('ws://127.0.0.1:8081', { headers: {
+      'x-dt-proxy': '1', 'x-dt-role': 'teacher', 'x-dt-internal-token': 'forged-token',
+    } });
+    forged = { status: 200 };
+  } catch (e) { forged = { status: e.status, deny: e.deny, error: e.error }; }
+  check('伪造内部 token / 自封 teacher 的直连被拒绝', forged.status !== 200, forged);
+
+  let concurrent = { a: null, b: null };
+  try {
+    const c1 = await open('ws://127.0.0.1:8081');
+    const c2 = await open('ws://127.0.0.1:8081');
+    const [a, b] = await Promise.all([makeRpc(c1)(CONNECT_OK), makeRpc(c2)(CONNECT_OK)]);
+    concurrent = { a: !!a.success, b: !!b.success };
+    c1.close(); c2.close();
+  } catch (e) { concurrent = { err: e.error || e.status }; }
+  check('并发 connect 至多一个成功', concurrent.a !== undefined && concurrent.a !== concurrent.b && (concurrent.a || concurrent.b), concurrent);
+
+  let opaque;
+  try { await open('ws://127.0.0.1:8081', { headers: { origin: 'null' } }); opaque = { status: 200 }; }
+  catch (e) { opaque = { status: e.status, deny: e.deny, error: e.error }; }
+  check('Origin:null 且无 Electron 凭据的直连被拒绝', opaque.status !== 200, opaque);
 
   teacherRelay.close(); viewerRelay.close();
   await sleep(150);

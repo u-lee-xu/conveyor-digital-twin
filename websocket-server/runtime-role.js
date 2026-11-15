@@ -13,11 +13,16 @@
  *     → server.js(:8081) / broadcast.js(:8082) 的 verifyClient 复核。
  *   LAN 客户端无法绕过代理直连 8081/8082（两者只绑 127.0.0.1），也无法自封 teacher
  *   （同名请求头会被代理无条件覆写）。
- *   Electron file:// 直连回环时没有代理头，视为可信的本机 teacher。
+ *   未走代理的本机直连也不能无条件信任：必须落在回环地址、Host 指向回环，且浏览器
+ *   握手同源。跨站网页即便跑在教师机本机也拿不到 teacher（allowViewer 时只降为只读）。
+ *   opaque origin（sandbox iframe / data: / file://）与 Electron 打包版不可区分，
+ *   因此 Electron 主进程签发一次性凭据，由 wsEndpoints 附加到直连 URL；本机脚本
+ *   （无 Origin 头）仍按回环 + Host 判定放行。
  */
 const ROLE_HEADER = 'x-dt-role';
 const PROXY_HEADER = 'x-dt-proxy';
 const TOKEN_HEADER = 'x-dt-internal-token';
+const ORIGIN_OK_HEADER = 'x-dt-origin-ok';
 const LOOPBACK_HOSTS = new Set(['', 'localhost', '127.0.0.1', '::1', '[::1]']);
 
 /** 从 Host 头取主机名：只去掉末尾端口，IPv6 字面量的方括号要保留 */
@@ -50,9 +55,24 @@ function roleFromUpgrade(req) {
 function originMatches(req) {
   const headers = (req && req.headers) || {};
   const origin = headers.origin;
-  if (!origin || origin === 'null') return true;
+  if (!origin) return true;
+  // opaque origin（sandbox iframe / data: / file://）与 Electron 打包版在服务端
+  // 不可区分，绝不能默认可信：必须由 Electron 主进程签发的一次性凭据证明。
+  if (origin === 'null' || String(origin).startsWith('file:')) return false;
   try {
     return new URL(String(origin)).host.toLowerCase() === String(headers.host || '').toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+/** 直连请求携带的一次性凭据（Electron file:// 由 wsEndpoints 附加到 URL） */
+function credentialMatches(req) {
+  const token = process.env.DT_INTERNAL_TOKEN;
+  if (!token) return false;
+  try {
+    const u = new URL(String((req && req.url) || '/'), 'http://127.0.0.1');
+    return u.searchParams.get('dt_token') === token;
   } catch {
     return false;
   }
@@ -63,6 +83,7 @@ function applyProxyHeaders(req) {
   const role = roleFromUpgrade(req);
   req.headers[ROLE_HEADER] = role;
   req.headers[PROXY_HEADER] = '1';
+  req.headers[ORIGIN_OK_HEADER] = originMatches(req) ? '1' : '0';
   if (process.env.DT_INTERNAL_TOKEN) {
     req.headers[TOKEN_HEADER] = process.env.DT_INTERNAL_TOKEN;
   } else {
@@ -74,18 +95,39 @@ function applyProxyHeaders(req) {
 /**
  * 内部服务侧的升级校验。allowViewer=false 用于 PLC 网关（主控唯一）；
  * true 用于状态中继（观众可订阅，但其上行在 broadcast.js 里按 role 丢弃）。
+ *
+ * 无代理头 = 本机直连回环端口。回环绑定只挡 LAN，挡不住教师机本机打开的其它网页，
+ * 所以还要复核连接落点、Host 与 Origin；跨站网页降级为 viewer（中继）或直接拒绝（网关）。
  */
 function verifyInternalRequest(req, options) {
   const opts = options || {};
   const headers = (req && req.headers) || {};
+  const local = isLoopbackAddress(req && req.socket && req.socket.localAddress);
   if (headers[PROXY_HEADER] !== '1') {
-    // 未走代理 = 本机直连回环端口（Electron file:// 回退 / 本机脚本）
+    if (local === false || !isLoopbackHost(headers.host)) {
+      return { ok: false, role: 'viewer', reason: 'loopback' };
+    }
+    // 跨站 / opaque origin：只有持 Electron 主进程签发的一次性凭据才可信，
+    // 否则网关直接拒绝、中继降级为只读 viewer
+    if (!originMatches(req) && !credentialMatches(req)) {
+      if (!opts.allowViewer) return { ok: false, role: 'viewer', reason: 'origin' };
+      return { ok: true, role: 'viewer', reason: '' };
+    }
+    // 本机脚本（无 Origin 头）或持有凭据的 Electron file://：视为可信 teacher
     return { ok: true, role: 'teacher', reason: '' };
   }
+  // 代理层把 Origin 判定结果作为信任头写入，网关复核，避免两层口径断层
+  if (headers[ORIGIN_OK_HEADER] === '0') {
+    return { ok: false, role: 'viewer', reason: 'origin' };
+  }
   const token = process.env.DT_INTERNAL_TOKEN;
-  // 头缺失 = dev server（Vite CLI 直启，没有 start-lab 签发 token）或旧版代理，
-  // 仍按 role 把关；头存在但不匹配 = 外部伪造 / 另一个实验室实例的代理，直接拒绝。
-  if (token && headers[TOKEN_HEADER] && headers[TOKEN_HEADER] !== token) {
+  // token 已签发（start:lab）：缺头与错头一律拒绝，杜绝旧实例代理 / 手工删头绕过。
+  // token 未签发（Vite CLI 直启 dev）：代理会清掉客户端自带的同名头，仍按 role 把关。
+  if (token) {
+    if (!headers[TOKEN_HEADER] || headers[TOKEN_HEADER] !== token) {
+      return { ok: false, role: 'viewer', reason: 'token' };
+    }
+  } else if (headers[TOKEN_HEADER]) {
     return { ok: false, role: 'viewer', reason: 'token' };
   }
   const role = headers[ROLE_HEADER] === 'viewer' ? 'viewer' : 'teacher';
@@ -96,7 +138,7 @@ function verifyInternalRequest(req, options) {
 }
 
 module.exports = {
-  ROLE_HEADER, PROXY_HEADER, TOKEN_HEADER, LOOPBACK_HOSTS,
+  ROLE_HEADER, PROXY_HEADER, TOKEN_HEADER, ORIGIN_OK_HEADER, LOOPBACK_HOSTS,
   hostOf, isLoopbackHost, isLoopbackAddress,
   roleFromUpgrade, originMatches, applyProxyHeaders, verifyInternalRequest,
 };

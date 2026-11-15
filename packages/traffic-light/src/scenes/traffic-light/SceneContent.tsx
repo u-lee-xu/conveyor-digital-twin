@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { RoundedBox } from '@react-three/drei';
-import { Ground } from '@digital-twin/shared';
+import { Ground } from '@digital-twin/shared/components/Ground';
 import { SceneContainer } from './components/SceneContainer';
 import { PhysicsLabel } from './components/PhysicsLabel';
 import { TrafficCars } from './components/TrafficCars';

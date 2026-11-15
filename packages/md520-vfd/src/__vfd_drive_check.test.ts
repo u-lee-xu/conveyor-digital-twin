@@ -24,7 +24,9 @@ const materials = src('components/scene/shared/materials.ts');
 describe('独立场景骨架', () => {
   it('平台壳注册了 MD520 独立设备', () => {
     const registry = rootSrc('packages/platform/src/registry.ts');
-    expect(registry).toContain('md520VfdDevice');
+    expect(JSON.parse(rootSrc('packages/md520-vfd/device.json')).id).toBe('md520-vfd');
+    expect(rootSrc('packages/md520-vfd/src/device.ts')).toContain('md520VfdDevice');
+    expect(registry).toContain('import.meta.glob');
     expect(index).toContain("id: 'md520-vfd'");
     expect(index).toContain("name: 'MD520 变频器'");
   });
@@ -81,7 +83,7 @@ describe('观众跟随与场景隔离', () => {
     expect(index).toContain('useVfdStore.getState().applyBroadcast(v)');
   });
 
-  it('独立虚拟 PLC 是 :1507，其它场景 PLC 无变频器残留', () => {
+  it('开发靶机 :1507 与其它场景 PLC 隔离，教学交付不依赖它', () => {
     const startLab = rootSrc('scripts/start-lab.cjs');
     expect(startLab).toContain('VFD_PLC_PORT = 1507');
     expect(startLab).toContain("path.join(WSS, 'mock-vfd-server.js')");

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { PlcConnectionPanel, modbusService, type PlcConnConfig } from '@digital-twin/shared';
+import { PlcConnectionPanel, type PlcConnConfig } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { useDeviceStore } from '../stores';
 
 const PRESETS: { label: string; config: PlcConnConfig }[] = [

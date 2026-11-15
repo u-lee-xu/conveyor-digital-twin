@@ -1,10 +1,13 @@
-import { RigidBody, CuboidCollider } from '@react-three/rapier';
-
+/**
+ * 纯视觉地面：暗色平面 + 辅助网格，无物理碰撞。
+ * 刻意不 import Rapier —— 物理版拆在 PhysicsGround.tsx，避免无物理设备
+ * 仅因画一个地面就把 2.26MB 的 rapier chunk 拉进自己的分包。
+ */
 export const GROUND_SIZE = 20;
 export const GROUND_COLOR = 0x334155;
 export const GROUND_GRID_COLOR = 0x475569;
 
-interface GroundProps {
+export interface GroundProps {
   size?: number;
   divisions?: number;
   color?: number | string;
@@ -22,15 +25,5 @@ export function Ground({ size = GROUND_SIZE, divisions = 40, color = GROUND_COLO
       </mesh>
       <gridHelper args={[size, divisions, gridColor, subColor]} position={[0, 0.001, 0]} />
     </group>
-  );
-}
-
-/** 带物理碰撞的地面（供 rapier 场景使用） */
-export function PhysicsGround({ size = GROUND_SIZE, ...rest }: GroundProps) {
-  return (
-    <RigidBody type="fixed" position={[0, -0.01, 0]} colliders={false}>
-      <CuboidCollider args={[size / 2, 0.01, size / 2]} collisionGroups={(0x0001 << 16) | 0x0003} />
-      <Ground size={size} {...rest} />
-    </RigidBody>
   );
 }

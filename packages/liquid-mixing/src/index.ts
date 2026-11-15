@@ -5,8 +5,9 @@
  * 四个罐体体积是 32 位 REAL 浮点唯一真值；三模式共用面板外壳；
  * 仿真对接外部 PLC 仿真软件，不依赖内置虚拟 PLC、不新增端口或进程。
  */
-import type { DeviceDefinition, PlatformModeState } from '@digital-twin/platform';
-import { modbusService, type Mode } from '@digital-twin/shared';
+import type { DeviceDefinition, PlatformModeState } from '@digital-twin/shared';
+import type { Mode } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { LiquidSceneContent } from './scenes/LiquidSceneContent';
 import { LiquidSceneWrapper } from './platform/LiquidSceneWrapper';
 import { LiquidModePanel } from './platform/LiquidModePanel';

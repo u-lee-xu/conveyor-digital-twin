@@ -1,12 +1,18 @@
-# 数字孪生传送带分拣系统 V3
+# 数字孪生仿真教学平台
 
-这是一个基于 React, Three.js 和 ModbusTCP 的数字孪生项目。
+基于 React、Three.js / Rapier 与 Modbus TCP / Siemens S7 / 三菱 MX 的数字孪生教学平台。
+`packages/platform` 是唯一交付入口，7 个教学设备各自成包并按设备懒加载。
 
-## 功能特点
-- **手动模式**: 直接控制气缸、传送带和投放物料。
-- **演示模式**: 自动运行分拣流程。
-- **同步模式**: 与真实 PLC 状态实时同步。
-- **仿真模式**: 网页作为虚拟产线，与 PLC (实体或仿真) 进行闭环控制调试。
+## 教学设备
+传送带分拣控制、气动机械手、交通灯、自动配药、MD520 变频器、汇川龙门 XY 象棋分拣、液体混装。
+
+## 运行模式
+- **手动 / 演示 / 仿真** 三档，各设备支持的模式以注册元数据为准。
+- **仿真模式 = 虚拟场景 ↔ 外部 PLC 编程软件的 simulator 或实物 PLC**（Modbus TCP 通信控制，或 DI/AI 端子接线控制）；内置虚拟 PLC 不随教学交付启动，仅在开发 / 验收模式（`npm run start:devlab`）启用。
+- 装软件的机器是主控（唯一连接 PLC），局域网观众通过教师机 IP 打开即为只读镜像。
+
+## 场景包导入
+平台按目录自动发现场景包：把符合导入契约的包放进 `packages/` 并重新构建，即可作为并列场景挂载，平台壳无需改源码。完整开发规范见 `SCENE_DEVELOPMENT.md`，维护者速查见 `AGENTS.md`「场景包导入契约」。根目录下的 `src/`、`electron/`、`vite.config.ts` 等是历史遗留，不属于交付入口。
 
 ## 运行环境
 - Node.js (建议 v18+)
@@ -20,30 +26,31 @@ npm install
 cd websocket-server && npm install
 ```
 
-### 2. 启动服务 (推荐)
-使用以下命令同时启动前端开发服务器和 WebSocket 代理服务器：
+### 2. 构建平台壳
 ```bash
-npm run start:all
+npm run build:platform
 ```
 
-或者分开启动：
-
-**启动 WebSocket 代理服务器:**
+### 3. 启动教学实验室（推荐）
 ```bash
-npm run websocket:start
+npm run start:lab
 ```
+浏览器只访问 `http://127.0.0.1:5201/`；同网段观众访问 `http://<教师机IP>:5201/`（只读镜像）。
+**角色只按协议与主机名判定**：主控机必须用 `localhost` / `127.0.0.1` 打开；即使用本机 LAN IP、内网穿透域名或 `127.0.0.2` 打开同一台机器，也会进入只读观众模式，这不是故障。观众请一律使用界面底部显示的教师机 IP。
+`start:lab` 用 Vite preview 读 `packages/platform/dist`，**改过源码必须重做第 2 步**。
 
-**启动前端:**
-```bash
-npm run dev
-```
+单独调试某个包时用 `npm run dev:platform` / `npm run dev:conveyor` 等；只启动网关用 `npm run websocket:start`；地址表自检用 `node websocket-server/mock-addresses.js --check`。
 
-### 3. 停止服务
-- 在终端中按 `Ctrl + C` 即可停止正在运行的服务。
-- 如果使用了 `npm run start:all`，它会同时尝试终止前端和代理服务器进程。
+### 4. 停止服务
+在 `start:lab` 终端按 `Ctrl + C`，网关 / 中继 / 虚拟 PLC 子进程与主进程一起退出。
 
 ## 通信架构
-网页前端 <--WebSocket (8081)--> Node.js 代理服务器 <--ModbusTCP (502)--> PLC
+```
+PLC 或 PLC 仿真软件 ⇄ :8081 网关（仅回环）⇄ 主控浏览器
+主控 → store 快照 ~10Hz → :8082 中继（仅回环，只扇出）→ 观众浏览器
+```
+浏览器只连 `:5201` 的同源代理 `/ws/plc`、`/ws/relay`；内部端口一律显式绑 `127.0.0.1`，对外只开放 `:5201`。
+仿真模式对接外部 PLC 仿真软件（Modbus TCP `:502` / S7 `:102` / 三菱），不依赖内置虚拟 PLC。
 
 ## Modbus 地址定义 (线圈)
 - 0: 启动

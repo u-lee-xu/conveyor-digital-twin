@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Ground } from '@digital-twin/shared';
+import { Ground } from '@digital-twin/shared/components/Ground';
 import { SceneContainer } from './components/SceneContainer';
 import { RobotArm } from './components/RobotArm';
 import { PhysicsLabel } from './components/PhysicsLabel';

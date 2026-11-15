@@ -41,9 +41,9 @@ export function GantrySimPanel() {
       <div style={box}>
         <b>位置数据寄存器 · 机床坐标</b>
         <div data-dt-gantry-registers style={{ fontFamily: 'monospace', marginTop: 5, lineHeight: 1.7 }}>
-          HR200 X {Math.round(x.position)} · MW1000 · D1000
-          HR202 Y {Math.round(y.position)} · MW1004 · D1002
-          HR208 Z {Math.round(z)} · MW1016 · D1008
+          HR0 X {Math.round(x.position)} · MW0 · D0
+          HR2 Y {Math.round(y.position)} · MW4 · D2
+          HR8 Z {Math.round(z)} · MW16 · D8
         </div>
         <div style={{ fontFamily: 'monospace', marginTop: 4, color: '#94a3b8', whiteSpace: 'nowrap' }}>
           字变量 {Object.keys(GANTRY_WORD_VARIABLES).length} · 地址行 {GANTRY_ADDRESS_ROWS.length} · 6 路传感器输入

@@ -143,6 +143,35 @@ describe('演示状态机：一直循环 / 完成当前循环再停 / 正反转�
     run(30);
     expect(S().volumes).not.toEqual(v);
   });
+
+  it('暂停期间阶段计时冻结，恢复后从原计时继续而不跳阶段', () => {
+    S().startDemo();
+    run(10);
+    const elapsed = S().phaseElapsed;
+    const phase = S().phase;
+    S().toggleDemoPause();
+    run(60);
+    expect(S().phaseElapsed).toBe(elapsed);
+    expect(S().phase).toBe(phase);
+    S().toggleDemoPause();
+    run(1);
+    expect(S().phaseElapsed).toBeGreaterThan(elapsed);
+  });
+
+  it('配方非法输入不污染演示状态机：NaN 保留、负值归零、超量程钳位', () => {
+    const before = { ...S().recipe };
+    S().setRecipe({
+      targetA: Number.NaN, targetB: -20,
+      stirForwardSec: Number.POSITIVE_INFINITY, stirReverseSec: 999,
+    });
+    expect(S().recipe.targetA).toBe(before.targetA);
+    expect(S().recipe.targetB).toBe(0);
+    expect(S().recipe.stirForwardSec).toBe(before.stirForwardSec);
+    expect(S().recipe.stirReverseSec).toBe(60);
+    S().setRecipe({ targetA: 40, stirForwardSec: 5 });
+    expect(S().recipe.targetA).toBe(40);
+    expect(S().recipe.stirForwardSec).toBe(5);
+  });
 });
 
 describe('报警 / 急停 / 仿真边界', () => {
@@ -155,6 +184,37 @@ describe('报警 / 急停 / 仿真边界', () => {
     expect(S().demoRunning).toBe(false);
     S().clearAlarm();
     expect(S().alarm).toBe(0);
+  });
+
+  it('报警条件自我消除后仍锁存，直到显式复位', () => {
+    S().setVolume('a', 0);
+    S().setOutput('valveA', true);
+    S().tick(0.05);
+    expect(S().alarm & LIQUID_ALARM.LOW_LEVEL).toBeTruthy();
+    // 报警停机把阀断电后，低液位判据不再成立；锁存必须让报警继续显示
+    run(20);
+    expect(S().alarm & LIQUID_ALARM.LOW_LEVEL).toBeTruthy();
+    S().clearAlarm();
+    expect(S().alarm).toBe(0);
+  });
+
+  it('急停写入 estop 后报警含 ESTOP 位，复位链路可解除', () => {
+    S().setEstop(true);
+    S().tick(0.05);
+    expect(S().estop).toBe(true);
+    expect(S().alarm & LIQUID_ALARM.ESTOP).toBeTruthy();
+    S().clearAlarm();
+    expect(S().estop).toBe(false);
+    expect(S().alarm).toBe(0);
+  });
+
+  it('PLC 帧缺字段时配方与动作字边沿保持上次值', () => {
+    S().setPlcFrame({ recipeA: 300, actionWord: 2011 });
+    const recipe = { ...S().recipe };
+    const seq = S().actionSeq;
+    S().setPlcFrame({});
+    expect(S().recipe).toEqual(recipe);
+    expect(S().actionSeq).toBe(seq);
   });
 
   it('空罐仍开进料阀触发低液位报警', () => {
@@ -500,5 +560,19 @@ describe('阀门开关状态色与真值同源', () => {
     expect(liquidValveStateColor(S().outputs.discharge)).toBe(LIQUID_VISUAL.LAMP_GREEN);
     const snap = exportLiquidSnapshot();
     expect([snap.LIQUID_VALVE_A, snap.LIQUID_VALVE_B, snap.LIQUID_DISCHARGE]).toEqual([1, 0, 1]);
+  });
+});
+
+describe('rAF 写入守卫', () => {
+  it('静止期 tick 不产生新 store 引用，阀门打开后液面照常推进', () => {
+    const before = S();
+    before.tick(0.05);
+    expect(S().volumes).toBe(before.volumes);
+    expect(S().sensors).toBe(before.sensors);
+
+    useLiquidStore.setState({ outputs: { ...LIQUID_EMPTY_OUTPUTS, valveA: true } });
+    const flowing = S();
+    flowing.tick(0.05);
+    expect(S().volumes.a).toBeLessThan(flowing.volumes.a);
   });
 });

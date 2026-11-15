@@ -6,18 +6,19 @@
  * 本地手动 / 演示模式 connected=false，整个通信分支不发任何帧。
  */
 import { useEffect } from 'react';
-import { isViewerRuntime, modbusService } from '@digital-twin/shared';
+import { isViewerRuntime } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { useLiquidStore, liquidRatioA } from '../stores/useLiquidStore';
 import {
-  LIQUID_COMMAND_WORD_NAMES, LIQUID_REAL_NAMES, LIQUID_REPORT_WORD_NAMES,
+  LIQUID_COILS, LIQUID_COMMAND_WORD_NAMES, LIQUID_REAL_NAMES, LIQUID_REPORT_WORD_NAMES,
   LIQUID_OUTPUT_COIL_NAMES, LIQUID_SENSOR_FEEDBACK_BASE, LIQUID_SENSOR_VAR_NAMES,
   liquidSensorBits, liquidSensorMask, LIQUID_PLC_SCALE,
 } from '../constants/liquidVariables';
 import { floatToDintBits } from '../constants/real32';
 import type { Outputs } from '../constants/liquidConstants';
 
-/** 与 LIQUID_OUTPUT_COIL_NAMES 同序：C40~C46 一次读回 */
-const OUTPUT_COIL_BASE = 40;
+/** 与 LIQUID_OUTPUT_COIL_NAMES 同序：C0~C6 一次读回；基址从变量表派生，改地址不必再动此处 */
+const OUTPUT_COIL_BASE = LIQUID_COILS.LIQUID_VALVE_A;
 const OUTPUT_COIL_COUNT = LIQUID_OUTPUT_COIL_NAMES.length;
 
 export function LiquidDeviceEffects() {
@@ -27,6 +28,10 @@ export function LiquidDeviceEffects() {
     let lastSensorMask = -1;
     /** 上一次成功写回的 REAL 位模式；静止时不重复发帧 */
     let lastRealKey = '';
+    /** 300ms 轮询的 in-flight 守卫：一次读慢于间隔时不重入，避免帧交错 */
+    let busy = false;
+    /** 卸载 / 切模式后，在途 await 返回时不再写 store、不再发帧 */
+    let stopped = false;
     let raf = 0;
     let last = performance.now();
 
@@ -38,26 +43,36 @@ export function LiquidDeviceEffects() {
     };
     raf = requestAnimationFrame(loop);
 
-    const timer = window.setInterval(async () => {
+    const poll = async () => {
       const st = useLiquidStore.getState();
       if (!st.connected) {
         lastSensorMask = -1;
         lastRealKey = '';
         return;
       }
+      if (stopped) return;
       try {
         /* 1) PLC → 设备：显式动作字 + 配方 / 时长 + 5 个执行器线圈 */
         const words = await modbusService.readWords([...LIQUID_COMMAND_WORD_NAMES]);
-        const w = words.success && words.values ? words.values : {};
-        const num = (key: string) => {
-          const n = Number(w[key]);
-          return Number.isFinite(n) ? n : 0;
+        if (stopped) return;
+        /**
+         * 读失败必须整轮跳过：用 0 兜底会把配方 / 时长清 0，还会把 actionSeq 打回 0，
+         * 导致 PLC 补发同 seq 动作字时重复触发 RESET / ESTOP。缺字段保持上次值。
+         */
+        if (!words.success || !words.values) return;
+        const w = words.values;
+        const num = (key: string): number | undefined => {
+          const raw = w[key];
+          if (raw === undefined) return undefined;
+          const n = Number(raw);
+          return Number.isFinite(n) ? n : undefined;
         };
         let outputs: Partial<Outputs> = {};
         let estop: boolean | undefined;
         let reset = false;
         if (modbusService.getProtocol() === 'modbus') {
           const coils = await modbusService.readCoils(OUTPUT_COIL_BASE, OUTPUT_COIL_COUNT);
+          if (stopped) return;
           if (coils.success && coils.values) {
             const v = coils.values;
             outputs = {
@@ -69,6 +84,7 @@ export function LiquidDeviceEffects() {
           }
         } else {
           const vars = await modbusService.readVars([...LIQUID_OUTPUT_COIL_NAMES]);
+          if (stopped) return;
           if (vars.success && vars.values) {
             const v = vars.values;
             outputs = {
@@ -102,6 +118,7 @@ export function LiquidDeviceEffects() {
         const realKey = realBits.join(',');
         if (realKey !== lastRealKey) {
           const wrote = await modbusService.writeWords([...LIQUID_REAL_NAMES], realBits);
+          if (stopped) return;
           if (wrote.success) lastRealKey = realKey;
         }
 
@@ -114,6 +131,7 @@ export function LiquidDeviceEffects() {
           Math.round(liquidRatioA(s.mixA, s.mixB) * LIQUID_PLC_SCALE.RATIO),
           mask,
         ]);
+        if (stopped) return;
 
         /* 4) 开关量反馈：位掩码变化才发帧；写失败不更新掩码，下一轮自动重试 */
         if (mask !== lastSensorMask) {
@@ -121,14 +139,22 @@ export function LiquidDeviceEffects() {
           const write = modbusService.getProtocol() === 'modbus'
             ? await modbusService.writeCoils(LIQUID_SENSOR_FEEDBACK_BASE, bits)
             : await modbusService.writeVars(LIQUID_SENSOR_VAR_NAMES, bits);
+          if (stopped) return;
           if (write.success) lastSensorMask = mask;
         }
       } catch {
         // 断开瞬间的读写失败不打断演示
       }
+    };
+
+    const timer = window.setInterval(() => {
+      if (busy || stopped) return;
+      busy = true;
+      void poll().finally(() => { busy = false; });
     }, 300);
 
     return () => {
+      stopped = true;
       cancelAnimationFrame(raf);
       window.clearInterval(timer);
     };

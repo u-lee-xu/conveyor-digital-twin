@@ -1,5 +1,5 @@
-import type { DeviceDefinition } from '@digital-twin/platform';
-import { modbusService } from '@digital-twin/shared';
+import type { DeviceDefinition } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { ConveyorSortingSceneContent } from './scenes/conveyor-sorting/SceneContent';
 import { ConveyorSceneWrapper } from './platform/ConveyorSceneWrapper';
 import { useDeviceStore } from './stores';

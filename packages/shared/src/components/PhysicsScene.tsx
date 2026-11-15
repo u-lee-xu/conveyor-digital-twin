@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Physics } from '@react-three/rapier';
 import type { ComponentType } from 'react';
-import { PhysicsGround } from './Ground';
+import { PhysicsGround } from './PhysicsGround';
 import { AspectFitCamera } from './AspectFitCamera';
 import type { IndustrialLighting } from '../styles/industrialVisual';
 
@@ -22,6 +22,8 @@ interface PhysicsSceneProps {
   minDistance?: number;
   /** 可选：展台自带 0.1m 标尺网格时关掉整机地面；不传保持旧版 true */
   showGround?: boolean;
+  /** 可选：主控开启阴影、观众端关闭；不传保持旧版 false */
+  shadows?: boolean;
 }
 
 const LEGACY_BACKGROUND = '#1e293b';
@@ -36,6 +38,7 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
   timeStep = 1 / 30,
   minDistance = 2,
   showGround = true,
+  shadows = false,
 }) => {
   const [isHidden, setIsHidden] = useState(false);
 
@@ -54,7 +57,10 @@ export const PhysicsScene: React.FC<PhysicsSceneProps> = ({
   return (
     <div style={{ width: '100vw', height: '100vh', background: background ?? LEGACY_BACKGROUND }}>
       <Canvas
+        shadows={shadows}
         frameloop={isHidden ? 'never' : 'always'}
+        // 显式锁 dpr=1：观众大屏高 DPR 下不做 4 倍像素渲染；onCreated 的 setPixelRatio 作双保险
+        dpr={1}
         camera={{ position: cameraPosition, fov: cameraFov, near: 0.1, far: 1000 }}
         gl={{ antialias: true }}
         onCreated={({ gl }) => {

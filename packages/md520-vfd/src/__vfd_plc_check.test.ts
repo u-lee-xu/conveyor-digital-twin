@@ -83,7 +83,7 @@ describe('场景独立：变频器自己的虚拟 PLC 与已定稿场景互不�
     }
   });
 
-  it('start:lab 独立启动变频器 PLC，端口与其它场景不混用', () => {
+  it('开发模式独立启动变频器靶机 PLC，端口与其它场景不混用', () => {
     expect(startLab).toContain('VFD_PLC_PORT = 1507');
     expect(startLab).toContain("path.join(WSS, 'mock-vfd-server.js')");
     expect(startLab).toContain("path.join(WSS, 'mock-dispensing-server.js')");

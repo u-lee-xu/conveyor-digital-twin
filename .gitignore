@@ -18,13 +18,30 @@ release*
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+.vs/
 .idea
 .DS_Store
+
+# 本地 AI 助手工作数据（项目记忆 / 契约 / 规格稿）：只留本机，不上传 GitHub
+.workbuddy/
+.trae/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# 未入库的本地实验素材：整目录不参与提交（含自带 dist / node_modules）
+packages/inovance-control/
+
+# 本地素材与临时产物：只提交源码、配置与必要测试脚本
+inovance/
+pic/
+docs/*.pdf
+docs/*.mp4
+docs/*.doc
+websocket-server/延迟测试报告_*.txt
+websocket-server/_mx_tmp.ps1
 
 # NATFRP config (root owned)
 deploy/natfrp-config/

@@ -1,0 +1,18 @@
+{
+  "id": "inovance-gantry",
+  "order": 5,
+  "name": "汇川龙门 XY 象棋分拣",
+  "icon": "♟",
+  "gradient": "from-sky-700 to-indigo-700",
+  "version": "1.0",
+  "description": "XY 直角坐标双伺服龙门，Z 气缸吸盘按 position 坐标变量完成棋盘格象棋棋子的吸取、移动与放置；ETHERCAT 仅作变量/信号映射。",
+  "modeCount": 3,
+  "protocols": [
+    "modbus",
+    "s7",
+    "mitsubishi"
+  ],
+  "hasPhysics": false,
+  "needsPlcService": true,
+  "exportName": "inovanceGantryDevice"
+}

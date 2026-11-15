@@ -45,8 +45,8 @@ describe('MD520 教学手册（② 教学资料）', () => {
   it('12 个章节与接线图齐全', () => {
     const html = readFileSync(bookPath, 'utf8');
     for (let i = 1; i <= 12; i += 1) expect(html).toContain(`id="s${i}"`);
-    for (const t of ['B 档真实 485 主从', 'mock-vfd-slave.js', 'vfd-485-master.cjs',
-      ':1508', ':5088', 'DT_VFD_485_MASTER=0', 'masterFrames', 'FC03/06/16/01/05/15']) {
+    for (const t of ['12 外部 PLC 的 DI/AI 端子控制', 'F0-02=1', 'F0-03=2',
+      'DI4', 'AI1', 'AI2', 'DI1~DI3', 'FC-00~FC-07', 'DT_PLC_HOSTS', 'npm run start:devlab']) {
       expect(html).toContain(t);
     }
     expect(html).toContain('<svg');

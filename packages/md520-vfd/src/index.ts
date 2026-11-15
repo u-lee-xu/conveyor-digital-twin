@@ -1,11 +1,13 @@
 /**
  * MD520 虚拟变频器 —— 独立设备场景。
  *
- * 与传送带分拣 / 自动配药完全独立：自己的设备包、自己的三维装置、自己的虚拟 PLC
- * （mock-vfd-server.js :1507）。平台壳只通过 DeviceDefinition 接入，不感知内部实现。
+ * 与传送带分拣 / 自动配药完全独立：自己的设备包、自己的三维装置。
+ * 仿真模式连外部 PLC 仿真软件 / 实物 PLC；内置虚拟 PLC 靶机只用于开发验收，不随教学交付启动。
+ * 平台壳只通过 DeviceDefinition 接入，不感知内部实现。
  */
-import type { DeviceDefinition, PlatformModeState } from '@digital-twin/platform';
-import { modbusService, type Mode } from '@digital-twin/shared';
+import type { DeviceDefinition, PlatformModeState } from '@digital-twin/shared';
+import type { Mode } from '@digital-twin/shared';
+import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { VfdSceneContent } from './scenes/vfd/SceneContent';
 import { VfdSceneWrapper } from './platform/VfdSceneWrapper';
 import { VfdModePanel } from './platform/VfdModePanel';

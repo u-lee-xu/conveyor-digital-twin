@@ -235,3 +235,18 @@ describe('继续补：其余只存值参数的教学近似效果（默认档零�
     expect(src('platform/VfdKeypadPanel.tsx')).toContain("FD-01 {params['FD-01']}");
   });
 });
+
+describe('rAF 写入守卫', () => {
+  it('静止期复用参数表且不写 store，运行时频率斜坡照常推进', () => {
+    useVfdStore.getState().tick(0.05); // 预热：首次写入 U0-00
+    const before = useVfdStore.getState();
+    const factor = before.tick(0.05);
+    expect(useVfdStore.getState().params).toBe(before.params);
+    expect(factor).toBeCloseTo(0);
+
+    useVfdStore.setState({ running: true });
+    const accelerating = useVfdStore.getState();
+    accelerating.tick(0.05);
+    expect(useVfdStore.getState().outputHz).toBeGreaterThan(accelerating.outputHz);
+  });
+});

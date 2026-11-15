@@ -2,6 +2,7 @@ import { defineConfig, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron/simple'
 import path from 'path'
+import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import type { IncomingMessage } from 'node:http'
 import type { Socket } from 'node:net'
@@ -69,6 +70,17 @@ const WS_PROXY: Record<string, ProxyOptions> = {
   },
 };
 
+/** 场景包 alias 自动派生：只认带 device.json 的目录，导入新场景无需改构建配置 */
+const PACKAGES_DIR = path.resolve(__dirname, '..')
+const sceneAliases: Record<string, string> = {}
+for (const entry of fs.readdirSync(PACKAGES_DIR, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue
+  const dir = path.join(PACKAGES_DIR, entry.name)
+  if (fs.existsSync(path.join(dir, 'device.json'))) {
+    sceneAliases[`@digital-twin/${entry.name}`] = path.join(dir, 'src')
+  }
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -80,18 +92,28 @@ export default defineConfig({
         input: 'electron/preload.ts',
       },
       renderer: {},
-    })
+    }),
+    {
+      name: 'electron-csp-html',
+      apply: 'build',
+      closeBundle() {
+        // Web 版 index.html 只放行 'self'；Electron file:// 需要直连内部 WS，
+        // 因此构建期额外生成一份仅 Electron 加载、放宽 connect-src 的 HTML
+        const dist = path.resolve(__dirname, 'dist')
+        const src = path.join(dist, 'index.html')
+        if (!fs.existsSync(src)) return
+        const html = fs.readFileSync(src, 'utf8').replace(
+          "connect-src 'self';",
+          "connect-src 'self' ws://127.0.0.1:8081 ws://127.0.0.1:8082;",
+        )
+        fs.writeFileSync(path.join(dist, 'index-electron.html'), html)
+      },
+    },
   ],
   resolve: {
     alias: {
       '@digital-twin/shared': path.resolve(__dirname, '../shared/src'),
-      '@digital-twin/conveyor-sorting': path.resolve(__dirname, '../conveyor-sorting/src'),
-      '@digital-twin/pneumatic-robot': path.resolve(__dirname, '../pneumatic-robot/src'),
-      '@digital-twin/traffic-light': path.resolve(__dirname, '../traffic-light/src'),
-      '@digital-twin/auto-dispensing': path.resolve(__dirname, '../auto-dispensing/src'),
-      '@digital-twin/md520-vfd': path.resolve(__dirname, '../md520-vfd/src'),
-      '@digital-twin/inovance-gantry': path.resolve(__dirname, '../inovance-gantry/src'),
-      '@digital-twin/liquid-mixing': path.resolve(__dirname, '../liquid-mixing/src'),
+      ...sceneAliases,
     },
   },
   server: {
@@ -107,11 +129,23 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-three': ['three'],
-          'vendor-rapier': ['@react-three/rapier'],
-          'vendor-r3f': ['@react-three/fiber', '@react-three/drei'],
-          'vendor-react': ['react', 'react-dom'],
+        /**
+         * 函数式分组：把 React 单独拆出来，启动器首屏才不会为了 react-dom 而
+         * 连带预加载 three / r3f（数组式会递归分配依赖，做不到这点）。
+         * 3D / 物理库只在按需加载的工作区 chunk 里引用，不进首屏 preload。
+         */
+        manualChunks(id) {
+          const p = id.replace(/\\/g, '/');
+          // Vite 的 dynamic-import preload helper 必须跟 React 同组：否则主 chunk
+          // 会为了它静态依赖 r3f chunk，进而把 three / r3f 重新拉回首屏 preload
+          if (p.includes('vite/preload-helper')) return 'vendor-react';
+          if (/\/node_modules\/(react|react-dom|scheduler)\//.test(p)) return 'vendor-react';
+          if (p.includes('/node_modules/three/')) return 'vendor-three';
+          // Rapier 与 wasm 不手动分组：交给 Rollup 从「真正引用它的设备 chunk」里
+          // 抽成共享 chunk，否则共享工具会把 vendor-r3f 拉上 2.26MB 的 wasm 依赖
+          if (p.includes('/node_modules/@react-three/rapier/') || p.includes('/node_modules/@dimforge/')) return undefined;
+          if (p.includes('/node_modules/@react-three/')) return 'vendor-r3f';
+          return undefined;
         },
       },
     },

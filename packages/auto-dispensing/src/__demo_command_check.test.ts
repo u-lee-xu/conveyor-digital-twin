@@ -14,6 +14,7 @@
  *  5. 平台注册的每个有评分模式的设备，评分状态机都必须在平台入口挂载。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SCENE_DESCRIPTORS } from '../../platform/src/deviceCatalog';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useDispenseLoop } from './scenes/auto-dispensing/hooks/useDispenseLoop';
@@ -269,22 +270,21 @@ describe('源码级防回退：主令脉冲、暂停态、优先级', () => {
 
 describe('P1-4 平台入口：有评分模式的设备必须挂载评分状态机', () => {
   const registry = read('../../platform/src/registry.ts');
-  const deviceVars = [...registry.matchAll(/^\s*(\w+Device),?\s*$/gm)].map((m) => m[1]);
-  const pkgOf: Record<string, string> = {
-    conveyorDevice: 'conveyor-sorting',
-    pneumaticDevice: 'pneumatic-robot',
-    trafficLightDevice: 'traffic-light',
-    dispensingDevice: 'auto-dispensing',
-    md520VfdDevice: 'md520-vfd',
-    inovanceGantryDevice: 'inovance-gantry',
-    liquidMixingDevice: 'liquid-mixing',
-  };
+  const pkgOf: Record<string, string> = Object.fromEntries(
+    SCENE_DESCRIPTORS.map((s) => [s.exportName, s.pkg]),
+  );
+  const deviceVars = Object.keys(pkgOf);
   const deviceIndex = (v: string) => read(`../../${pkgOf[v]}/src/index.ts`);
 
   it('注册表里的设备都能定位到自己的 index.ts，至少覆盖 traffic-light 与 conveyor-sorting', () => {
+    expect(registry).toContain('export const DEVICE_LOADERS');
     expect(deviceVars).toContain('trafficLightDevice');
     expect(deviceVars).toContain('conveyorDevice');
-    deviceVars.forEach((v) => expect(pkgOf[v]).toBeTruthy());
+    deviceVars.forEach((v) => {
+      expect(pkgOf[v]).toBeTruthy();
+      // 场景包统一入口 src/device.ts 必须转出 device.json 声明的导出名
+      expect(read(`../../${pkgOf[v]}/src/device.ts`)).toContain(v);
+    });
   });
 
   it('凡有评分模式的设备，评分 hook 都在平台入口挂载；traffic-light / conveyor-sorting 走 effects', () => {

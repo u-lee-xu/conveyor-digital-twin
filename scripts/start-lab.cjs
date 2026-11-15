@@ -6,15 +6,15 @@
  *
  * 默认起 8 个进程，但浏览器（含智能电视）只需要访问一个地址：
  *   http://<教师机当前任一可达 IP>:5201/
- * 内部链路 8081 / 8082 / 1505 / 5085 / 1503 / 5083 / 1507 / 5087 / 1508 / 5088
- * 已显式绑定 127.0.0.1，只有 Vite preview 的 /ws/plc 与 /ws/relay 同源代理能触达，
- * CSP 的 'self' 直接放行。
- * 三个场景各自一个虚拟 PLC：1505 自动配药、1503 传送带分拣、1507 MD520 变频器。
- * **汇川龙门 XY 的仿真模式对接外部 PLC 仿真软件（Modbus TCP :502），产品默认不启内置靶机**；
- * 没有仿真软件、只想临时联调时设 DT_ENABLE_GANTRY_MOCK=1，额外起 :1509 + :5089
- * （第 9 个进程，仅联调用，不参与正常教学，前端预设也不列出）。
- * 另有 B 档独立 485 从站 1508（纯从站，无参考程序）与真实 Modbus 主站轮询进程；
- * 外部 PLC 要独占从站时设 DT_VFD_485_MASTER=0。
+ * 教学交付只启动 8081 PLC 网关 / 8082 状态中继，两者显式绑定 127.0.0.1，
+ * 只有 Vite preview 的 /ws/plc 与 /ws/relay 同源代理能触达，CSP 的 'self' 直接放行。
+ * 仿真模式一律对接外部 PLC 编程软件的 simulator 或实物 PLC（Modbus TCP :502 /
+ * S7 :102 / 三菱，或 DI/AI 端子接线），内置虚拟 PLC 不是教学交付的一部分。
+ *
+ * 内置虚拟 PLC（1505 配药 / 1503 分拣 / 1507+1508 MD520）只是开发/验收靶机：
+ * 默认不启动，需 DT_ENABLE_MOCK=1（或 npm run start:devlab）显式启用，供
+ * security-check / plc-ports-check / plc-3d-link-check 等自检脚本复跑。
+ * 汇川龙门 XY 本机练习靶机 :1509 + :5089 同样默认不启（DT_ENABLE_GANTRY_MOCK=1）。
  *
  * 【不固化 IP】教室/实验室网络会变：DHCP 续租、换 WiFi、有线无线并存、虚拟网卡。因此：
  *  - 实际通信一律同源相对路径（wsEndpoints.ts 用 location.host），与 IP 无关；
@@ -23,7 +23,8 @@
  *  - 界面默认显示默认路由网卡的「本地 IP」，其余网卡候选可切换复制；
  *    本机自己始终用 127.0.0.1，网络变化后刷新即更新。
  *
- * 环境变量：DT_PORT 改前端端口（默认 5201）；DT_SKIP_MOCK=1 不启虚拟 PLC；
+ * 环境变量：DT_PORT 改前端端口（默认 5201）；
+ * DT_ENABLE_MOCK=1 启动内置虚拟 PLC 靶机（默认关，仅开发 / 自检用）；
  * DT_ENABLE_GANTRY_MOCK=1 额外启用龙门本机练习靶机 :1509（默认关）。
  * 内部端口 8081 / 8082 与同源代理目标硬绑定，检测到不一致会拒绝启动。
  *
@@ -63,6 +64,8 @@ const VFD_SLAVE_PORT = 1508;
 const GANTRY_PLC_PORT = 1509;
 const GANTRY_HTTP_PORT = 5089;
 const GANTRY_MOCK_ENABLED = process.env.DT_ENABLE_GANTRY_MOCK === '1';
+/** 内置虚拟 PLC 只在开发/自检模式启动；课堂交付进程里不应出现 */
+const MOCK_ENABLED = process.env.DT_ENABLE_MOCK === '1' && process.env.DT_SKIP_MOCK !== '1';
 
 /**
  * 取默认路由所在网卡的 IPv4，即「本机 IP」：不发包，只让内核按路由表选源地址。
@@ -129,17 +132,44 @@ function fallbackIp() {
  * 浏览器 fetch 时按当前请求的 Host + 实时网卡表生成候选地址；
  * Cache-Control: no-store 是关键，否则浏览器会缓存旧 IP 又变成「固定 IP」。
  */
+/** Host 只接受域名 / IPv4 / IPv6 字面量 + 可选端口，伪造头不能污染界面上的观众地址 */
+const HOST_RE = /^[a-zA-Z0-9.:[\]-]+$/;
+
 function labInfoPlugin(port) {
+  // 默认路由网卡探测要建 UDP socket，缓存 2s，避免高频轮询放大 fd / 定时器
+  let cachedRoute = { at: 0, ip: '' };
+  const routeIpCached = async () => {
+    const now = Date.now();
+    if (now - cachedRoute.at < 2000) return cachedRoute.ip;
+    cachedRoute = { at: now, ip: await defaultRouteIp() };
+    return cachedRoute.ip;
+  };
+  // 单 IP 每秒最多 20 次，超出直接 429
+  const hits = new Map();
   return {
     name: 'dt-lab-info-dynamic',
     configurePreviewServer(server) {
       server.middlewares.use('/lab-info.json', (req, res) => {
+        const now = Date.now();
+        const key = req.socket.remoteAddress || 'unknown';
+        const entry = hits.get(key) || { at: now, count: 0 };
+        if (now - entry.at > 1000) { entry.at = now; entry.count = 0; }
+        entry.count += 1;
+        hits.set(key, entry);
+        if (entry.count > 20) {
+          res.statusCode = 429;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end('{"error":"rate limited"}\n');
+          return;
+        }
         void (async () => {
-          const rawHost = typeof req.headers.host === 'string' ? req.headers.host : '';
+          const raw = typeof req.headers.host === 'string' ? req.headers.host : '';
+          const rawHost = HOST_RE.test(raw) && raw.length <= 255 ? raw : `127.0.0.1:${port}`;
           const host = hostOf(rawHost);
-          const scheme = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+          // 客户端可伪造 x-forwarded-proto，只按实际连接判断 scheme
+          const scheme = req.socket.encrypted ? 'https' : 'http';
           // 界面默认显示的是默认路由网卡那个「本地 IP」，不是枚举到的第一块虚拟网卡
-          const preferred = await defaultRouteIp();
+          const preferred = await routeIpCached();
           const all = lanAddresses();
           const addresses = preferred
             ? [
@@ -175,13 +205,39 @@ function labInfoPlugin(port) {
   };
 }
 
+/**
+ * 占用探测：内部服务一律只绑 127.0.0.1，探 LAN 地址只会被虚拟网卡上的无关
+ * 监听误报，甚至让 :8081/:8082 的 token fail-fast 直接终止启动。只有对外 :5201
+ * 才额外探测真实网卡，并排除 VirtualBox / WSL / Docker / VPN 等虚拟适配器。
+ * 旧版「尝试绑 0.0.0.0」在 Windows 会与只绑回环的服务共存，不能用来判占用。
+ */
+const VIRTUAL_NIC = /virtual|vmware|vbox|wsl|docker|hyper-v|vpn|tap-|loopback|虚拟|伪/i;
 function portBusy(port) {
+  const hosts = ['127.0.0.1'];
+  if (port === PORT) {
+    try {
+      for (const nic of lanAddresses()) {
+        if (!VIRTUAL_NIC.test(nic.name)) hosts.push(nic.address);
+      }
+    } catch { /* 网卡枚举失败时仍探回环 */ }
+  }
   return new Promise((resolve) => {
-    const s = net.connect(port, '127.0.0.1');
-    s.setTimeout(600);
-    s.on('connect', () => { s.destroy(); resolve(true); });
-    s.on('error', () => resolve(false));
-    s.on('timeout', () => { s.destroy(); resolve(false); });
+    let pending = hosts.length;
+    let busy = false;
+    for (const host of hosts) {
+      let settled = false;
+      const finish = (v) => {
+        if (settled) return;
+        settled = true;
+        if (v) busy = true;
+        if (--pending === 0) resolve(busy);
+      };
+      const s = net.connect(port, host);
+      s.setTimeout(600);
+      s.on('connect', () => { s.destroy(); finish(true); });
+      s.on('error', () => finish(false));
+      s.on('timeout', () => { s.destroy(); finish(false); });
+    }
   });
 }
 
@@ -226,19 +282,76 @@ function assertInternalPorts() {
 }
 
 const children = [];
+let stopping = false;
+const restartCounts = new Map();
+const MAX_RESTART = 3;
+/** 稳定运行这么久后清零重启计数，让「连续 3 次」真的是连续，而非进程生命周期累计 */
+const RESTART_STABLE_MS = 30000;
+
+/** 子进程异常退出要能被看见并自愈：限次指数退避重启，避免「页面能开但 PLC 连不上」 */
 function launch(name, command, args, cwd, needed) {
   if (!needed) {
     console.warn(`[lab] 警告：${name} 端口已被占用，沿用已运行实例；该实例可能不是当前版本，必要时请先停掉旧进程再重启`);
     return;
   }
-  const child = spawn(command, args, { cwd, stdio: 'inherit', windowsHide: true });
-  child.on('exit', (code) => console.log(`[lab] ${name} 退出 (${code})`));
-  children.push({ name, child });
-  console.log(`[lab] 启动 ${name}`);
+  const spawnOnce = () => {
+    if (stopping) return;
+    const child = spawn(command, args, { cwd, stdio: 'inherit', windowsHide: true });
+    children.push({ name, child });
+    console.log(`[lab] 启动 ${name}`);
+    let restartScheduled = false;
+    const stableTimer = setTimeout(() => restartCounts.set(name, 0), RESTART_STABLE_MS);
+    stableTimer.unref?.();
+
+    const scheduleRestart = () => {
+      if (stopping || restartScheduled || process.env.DT_NO_RESTART === '1') return;
+      restartScheduled = true;
+      const n = restartCounts.get(name) ?? 0;
+      if (n >= MAX_RESTART) {
+        console.error(`[lab] ${name} 连续 ${MAX_RESTART} 次异常退出，停止重启；请查看上方日志后手工重启实验室`);
+        return;
+      }
+      restartCounts.set(name, n + 1);
+      const delay = 1000 * 2 ** n;
+      console.warn(`[lab] ${name} 异常退出，${delay}ms 后重启（${n + 1}/${MAX_RESTART}）`);
+      const timer = setTimeout(spawnOnce, delay);
+      timer.unref?.();
+    };
+
+    // spawn 失败（可执行文件缺失 / 权限）只触发 error 而不一定触发 exit，
+    // 两条路径都要能重启，用 restartScheduled 防止重复拉起
+    child.on('error', (err) => {
+      console.error(`[lab] ${name} 启动失败:`, err.message);
+      clearTimeout(stableTimer);
+      scheduleRestart();
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(stableTimer);
+      console.log(`[lab] ${name} 退出 (${code}${signal ? `, ${signal}` : ''})`);
+      if (stopping || code === 0) return;
+      scheduleRestart();
+    });
+  };
+  spawnOnce();
 }
 
 async function main() {
   assertInternalPorts();
+  const [busy8081, busy8082, busy1505, busy1503, busy1507, busy1508, busy1509, busy5089] = await Promise.all([
+    portBusy(8081), portBusy(8082), portBusy(1505),
+    portBusy(CONVEYOR_PLC_PORT), portBusy(VFD_PLC_PORT), portBusy(VFD_SLAVE_PORT),
+    // 靶机默认不启：不预检这两个端口，避免无谓占用（Promise.all 允许非 Promise 值）
+    GANTRY_MOCK_ENABLED && portBusy(GANTRY_PLC_PORT),
+    GANTRY_MOCK_ENABLED && portBusy(GANTRY_HTTP_PORT),
+  ]);
+  /**
+   * 网关 / 中继持有启动时签发的一次性 DT_INTERNAL_TOKEN。沿用旧实例会让新代理写入
+   * 新 token、旧网关按旧 token 复核，握手全部被拒且只有一行告警。其余 mock PLC 与
+   * token 无关，仍允许沿用旧实例。
+   */
+  if (busy8081 || busy8082) {
+    throw new Error('检测到 :8081 / :8082 已被占用：残留的网关或中继持有旧的一次性内部链路 token，新代理握手会被拒绝。请先停掉旧实例再启动本脚本。');
+  }
   const addresses = lanAddresses();
   const recommended = await pickLanIp();
 
@@ -276,17 +389,9 @@ async function main() {
   console.log(`[lab] 平台壳 Web 服务已监听 :${PORT}`);
   previewServer.printUrls();
 
-  const [busy8081, busy8082, busy1505, busy1503, busy1507, busy1508, busy1509, busy5089] = await Promise.all([
-    portBusy(8081), portBusy(8082), portBusy(1505),
-    portBusy(CONVEYOR_PLC_PORT), portBusy(VFD_PLC_PORT), portBusy(VFD_SLAVE_PORT),
-    // 靶机默认不启：不预检这两个端口，避免无谓占用（Promise.all 允许非 Promise 值）
-    GANTRY_MOCK_ENABLED && portBusy(GANTRY_PLC_PORT),
-    GANTRY_MOCK_ENABLED && portBusy(GANTRY_HTTP_PORT),
-  ]);
-
   launch('PLC 网关 :8081', process.execPath, [path.join(WSS, 'server.js')], WSS, !busy8081);
   launch('状态中继 :8082', process.execPath, [path.join(WSS, 'broadcast.js')], WSS, !busy8082);
-  if (process.env.DT_SKIP_MOCK !== '1') {
+  if (MOCK_ENABLED) {
     launch('自动配药虚拟 PLC :1505', process.execPath, [path.join(WSS, 'mock-dispensing-server.js'), '1505'], WSS, !busy1505);
     launch('传送带虚拟 PLC :1503', process.execPath,
       [path.join(WSS, 'mock-conveyor-server.js'), String(CONVEYOR_PLC_PORT)], WSS, !busy1503);
@@ -321,15 +426,21 @@ async function main() {
   lines.forEach((l) => console.log(l));
   console.log(`  界面默认显示： http://${recommended}:${PORT}/ · 默认路由网卡，换网自动更新`);
   console.log('  对外：只需放行 :5201，观众浏览器访问上面的本地 IP 即可');
-  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继 / 1505+5085 配药 / 1503+5083 分拣 / 1507+5087 MD520 / 1508+5088 B档485从站，均绑定 127.0.0.1，外部访问不到');
-  console.log(`  汇川龙门仿真：对接外部 PLC 仿真软件 :502；本机练习靶机 ${GANTRY_MOCK_ENABLED ? '已启用 :1509+5089' : '默认关闭，DT_ENABLE_GANTRY_MOCK=1 可开启'}`);
+  console.log('  本机内部：8081 PLC 网关 / 8082 状态中继，均绑定 127.0.0.1，外部访问不到');
+  console.log(`  内置虚拟 PLC：${MOCK_ENABLED ? '已启用（开发 / 自检模式，不用于课堂）' : '未启用（教学交付模式）'}`);
+  console.log('  验收脚本需靶机时：npm run start:devlab（等价于 DT_ENABLE_MOCK=1 npm run start:lab）');
+  console.log('  仿真模式：连接外部 PLC 仿真软件（Modbus TCP :502 / S7 :102 / 三菱）或实物 PLC 的 DI/AI 端子');
   console.log('  WS 升级鉴权：LAN 只能订阅中继，PLC 写入通道只对主控回环开放；内部链路 token 每次启动重新签发');
   console.log(`  PLC 主机白名单：${process.env.DT_PLC_HOSTS ? process.env.DT_PLC_HOSTS : '默认仅回环；接实体 PLC 请设 DT_PLC_HOSTS'}`);
   console.log('  提示：若修改过源码，请先 npm run build:platform 再启动');
   console.log('');
 
   const stop = () => {
+    if (stopping) return;
+    stopping = true;
     for (const { child } of children) { try { child.kill(); } catch { /* noop */ } }
+    // 先关 Web 监听再退出，避免半初始化的 preview 继续占着 :5201
+    try { previewServer.httpServer?.close?.(); } catch {}
     process.exit(0);
   };
   process.on('SIGINT', stop);
@@ -337,3 +448,15 @@ async function main() {
 }
 
 main().catch((e) => { console.error('[lab] 启动失败:', e); process.exitCode = 1; });
+
+// 主进程同时托管 Web 与全部子进程：异常时必须先收掉子进程，否则 Windows 下
+// 会留下占住 8081/8082 的孤儿，下次启动又被 token fail-fast 永久拒绝。
+process.on('unhandledRejection', (reason) => {
+  console.error('[lab] 未处理的 Promise 拒绝:', reason && reason.message ? reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[lab] 未捕获异常，实验室退出:', err);
+  stopping = true;
+  for (const { child } of children) { try { child.kill(); } catch { /* noop */ } }
+  process.exit(1);
+});

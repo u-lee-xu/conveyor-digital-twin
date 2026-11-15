@@ -2,7 +2,7 @@ import { Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Physics } from '@react-three/rapier';
-import { PhysicsGround } from '@digital-twin/shared';
+import { PhysicsGround } from '@digital-twin/shared/components/PhysicsGround';
 import { PlcConnectionPanel, HelpPanel, useMobile, type PlcConnConfig } from '@digital-twin/shared';
 import { useAppStore, type AppMode } from './stores/useAppStore';
 import { BeltControlPanel } from './scenes/coal-sorting/panels/BeltControlPanel';

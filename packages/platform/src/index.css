@@ -2,13 +2,8 @@
 @config "../tailwind.config.js";
 @source "../../shared/src";
 @source "../src";
-@source "../../conveyor-sorting/src";
-@source "../../pneumatic-robot/src";
-@source "../../traffic-light/src";
-@source "../../auto-dispensing/src";
-@source "../../md520-vfd/src";
-@source "../../inovance-gantry/src";
-@source "../../liquid-mixing/src";
+/* 场景包源码由 glob 自动纳入扫描：导入新包无需改样式配置 */
+@source "../../*/src/**/*.{ts,tsx}";
 
 /* 全局样式 */
 * {

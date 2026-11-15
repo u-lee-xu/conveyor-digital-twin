@@ -1,4 +1,4 @@
-import type { DeviceDefinition, PlatformModeState } from '@digital-twin/platform';
+import type { DeviceDefinition, PlatformModeState } from '@digital-twin/shared';
 import type { Mode } from '@digital-twin/shared';
 import { PneumaticRobotSceneContent } from './scenes/pneumatic-robot/SceneContent';
 import { ManualModePanel } from './platform/ManualModePanel';

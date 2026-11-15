@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
-import { isTeacherRuntime } from '@digital-twin/shared';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { isTeacherRuntime } from '@digital-twin/shared/runtime/runtimeRole';
 import { LauncherPage } from './LauncherPage';
-import { WorkspaceShell } from './WorkspaceShell';
-import { ViewerWorkspace } from './ViewerWorkspace';
-import { devices, getDevice } from './registry';
+import { DEVICE_META } from './deviceMeta';
+
+/**
+ * 工作区按需加载：启动器首屏只带轻量元数据，进入设备 / 成为观众时才拉起
+ * 设备注册表、7 个设备实现与 Three / Rapier 所在的 chunk。
+ */
+const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then((m) => ({ default: m.TeacherWorkspace })));
+const ViewerWorkspace = lazy(() => import('./ViewerWorkspace').then((m) => ({ default: m.ViewerWorkspace })));
 
 type Screen =
   | { role: 'teacher'; deviceId: string | null }
@@ -14,7 +19,7 @@ type Screen =
  *  - 装了软件的机器（Electron file:// / localhost / 127.0.0.1）打开就是主控，
  *    直接进设备选择，不再显示角色选择页。
  *  - 其余设备通过 http://<教师机IP>:5201/ 打开就直接是只读跟随的观众，
- *    不需要参数、不需要点任何按钮（智能电视遥控器也能用）。
+ *    不需要参数或点击任何按钮，智能电视遥控器也能用。
  */
 function initialScreen(): Screen {
   return isTeacherRuntime() ? { role: 'teacher', deviceId: null } : { role: 'viewer' };
@@ -37,6 +42,22 @@ function decodeScreen(st: unknown, fallback: Screen): Screen {
 /** 页面加载时判定一次角色，之后不再随渲染变化（避免 ref 在 render 期读取） */
 const INITIAL_SCREEN: Screen = initialScreen();
 
+function LoadingScreen() {
+  return (
+    <div
+      data-dt-workspace-loading="1"
+      style={{
+        position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', gap: 16,
+        alignItems: 'center', justifyContent: 'center', background: '#0b1220',
+        color: '#e2e8f0', fontFamily: 'system-ui, sans-serif',
+      }}
+    >
+      <div style={{ width: 32, height: 32, border: '2px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%' }} />
+      <p style={{ fontSize: 14 }}>场景加载中…</p>
+    </div>
+  );
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>(INITIAL_SCREEN);
 
@@ -57,26 +78,25 @@ export function App() {
     else setScreen(INITIAL_SCREEN);
   };
 
+  const selectDevice = (deviceId: string) => navigate({ role: 'teacher', deviceId });
+
   // 观众：无软件设备打开链接即进入，零交互
   if (screen.role === 'viewer') {
-    return <ViewerWorkspace />;
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <ViewerWorkspace />
+      </Suspense>
+    );
   }
 
   // 主控：选设备 → 工作区
   if (screen.deviceId === null) {
-    return <LauncherPage devices={devices} onSelect={(deviceId) => navigate({ role: 'teacher', deviceId })} />;
-  }
-
-  const device = getDevice(screen.deviceId);
-  if (!device) {
-    return <LauncherPage devices={devices} onSelect={(deviceId) => navigate({ role: 'teacher', deviceId })} />;
+    return <LauncherPage devices={DEVICE_META} onSelect={selectDevice} />;
   }
 
   return (
-    <WorkspaceShell
-      key={device.id}
-      device={device}
-      onBack={goBack}
-    />
+    <Suspense fallback={<LoadingScreen />}>
+      <TeacherWorkspace key={screen.deviceId} deviceId={screen.deviceId} onBack={goBack} />
+    </Suspense>
   );
 }
