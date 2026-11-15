@@ -661,3 +661,61 @@ describe('模式切换：进入仿真从空罐开始实验', () => {
     expect(store).toContain('sensors: liquidSensorStates(resetVolumes()');
   });
 });
+
+/**
+ * 面板内容契约第一块（11-15 用户拍板：全场景统一、先内容后格式、逐块连内容带样式一起改）。
+ * 执行器按信号类型分簇：三个阀门一排、搅拌正反转一排；形状归平台壳共享类，
+ * 状态色仍由各场景与 3D 同源的纯函数注入，绝不抹平成通用 UI 语义色。
+ */
+describe('面板执行器分簇与全场景统一基线', () => {
+  const manual = read('packages/liquid-mixing/src/platform/LiquidManualPanel.tsx');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const css = read('packages/platform/src/index.css');
+
+  it('执行器 3+2 两排，顺序恒为 A 阀 / B 阀 / 出料阀 → 搅拌正 / 搅拌反', () => {
+    expect(manual).toContain('const EXECUTOR_ROWS');
+    expect(manual).toContain('gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))`');
+    const rows = manual.slice(manual.indexOf('const EXECUTOR_ROWS'), manual.indexOf('/** 三个阀门用'));
+    expect((rows.match(/key: '/g) ?? []).length).toBe(5);
+    const keys = ['valveA', 'valveB', 'discharge', 'stirForward', 'stirReverse'];
+    let last = -1;
+    for (const k of keys) {
+      const at = rows.indexOf(`key: '${k}'`);
+      expect(at, `${k} 必须在分簇里`).toBeGreaterThan(last);
+      last = at;
+    }
+    // 短标签放按钮，完整信号名放地址浮框标题（窄栏只放得下 3~4 字）
+    for (const s of ["label: '搅拌正'", "label: '搅拌反'", "title: '搅拌正转'",
+      "title: '搅拌反转'", "title: 'A 进料阀 / 泵'"]) expect(rows).toContain(s);
+  });
+
+  it('按钮形状统一到平台壳共享类，状态色仍与 3D 同源', () => {
+    expect(manual).toContain('className="btn btn-xs dt-executor touch-manipulation"');
+    expect(manual).toContain('className="section-title"');
+    expect(manual).toContain('badge-green');
+    expect(manual).toContain('className="dt-state-led"');
+    expect(manual).toContain('liquidValveStateColor(on)');
+    expect(manual).toContain('valveKeys.includes(t.key)');
+    expect(manual).toContain("'--dt-state-color': color");
+    expect(manual).toContain('underline={false}');
+    // 状态不再靠按钮里的 ON/OFF 文字，改由可读取的属性承载
+    expect(manual).toContain('data-dt-liquid-executor={t.key}');
+    expect(manual).toContain("data-on={on ? '1' : '0'}");
+    expect(manual).toContain('aria-pressed={on}');
+    expect(manual).not.toContain("{on ? 'ON' : 'OFF'}");
+  });
+
+  it('共享样式在平台壳单一来源，紧凑尺寸与配色不回退', () => {
+    expect(css).toContain('.device-card--compact');
+    expect(css).toContain('.dt-executor[data-on="1"]');
+    expect(css).toContain('var(--dt-state-color');
+    expect(css).toContain('padding: 6px 9px;');
+    // 新增的共享段落不得硬编码任何场景的设备灯色（色值只由场景侧注入 CSS 变量）
+    const shared = css.slice(css.indexOf('/* 高密度读数面板'), css.indexOf('/* 跨设备适配'));
+    expect(shared).not.toContain('#2fb862');
+    expect(shared).not.toContain('#e04b3c');
+    expect(panel).toContain('linear-gradient(135deg, rgba(30,41,59,.9) 0%, rgba(15,23,42,.95) 100%)');
+    expect(panel).toContain("padding: '6px 9px'");
+    expect(panel).toContain('fontWeight: 600');
+  });
+});

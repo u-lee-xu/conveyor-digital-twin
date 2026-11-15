@@ -14,8 +14,22 @@ import {
 } from '../constants/liquidVariables';
 import { LiquidHint, LiquidSensorHint } from './LiquidAddressHint';
 
-export const box: CSSProperties = { background: 'rgba(30,41,59,.9)', border: '1px solid rgba(100,116,139,.4)', borderRadius: 8, padding: '6px 9px', marginBottom: 6 };
-export const btn: CSSProperties = { padding: '3px 7px', borderRadius: 5, cursor: 'pointer', background: 'rgba(71,85,105,.6)', border: '1px solid rgba(100,116,139,.5)', color: '#e2e8f0', fontSize: 11 };
+/**
+ * 设计令牌对齐平台壳 packages/platform/src/index.css 的 .device-card / .btn-outline。
+ * 液体混装左栏约 245px、信息密度高，直接套 .device-card 的 padding 20px / radius 16px
+ * 会把四罐读数重新挤出 900px 视口，因此只统一配色与圆角语言，保留紧凑尺寸。
+ * 后续全场景统一时改由共享类 .device-card--compact 提供，本包不再自带一份常量。
+ */
+export const box: CSSProperties = {
+  background: 'linear-gradient(135deg, rgba(30,41,59,.9) 0%, rgba(15,23,42,.95) 100%)',
+  border: '1px solid rgba(71,85,105,.5)', borderRadius: 10,
+  padding: '6px 9px', marginBottom: 6,
+};
+export const btn: CSSProperties = {
+  padding: '3px 7px', borderRadius: 8, cursor: 'pointer',
+  background: 'rgba(30,41,59,.5)', border: '1px solid rgba(71,85,105,.5)',
+  color: '#cbd5e1', fontSize: 11, fontWeight: 600, transition: 'all .15s ease',
+};
 export const inputStyle: CSSProperties = { width: 62, padding: '2px 5px', background: '#0f172a', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 4, fontSize: 11 };
 
 const led = (on: boolean, color: string): CSSProperties => ({

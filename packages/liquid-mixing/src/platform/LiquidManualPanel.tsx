@@ -1,5 +1,5 @@
 /** 手动模式：5 执行器切换 / 配方设定 / 四罐去皮与任意读数 / 调试主令 + 只读读数 */
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useLiquidStore } from '../stores/useLiquidStore';
 import {
   TANK_IDS, LIQUID_INITIAL_VOLUMES, LIQUID_TANKS,
@@ -18,6 +18,30 @@ const EXECUTOR_HINT: Record<keyof Outputs, LiquidPanelHintKey> = {
   stirForward: 'stirForward', stirReverse: 'stirReverse', discharge: 'discharge',
 };
 
+/**
+ * 面板内容契约第一块：执行器按信号类型分簇，三个阀门一排、搅拌正反转一排。
+ * label 是按钮短标签（窄栏只放得下 3~4 字），title 是地址浮框里的完整信号名。
+ */
+const EXECUTOR_ROWS: { key: keyof Outputs; label: string; title: string }[][] = [
+  [
+    { key: 'valveA', label: 'A 进料阀', title: 'A 进料阀 / 泵' },
+    { key: 'valveB', label: 'B 进料阀', title: 'B 进料阀 / 泵' },
+    { key: 'discharge', label: '出料阀', title: '出料阀' },
+  ],
+  [
+    { key: 'stirForward', label: '搅拌正', title: '搅拌正转' },
+    { key: 'stirReverse', label: '搅拌反', title: '搅拌反转' },
+  ],
+];
+
+/** 三个阀门用与 3D 同源的状态色；搅拌点动用共享语义蓝，避免与阀位混淆 */
+const valveKeys: (keyof Outputs)[] = ['valveA', 'valveB', 'discharge'];
+const STIR_ON_COLOR = '#3b82f6';
+const STIR_OFF_COLOR = '#64748b';
+
+/** 状态色由场景纯函数写入 CSS 变量，按钮形状仍由平台壳共享 .btn 提供 */
+const stateStyle = (color: string): CSSProperties => ({ '--dt-state-color': color } as CSSProperties);
+
 export function LiquidManualPanel() {
   const outputs = useLiquidStore((s) => s.outputs);
   const volumes = useLiquidStore((s) => s.volumes);
@@ -31,42 +55,45 @@ export function LiquidManualPanel() {
     a: '0.0', b: '0.0', mix: '0.0', product: '0.0',
   });
 
-  const toggles: { key: keyof Outputs; label: string }[] = [
-    { key: 'valveA', label: 'A 进料阀' },
-    { key: 'valveB', label: 'B 进料阀' },
-    { key: 'stirForward', label: '搅拌正转点动' },
-    { key: 'stirReverse', label: '搅拌反转点动' },
-    { key: 'discharge', label: '出料阀' },
-  ];
-  /** 三个阀门用与 3D 同源的状态色；两个搅拌点动仍用原蓝色，避免视觉语义混淆 */
-  const valveKeys: (keyof Outputs)[] = ['valveA', 'valveB', 'discharge'];
+  const activeCount = EXECUTOR_ROWS.flat().filter((t) => outputs[t.key]).length;
 
   return (
     <div data-dt-liquid-manual>
       <div style={box}>
-        <b>执行器</b>
-        <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          {toggles.map((t) => {
-            const on = outputs[t.key];
-            const isValve = valveKeys.includes(t.key);
-            const stateColor = liquidValveStateColor(on);
-            return (
-              <button key={t.key} type="button" aria-label={t.label}
-                style={{
-                  ...btn,
-                  background: isValve ? (on ? '#14382a' : '#3b1d1d') : (on ? '#1d4ed8' : undefined),
-                  borderColor: isValve ? stateColor : undefined,
-                  color: isValve ? stateColor : undefined,
-                }}
-                onClick={() => setOutput(t.key, !on)}>
-                {isValve && <span style={{
-                  display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
-                  background: stateColor, boxShadow: `0 0 5px ${stateColor}`, marginRight: 4,
-                }} />}
-                <LiquidHint hintKey={EXECUTOR_HINT[t.key]} title={t.label}>{t.label} {on ? 'ON' : 'OFF'}</LiquidHint>
-              </button>
-            );
-          })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <span className="section-title" style={{ flex: 1, fontSize: 11, color: '#94a3b8', marginBottom: 0 }}>
+            执行器
+          </span>
+          <span className={`badge ${activeCount ? 'badge-green' : 'badge-slate'}`}>
+            {activeCount} / {EXECUTOR_ROWS.flat().length}
+          </span>
+        </div>
+        <div style={{ display: 'grid', gap: 5 }}>
+          {EXECUTOR_ROWS.map((row, i) => (
+            <div key={i} style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))`,
+              gap: 5,
+            }}>
+              {row.map((t) => {
+                const on = outputs[t.key];
+                const isValve = valveKeys.includes(t.key);
+                const stateColor = liquidValveStateColor(on);
+                return (
+                  <button key={t.key} type="button" aria-label={t.label} aria-pressed={on}
+                    data-dt-liquid-executor={t.key} data-on={on ? '1' : '0'}
+                    className="btn btn-xs dt-executor touch-manipulation"
+                    style={stateStyle(isValve ? stateColor : (on ? STIR_ON_COLOR : STIR_OFF_COLOR))}
+                    onClick={() => setOutput(t.key, !on)}>
+                    <span className="dt-state-led" />
+                    <LiquidHint hintKey={EXECUTOR_HINT[t.key]} title={t.title} underline={false}>
+                      {t.label}
+                    </LiquidHint>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
 

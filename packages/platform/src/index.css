@@ -567,6 +567,46 @@ body::before {
 
 .touch-manipulation { touch-action: manipulation; }
 
+/* 高密度读数面板：与 .device-card 同一套深色玻璃卡片语言，但保留紧凑尺寸。
+   液体混装一类场景左栏约 245px，直接套 .device-card 的 padding 20px / radius 16px
+   会把四罐读数挤出 900px 视口。后续各场景统一面板时复用这个变体。 */
+.device-card--compact {
+  padding: 6px 9px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+/* 执行器按钮：形状 / 字号 / 交互由共享 .btn 统一；颜色由各场景与 3D 同源的
+   状态色纯函数写入 --dt-state-color，避免把设备灯色抹平成通用 UI 语义色。 */
+.dt-executor {
+  font-size: 11px;
+  padding: 4px 3px;
+  gap: 3px;
+  white-space: nowrap;
+  min-width: 0;
+}
+.dt-executor:hover { filter: brightness(1.12); }
+.dt-executor:active:not(:disabled) { transform: scale(0.97); }
+.dt-executor[data-on="1"] {
+  background: var(--dt-state-color, #475569);
+  border-color: var(--dt-state-color, #475569);
+  color: #fff;
+}
+.dt-executor[data-on="0"] {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: rgba(71, 85, 105, 0.5);
+  color: #cbd5e1;
+}
+.dt-state-led {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dt-state-color, #64748b);
+}
+.dt-executor[data-on="1"] .dt-state-led { box-shadow: 0 0 5px var(--dt-state-color, #475569); }
+
 /* 跨设备适配：观众端竖屏相机拉远后部件标签会挤成一团，按宽高比隐藏（主控教学仍保留） */
 @media (max-aspect-ratio: 1/1) {
   .dt-viewer-label { display: none; }
