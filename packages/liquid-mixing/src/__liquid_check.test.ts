@@ -20,6 +20,7 @@ import {
   liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
   LIQUID_VISUAL, liquidValveStateColor,
   LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
+  LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS,
 } from './constants/liquidConstants';
 import { LIQUID_REAL32_WORD_ORDER } from './constants/real32';
 
@@ -548,6 +549,7 @@ describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', (
   const demo = read('packages/liquid-mixing/src/platform/LiquidDemoPanel.tsx');
   const sim = read('packages/liquid-mixing/src/platform/LiquidSimPanel.tsx');
   const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+  const index = read('packages/liquid-mixing/src/index.ts');
 
   it('四罐首屏都有液体，组分与体积同源，均匀度是 0..1 的过渡态', () => {
     expect(Object.values(LIQUID_INITIAL_VOLUMES).every((v) => v > 0)).toBe(true);
@@ -559,10 +561,29 @@ describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', (
     expect(LIQUID_INITIAL_COMPONENTS.mixUniformity).toBeLessThan(1);
   });
 
-  it('展示初值在初始化 / 全部复位 / PLC RESET 三处同源', () => {
+  it('首屏展示态只用于初始化，三处复位统一走工艺复位态', () => {
+    // 首次进入场景：展示态（四罐有液体）只出现一次
     expect(store).toContain('const initialComponents = () => ({ ...LIQUID_INITIAL_COMPONENTS });');
-    expect((store.match(/\.\.\.initialComponents\(\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect((store.match(/Object\.assign\(patch, initialComponents\(\)\)/g) ?? []).length).toBe(2);
+    expect((store.match(/\.\.\.initialComponents\(\)/g) ?? []).length).toBe(1);
+    // 全部复位 / frame.reset / 动作字 RESET：只留两个原料罐
+    expect(store).toContain('const resetVolumes = (): Volumes => ({ ...LIQUID_RESET_VOLUMES });');
+    expect(store).toContain('const emptyComponents = () => ({ ...LIQUID_EMPTY_COMPONENTS });');
+    expect((store.match(/patch\.volumes = resetVolumes\(\)/g) ?? []).length).toBe(2);
+    expect((store.match(/Object\.assign\(patch, emptyComponents\(\)\)/g) ?? []).length).toBe(2);
+    expect(store).toContain('volumes: resetVolumes(), tare: emptyVolumes()');
+    expect(store).toContain('sensors: liquidSensorStates(resetVolumes()');
+    expect(LIQUID_RESET_VOLUMES.a).toBe(LIQUID_INITIAL_VOLUMES.a);
+    expect(LIQUID_RESET_VOLUMES.b).toBe(LIQUID_INITIAL_VOLUMES.b);
+    expect(LIQUID_RESET_VOLUMES.mix).toBe(0);
+    expect(LIQUID_RESET_VOLUMES.product).toBe(0);
+    expect(Object.values(LIQUID_EMPTY_COMPONENTS).every((v) => v === 0)).toBe(true);
+  });
+
+  it('退出工作区只清运行时状态，不把复位后的空罐填回展示态', () => {
+    expect(index).toContain('resetRuntime()');
+    expect(index).not.toContain('resetAll()');
+    expect(store).toContain('resetRuntime: () => set({');
+    expect(store).toContain('volumes: resetVolumes()');
   });
 
   it('展示初值仍是纯本地教学量，不进 PLC 变量表与地址表', () => {

@@ -9,7 +9,8 @@ import {
   LIQUID_PHASE, LIQUID_ALARM, LIQUID_CAPACITY, LIQUID_PROCESS, LIQUID_TANKS, LIQUID_GEOM,
   liquidSensorStates, liquidLevelHeight, liquidLevelRatio, resolveStirDirection,
   liquidDisplay, LIQUID_EMPTY_OUTPUTS, liquidAlarmFlags, LIQUID_VISUAL, LIQUID_VIEW_PRESETS,
-  LIQUID_INITIAL_COMPONENTS, liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
+  LIQUID_INITIAL_COMPONENTS, LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS,
+  liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
   liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
   liquidValveStateColor, clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
@@ -19,6 +20,7 @@ const S = () => useLiquidStore.getState();
 /** 以 0.05s 帧推进，模拟浏览器 rAF */
 const run = (frames: number) => { for (let i = 0; i < frames; i += 1) S().tick(0.05); };
 
+/** 测试基线 = 工艺复位态：只留 A/B 原料罐，混合罐与成品罐为空 */
 beforeEach(() => {
   S().resetAll();
 });
@@ -326,21 +328,21 @@ describe('搅拌可视化四层：混合均匀度真值（纯本地教学量）'
     expect(S().mixUniformity).toBe(0);
   });
 
-  it('复位与动作字复位回到展示初值，停机不清（保持当前值）', () => {
+  it('复位与动作字复位清空均匀度，停机不清（保持当前值）', () => {
     S().setVolume('mix', 40);
     S().setOutput('stirForward', true);
     run(20);
     S().stopDemo();
     expect(S().mixUniformity).toBeGreaterThan(0);
-    // 初始展示态与「全部复位 / PLC RESET」是同一个状态，语义才自洽
+    // 一批开始前混合罐是空的，均匀度也必须归零
     S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 3) });
-    expect(S().mixUniformity).toBe(LIQUID_PROCESS.INITIAL_UNIFORMITY);
+    expect(S().mixUniformity).toBe(0);
     S().setVolume('mix', 40);
     S().setOutput('stirForward', true);
     run(20);
     expect(S().mixUniformity).toBeGreaterThan(0);
     S().resetAll();
-    expect(S().mixUniformity).toBe(LIQUID_PROCESS.INITIAL_UNIFORMITY);
+    expect(S().mixUniformity).toBe(0);
   });
 
   it('快照与观众镜像成对：均匀度可导出、可回放、越界与 NaN 被守卫', () => {
@@ -421,7 +423,7 @@ describe('成品罐颜色与混合后的液体同源', () => {
     useLiquidStore.setState({
       volumes: { a: 80, b: 80, mix: 50, product: 0 },
       mixA: 30, mixB: 20, mixUniformity: 1,
-      // 展示初值里成品罐已有组分，造批时必须显式清零，否则「组分和 = 体积」不成立
+      // 造批时显式清零成品组分：避免历史展示态 / 观众镜像污染「组分和 = 体积」断言
       productA: 0, productB: 0,
     });
   };
@@ -460,7 +462,7 @@ describe('成品罐颜色与混合后的液体同源', () => {
       .toBe(liquidBlendColor(30, 20));
   });
 
-  it('成品组分进快照 / 观众镜像，复位回到展示初值、排空清零', () => {
+  it('成品组分进快照 / 观众镜像，复位与排空都清零', () => {
     feedAndStir();
     S().setOutput('discharge', true);
     run(20);
@@ -470,8 +472,8 @@ describe('成品罐颜色与混合后的液体同源', () => {
     expect(snap.LIQUID_PRODUCT_A).toBeCloseTo(S().productA, 3);
     expect(snap.LIQUID_PRODUCT_B).toBeCloseTo(S().productB, 3);
     S().resetAll();
-    expect(S().productA).toBe(LIQUID_INITIAL_COMPONENTS.productA);
-    expect(S().productB).toBe(LIQUID_INITIAL_COMPONENTS.productB);
+    expect(S().productA).toBe(0);
+    expect(S().productB).toBe(0);
     S().applyBroadcast(snap);
     expect(liquidProductColor(S().productA, S().productB)).toBe(color);
     S().setVolume('product', 0);
@@ -501,7 +503,8 @@ describe('快照 / 观众只读镜像', () => {
     S().applyBroadcast({ LIQUID_B: NaN, LIQUID_A: Infinity, LIQUID_MIX: -1 });
     expect(S().volumes.b).toBe(55);
     expect(S().volumes.a).toBe(LIQUID_PROCESS.INITIAL_A);
-    expect(S().volumes.mix).toBe(LIQUID_PROCESS.INITIAL_MIX);
+    // beforeEach 是工艺复位态，缺字段时混合罐保持空罐（不是首屏展示态的 45 L）
+    expect(S().volumes.mix).toBe(0);
   });
 
   it('快照键全为有限数值，掩码与 14 路开关量同源', () => {
@@ -579,5 +582,76 @@ describe('rAF 写入守卫', () => {
     const flowing = S();
     flowing.tick(0.05);
     expect(S().volumes.a).toBeLessThan(flowing.volumes.a);
+  });
+});
+
+/** 用户反馈：「全部复位」应清空混合罐与成品罐，只保留原料罐 */
+describe('全部复位：只保留原料罐（工艺复位态）', () => {
+  const dirtyState = () => {
+    S().setVolume('mix', 55);
+    S().setVolume('product', 70);
+    useLiquidStore.setState({
+      mixA: 33, mixB: 22, productA: 42, productB: 28, mixUniformity: 0.8,
+      round: 3, phase: LIQUID_PHASE.STIR_FWD, alarm: LIQUID_ALARM.OVERFLOW,
+    });
+    S().tareTo('a', 0);
+    S().setOutput('valveA', true);
+  };
+
+  const expectResetState = () => {
+    expect(S().volumes).toEqual({
+      a: LIQUID_RESET_VOLUMES.a, b: LIQUID_RESET_VOLUMES.b, mix: 0, product: 0,
+    });
+    expect(S().mixA).toBe(0);
+    expect(S().mixB).toBe(0);
+    expect(S().productA).toBe(0);
+    expect(S().productB).toBe(0);
+    expect(S().mixUniformity).toBe(0);
+    expect(S().tare).toEqual({ a: 0, b: 0, mix: 0, product: 0 });
+    expect(S().round).toBe(0);
+    expect(S().phase).toBe(LIQUID_PHASE.IDLE);
+    expect(S().alarm).toBe(0);
+    // 执行器必须断电，否则复位后开着的进料阀下一帧就又进料
+    expect(S().outputs).toEqual(LIQUID_EMPTY_OUTPUTS);
+    expect(S().agitatorAngle).toBe(0);
+    expect(S().stirDirection).toBe(0);
+    expect(S().sensors).toEqual(liquidSensorStates(LIQUID_RESET_VOLUMES, LIQUID_EMPTY_OUTPUTS, 0));
+  };
+
+  it('面板「全部复位」把混合罐 / 成品罐排空，A/B 原料罐保持满量', () => {
+    dirtyState();
+    S().resetAll();
+    expectResetState();
+  });
+
+  it('PLC RESET 动作字与 frame.reset 与面板全部复位同一套工艺真值', () => {
+    dirtyState();
+    S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 11) });
+    expectResetState();
+    dirtyState();
+    S().setPlcFrame({ reset: true });
+    expectResetState();
+  });
+
+  it('首屏展示态与工艺复位态是两个不同状态', () => {
+    expect(LIQUID_INITIAL_COMPONENTS.mixUniformity).toBeGreaterThan(0);
+    expect(LIQUID_INITIAL_COMPONENTS.productA).toBeGreaterThan(0);
+    expect(LIQUID_RESET_VOLUMES.mix).toBe(0);
+    expect(LIQUID_RESET_VOLUMES.product).toBe(0);
+    expect(Object.values(LIQUID_EMPTY_COMPONENTS).every((v) => v === 0)).toBe(true);
+  });
+
+  it('退出工作区 resetRuntime 保留四罐体积与组分，只清运行时状态', () => {
+    S().resetAll();
+    S().setVolume('mix', 12);
+    useLiquidStore.setState({ mixUniformity: 0.6, alarm: LIQUID_ALARM.OVERFLOW, estop: true });
+    S().setOutput('valveA', true);
+    S().resetRuntime();
+    expect(S().volumes.mix).toBe(12);
+    expect(S().volumes.product).toBe(0);
+    expect(S().mixUniformity).toBe(0.6);
+    expect(S().alarm).toBe(0);
+    expect(S().estop).toBe(false);
+    expect(S().outputs).toEqual(LIQUID_EMPTY_OUTPUTS);
   });
 });

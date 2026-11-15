@@ -57,7 +57,9 @@ export const liquidMixingDevice: DeviceDefinition = {
   onModeChange: stopAndDisconnect,
   onCleanup: () => {
     stopAndDisconnect();
-    useLiquidStore.getState().resetAll();
+    // 只清运行时状态：保留四罐体积与组分，切走再回来仍是学生刚才看到的现场
+    // （若这里调 resetAll，会把「全部复位」后的空罐又填回教学首屏展示态）
+    useLiquidStore.getState().resetRuntime();
   },
   /** 观众只读镜像：数值键，有限性守卫由 store 内部保证 */
   applyBroadcast: (v: Record<string, boolean | number>) => {

@@ -68,7 +68,8 @@ export const LIQUID_PROCESS = {
   INITIAL_B: 80,
   /** 教学首屏展示态：上一批刚结束，混合罐留一批待出料、成品罐已有部分成品。
    *  四罐都有液体才能一眼看到液面、分层色带与成品颜色同源；仍是四罐 REAL 唯一真值，
-   *  去皮 / 演示 / PLC 语义不变。演示出料阶段会排空混合罐、完成阶段会转出成品。 */
+   *  去皮 / 演示 / PLC 语义不变。演示出料阶段会排空混合罐、完成阶段会转出成品。
+   *  注意：这组值只用于 store 初始化（首次进入场景），「全部复位」不回到此态。 */
   INITIAL_MIX: 45,
   INITIAL_PRODUCT: 60,
   /** 展示态的组分真值（L）：A/B 按 3:2 配比，颜色与混合罐同源 */
@@ -113,13 +114,37 @@ export const LIQUID_INITIAL_VOLUMES: Volumes = {
   product: LIQUID_PROCESS.INITIAL_PRODUCT,
 };
 
-/** 展示态组分与均匀度：store 初始化 / resetAll / PLC 复位同源，不进 PLC 地址表 */
+/**
+ * 教学首屏展示态的组分与均匀度：只在 store 初始化（首次进入场景）使用。
+ * 纯本地教学量，不进 PLC 地址表 / 300ms 链路。
+ */
 export const LIQUID_INITIAL_COMPONENTS = {
   mixA: LIQUID_PROCESS.INITIAL_MIX_A,
   mixB: LIQUID_PROCESS.INITIAL_MIX_B,
   productA: LIQUID_PROCESS.INITIAL_PRODUCT_A,
   productB: LIQUID_PROCESS.INITIAL_PRODUCT_B,
   mixUniformity: LIQUID_PROCESS.INITIAL_UNIFORMITY,
+} as const;
+
+/**
+ * 工艺复位态：一批生产开始前，只保留两个原料罐，混合罐与成品罐必须排空。
+ * 「全部复位」/ PLC RESET 动作字 / frame.reset 三处共用，与首屏展示态严格区分。
+ * 与 LIQUID_INITIAL_VOLUMES 一样是四罐 REAL 唯一真值，去皮 / 传感器一律同源派生。
+ */
+export const LIQUID_RESET_VOLUMES: Volumes = {
+  a: LIQUID_PROCESS.INITIAL_A,
+  b: LIQUID_PROCESS.INITIAL_B,
+  mix: 0,
+  product: 0,
+};
+
+/** 复位后组分与均匀度必须一起归零，否则空罐仍会残留颜色 / 分层 / 成品组分 */
+export const LIQUID_EMPTY_COMPONENTS = {
+  mixA: 0,
+  mixB: 0,
+  productA: 0,
+  productB: 0,
+  mixUniformity: 0,
 } as const;
 
 export const LIQUID_DEFAULT_RECIPE: Recipe = {

@@ -15,7 +15,7 @@ import { create } from 'zustand';
 import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
   LIQUID_PROCESS, LIQUID_CAPACITY, LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
-  LIQUID_DEFAULT_RECIPE,
+  LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS, LIQUID_DEFAULT_RECIPE,
   LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, TANK_IDS,
   clamp, clampVolume, clampUniformity, clampRecipe, LIQUID_RECIPE_LIMITS,
   liquidSensorStates, resolveStirDirection, liquidAlarmFlags,
@@ -91,6 +91,8 @@ interface LiquidStore {
   stopDemo: () => void;
   toggleDemoPause: () => void;
   clearAlarm: () => void;
+  /** 退出工作区：只清运行时状态，保留四罐体积 / 去皮 / 配方 / 组分 / 轮次 */
+  resetRuntime: () => void;
   resetAll: () => void;
   /** 每帧推进：演示状态机 + 流量积分 + 传感器 / 报警派生 */
   tick: (delta: number) => void;
@@ -98,9 +100,12 @@ interface LiquidStore {
 }
 
 const emptyVolumes = (): Volumes => ({ a: 0, b: 0, mix: 0, product: 0 });
+/** 教学首屏展示态：只在 store 初始化时使用，四罐都有液体才看得见液面 / 分层 / 成品同源 */
 const initialVolumes = (): Volumes => ({ ...LIQUID_INITIAL_VOLUMES });
-/** 教学首屏展示态的组分 / 均匀度：初始化、PLC 复位、全部复位三处同源 */
 const initialComponents = () => ({ ...LIQUID_INITIAL_COMPONENTS });
+/** 工艺复位态：全部复位 / PLC RESET 动作字 / frame.reset 三处同源，只留两个原料罐 */
+const resetVolumes = (): Volumes => ({ ...LIQUID_RESET_VOLUMES });
+const emptyComponents = () => ({ ...LIQUID_EMPTY_COMPONENTS });
 
 /** 当前混合罐 A 液占比 0..1（纯函数，面板 / 快照 / PLC 同源） */
 export function liquidRatioA(mixA: number, mixB: number): number {
@@ -185,9 +190,14 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     }
     if (typeof frame.estop === 'boolean') patch.estop = frame.estop;
     if (frame.reset) {
-      patch.volumes = initialVolumes();
+      // 与「全部复位」同一套工艺真值：只留原料罐、排空混合/成品罐、停桨叶与执行器。
+      // 若不清 outputs，复位后开着的进料阀下一帧就又进料，排空会形同虚设。
+      patch.volumes = resetVolumes();
       patch.tare = emptyVolumes();
-      Object.assign(patch, initialComponents());
+      Object.assign(patch, emptyComponents());
+      patch.outputs = { ...LIQUID_EMPTY_OUTPUTS };
+      patch.sensors = liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0);
+      patch.agitatorAngle = 0; patch.stirDirection = 0;
       patch.round = 0;
       patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
     }
@@ -201,9 +211,13 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
             patch.round = 0;
             break;
           case LIQUID_ACTION.RESET:
-            patch.volumes = initialVolumes();
+            // 与 frame.reset / 面板全部复位同源，见上方注释
+            patch.volumes = resetVolumes();
             patch.tare = emptyVolumes();
-            Object.assign(patch, initialComponents());
+            Object.assign(patch, emptyComponents());
+            patch.outputs = { ...LIQUID_EMPTY_OUTPUTS };
+            patch.sensors = liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0);
+            patch.agitatorAngle = 0; patch.stirDirection = 0;
             patch.round = 0;
             patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
             break;
@@ -239,13 +253,27 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   toggleDemoPause: () => set((s) => ({ demoPaused: !s.demoPaused })),
   clearAlarm: () => set({ alarm: 0, estop: false }),
 
+  /**
+   * 退出工作区只清运行时状态：体积 / 去皮 / 配方 / 组分 / 轮次一律保留。
+   * 否则「点过全部复位后切走再回来」会被悄悄填回展示态，学生看到的现场状态丢失。
+   */
+  resetRuntime: () => set({
+    outputs: { ...LIQUID_EMPTY_OUTPUTS },
+    demoRunning: false, stopRequested: false, demoPaused: false,
+    phase: LIQUID_PHASE.IDLE, phaseElapsed: 0,
+    alarm: 0, estop: false, controlSource: 'local', connected: false,
+    actionSeq: 0,
+  }),
+
+  /** 全部复位 = 一批开始前：只留 A/B 原料罐，混合罐与成品罐排空，组分 / 均匀度 / 去皮全清 */
   resetAll: () => set({
-    volumes: initialVolumes(), tare: emptyVolumes(),
+    volumes: resetVolumes(), tare: emptyVolumes(),
     recipe: { ...LIQUID_DEFAULT_RECIPE },
     outputs: { ...LIQUID_EMPTY_OUTPUTS },
-    sensors: liquidSensorStates(initialVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
+    // 传感器初值必须与复位后的体积真值同源，否则空罐仍上报下限 / 上限旧态
+    sensors: liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
     phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, agitatorAngle: 0, stirDirection: 0,
-    ...initialComponents(),
+    ...emptyComponents(),
     demoRunning: false, stopRequested: false, demoPaused: false, round: 0,
     alarm: 0, estop: false, controlSource: 'local', connected: false,
     actionSeq: 0,
