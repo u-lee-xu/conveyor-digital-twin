@@ -73,9 +73,18 @@ export function App() {
     setScreen(next);
   };
 
+  /**
+   * 「返回设备选择」一次点击必达。
+   * 旧实现用 history.back() + popstate 解码决定去向：会话恢复后 history.state 可能
+   * 仍残留 'teacher:<id>'，或栈里连续多条设备记录，此时 back() 只退一格会落到另一条
+   * 设备记录上，画面看起来「没反应」，要点几次才回到首页。
+   * 现在同步 setScreen 回首页，并用 replaceState 把当前记录改写成首页状态，
+   * 保证刷新后仍停在设备选择页；浏览器 / Android 的后退手势仍由 popstate 处理。
+   */
   const goBack = () => {
-    if (history.state !== null) history.back();
-    else setScreen(INITIAL_SCREEN);
+    const home: Screen = { role: 'teacher', deviceId: null };
+    history.replaceState(encodeScreen(home), '');
+    setScreen(home);
   };
 
   const selectDevice = (deviceId: string) => navigate({ role: 'teacher', deviceId });
