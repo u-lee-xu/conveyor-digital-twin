@@ -8,6 +8,7 @@
 import type { DeviceDefinition, PlatformModeState } from '@digital-twin/shared';
 import type { Mode } from '@digital-twin/shared';
 import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
+import { isViewerRuntime } from '@digital-twin/shared';
 import { LiquidSceneContent } from './scenes/LiquidSceneContent';
 import { LiquidSceneWrapper } from './platform/LiquidSceneWrapper';
 import { LiquidModePanel } from './platform/LiquidModePanel';
@@ -32,6 +33,21 @@ function stopAndDisconnect() {
   void modbusService.disconnect().catch(() => undefined);
 }
 
+/**
+ * 进入仿真 = 学生从空罐开始写 PLC 程序做实验。
+ * 首屏摆拍态里混合罐 45 L / 成品罐 60 L 是教学展示用的，不能带进仿真，
+ * 否则学生一进仿真就看到半罐料、上限开关量已置位，实验起点不对。
+ * 因此切到 sim 时统一走「全部复位」的工艺复位态（只留 A/B 原料罐），
+ * 与面板全部复位 / PLC RESET 动作字 / frame.reset 同源。
+ * 手动 / 演示之间切换不动真值；观众端是只读镜像，绝不在此写本地状态。
+ */
+function onModeChange(mode: Mode) {
+  stopAndDisconnect();
+  if (mode === 'sim' && !isViewerRuntime()) {
+    useLiquidStore.getState().resetAll();
+  }
+}
+
 export const liquidMixingDevice: DeviceDefinition = {
   id: 'liquid-mixing',
   name: '液体混装',
@@ -54,7 +70,7 @@ export const liquidMixingDevice: DeviceDefinition = {
   SceneWrapper: LiquidSceneWrapper,
   effects: LiquidDeviceEffects,
   useModeState: useLiquidModeState,
-  onModeChange: stopAndDisconnect,
+  onModeChange,
   onCleanup: () => {
     stopAndDisconnect();
     // 只清运行时状态：保留四罐体积与组分，切走再回来仍是学生刚才看到的现场

@@ -655,3 +655,26 @@ describe('全部复位：只保留原料罐（工艺复位态）', () => {
     expect(S().outputs).toEqual(LIQUID_EMPTY_OUTPUTS);
   });
 });
+
+/** 用户反馈：进入仿真应清空后两个罐，方便从空罐开始写 PLC 程序做实验 */
+describe('仿真起点：只留原料罐', () => {
+  it('复位到空罐后，PLC 打开进料阀能正常进料（实验可以从零开始）', () => {
+    // 进入仿真时 onModeChange('sim') 调用的就是 resetAll()
+    S().resetAll();
+    expect(S().volumes.mix).toBe(0);
+    expect(S().volumes.product).toBe(0);
+    S().setControlSource('plc');
+    S().setPlcFrame({ outputs: { valveA: true } });
+    run(20);
+    expect(S().volumes.mix).toBeGreaterThan(0);
+    expect(S().volumes.a).toBeLessThan(LIQUID_RESET_VOLUMES.a);
+  });
+
+  it('空罐起点不残留组分 / 上限态，传感器与体积真值同源', () => {
+    S().resetAll();
+    expect(S().sensors).toEqual(liquidSensorStates(LIQUID_RESET_VOLUMES, LIQUID_EMPTY_OUTPUTS, 0));
+    expect(S().mixA + S().mixB).toBe(0);
+    expect(S().productA + S().productB).toBe(0);
+    expect(S().mixUniformity).toBe(0);
+  });
+});

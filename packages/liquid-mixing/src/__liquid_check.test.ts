@@ -580,8 +580,10 @@ describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', (
   });
 
   it('退出工作区只清运行时状态，不把复位后的空罐填回展示态', () => {
-    expect(index).toContain('resetRuntime()');
-    expect(index).not.toContain('resetAll()');
+    // 只检查 onCleanup 块：进入仿真的 onModeChange 合法调用了一次 resetAll()
+    const cleanup = index.slice(index.indexOf('onCleanup:'), index.indexOf('/** 观众只读镜像'));
+    expect(cleanup).toContain('resetRuntime()');
+    expect(cleanup).not.toContain('resetAll()');
     expect(store).toContain('resetRuntime: () => set({');
     expect(store).toContain('volumes: resetVolumes()');
   });
@@ -631,5 +633,31 @@ describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', (
       if (recipe > -1) expect(readouts).toBeLessThan(recipe);
       if (table > -1) expect(readouts).toBeLessThan(table);
     }
+  });
+});
+
+/** 用户反馈：进入仿真界面应清空后两个罐，方便学生从空罐开始做实验 */
+describe('模式切换：进入仿真从空罐开始实验', () => {
+  const index = read('packages/liquid-mixing/src/index.ts');
+  const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+
+  it('onModeChange 带新模式参数，只在 sim 且非观众端时复位工艺真值', () => {
+    expect(index).toContain('function onModeChange(mode: Mode)');
+    expect(index).toContain('  onModeChange,');
+    expect(index).toContain("if (mode === 'sim' && !isViewerRuntime())");
+    expect(index).toContain('useLiquidStore.getState().resetAll()');
+    expect(index).not.toContain('onModeChange: stopAndDisconnect');
+    // 手动 / 演示之间切换只停演示断连接，不碰四罐真值
+    expect(index).toContain('function stopAndDisconnect()');
+    expect((index.match(/resetAll\(\)/g) ?? []).length).toBe(1);
+  });
+
+  it('复位目标仍是「只留原料罐」，与面板 / PLC RESET 同源', () => {
+    expect(LIQUID_RESET_VOLUMES.mix).toBe(0);
+    expect(LIQUID_RESET_VOLUMES.product).toBe(0);
+    expect(LIQUID_RESET_VOLUMES.a).toBe(LIQUID_INITIAL_VOLUMES.a);
+    expect(LIQUID_RESET_VOLUMES.b).toBe(LIQUID_INITIAL_VOLUMES.b);
+    expect(store).toContain('volumes: resetVolumes()');
+    expect(store).toContain('sensors: liquidSensorStates(resetVolumes()');
   });
 });
