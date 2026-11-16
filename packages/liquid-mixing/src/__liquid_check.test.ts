@@ -11,17 +11,19 @@ import { fileURLToPath } from 'node:url';
 import {
   LIQUID_WORD_VARIABLES, LIQUID_REAL_NAMES, LIQUID_REPORT_WORD_NAMES,
   LIQUID_COMMAND_WORD_NAMES, LIQUID_SENSOR_FEEDBACK, LIQUID_BOOL_S7,
-  LIQUID_BOOL_MITSUBISHI, LIQUID_OUTPUT_COIL_NAMES, LIQUID_LAMP_COIL_NAMES,
+  LIQUID_BOOL_MITSUBISHI, LIQUID_OUTPUT_COIL_NAMES, LIQUID_LAMP_COIL_NAMES, LIQUID_OPERATOR_COIL_NAMES,
+  liquidSelectorBits,
   LIQUID_ADDRESS_ROWS, LIQUID_COILS, liquidSensorBits, liquidSensorMask, LIQUID_IO_MAP,
   LIQUID_PANEL_HINT_SIGNALS, liquidAddressRowsFor, liquidSensorHintRow,
   type LiquidPanelHintKey,
 } from './constants/liquidVariables';
 import {
-  liquidSensorStates, LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
+  liquidSensorStates, LIQUID_PHASE, LIQUID_VIEW_PRESETS,
   LIQUID_VISUAL, liquidValveStateColor, liquidLampStateColor,
   LIQUID_LEVEL_SWITCHES, LIQUID_LEVEL_SWITCH_ORDER,
   LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
   LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS,
+  LIQUID_OPERATOR_BUTTONS, LIQUID_OPERATOR_SELECTOR,
 } from './constants/liquidConstants';
 import { LIQUID_REAL32_WORD_ORDER } from './constants/real32';
 
@@ -128,18 +130,22 @@ describe('S5 变量表单一来源与 32 位 REAL 双字', () => {
       expect(LIQUID_BOOL_MITSUBISHI[name], name).toBe(`Y${i}`);
       expect(LIQUID_BOOL_S7[name], name).toBe(`M40.${i}`);
     });
-    // 三色灯独立小簇：Modbus 紧接执行器占 C7~C9、三菱八进制 Y7/Y10/Y11、
-    // S7 避开反馈占用的 M41/M42 落 M43.0~M43.2
+    // 三色灯独立小簇：Modbus 紧接执行器占 C5~C7、三菱 Y5~Y7、S7 M40.5~M40.7
     LIQUID_LAMP_COIL_NAMES.forEach((name, i) => {
-      expect(LIQUID_COILS[name], name).toBe(7 + i);
-      expect(LIQUID_BOOL_S7[name], name).toBe(`M43.${i}`);
+      expect(LIQUID_COILS[name], name).toBe(5 + i);
+      expect(LIQUID_BOOL_S7[name], name).toBe(`M40.${5 + i}`);
     });
-    expect(LIQUID_BOOL_MITSUBISHI.LIQUID_LAMP_GREEN).toBe('Y7');
-    expect(LIQUID_BOOL_MITSUBISHI.LIQUID_LAMP_YELLOW).toBe('Y10');
-    expect(LIQUID_BOOL_MITSUBISHI.LIQUID_LAMP_RED).toBe('Y11');
+    expect(LIQUID_BOOL_MITSUBISHI.LIQUID_LAMP_GREEN).toBe('Y5');
+    expect(LIQUID_BOOL_MITSUBISHI.LIQUID_LAMP_YELLOW).toBe('Y6');
+    expect(LIQUID_BOOL_MITSUBISHI.LIQUID_LAMP_RED).toBe('Y7');
+    // 操作站输入簇紧随三色灯占 C8~C14 / X0~X6 / M41.0~M41.6
+    Object.values(LIQUID_OPERATOR_COIL_NAMES).forEach((name, i) => {
+      expect(LIQUID_COILS[name], name).toBe(8 + i);
+      expect(LIQUID_BOOL_S7[name], name).toBe(`M41.${i}`);
+    });
     LIQUID_SENSOR_FEEDBACK.forEach((r, i) => {
       expect(LIQUID_COILS[r.key], r.key).toBe(r.modbus);
-      expect(r.modbus, r.key).toBe(10 + i);
+      expect(r.modbus, r.key).toBe(15 + i);
       expect(LIQUID_BOOL_S7[r.key], r.key).toBe(r.s7);
       expect(LIQUID_BOOL_MITSUBISHI[r.key], r.key).toBe(r.mitsubishi);
     });
@@ -193,27 +199,23 @@ describe('S5 变量表单一来源与 32 位 REAL 双字', () => {
 });
 
 describe('S5 模拟量 / 开关量双路与回写表', () => {
-  it('14 路开关量反馈与 liquidSensorBits 同序同长，线圈连续', () => {
-    expect(LIQUID_SENSOR_FEEDBACK).toHaveLength(14);
-    expect(liquidSensorBits(liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0))).toHaveLength(14);
+  it('8 路液位开关反馈与 liquidSensorBits 同序同长，线圈连续', () => {
+    expect(LIQUID_SENSOR_FEEDBACK).toHaveLength(8);
+    expect(liquidSensorBits(liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 }))).toHaveLength(8);
     const coils = LIQUID_SENSOR_FEEDBACK.map((r) => r.modbus);
-    expect(coils).toEqual(Array.from({ length: 14 }, (_, i) => 10 + i));
+    expect(coils).toEqual(Array.from({ length: 8 }, (_, i) => 15 + i));
     expect(LIQUID_COILS.LIQUID_SENSOR_A_LOW).toBe(coils[0]);
   });
 
-  it('掩码与位数组同源，且不超过 14 位', () => {
-    const sensors = liquidSensorStates(
-      { a: 95, b: 95, mix: 115, product: 290 },
-      { valveA: true, valveB: false, stirForward: true, stirReverse: false, discharge: true },
-      1,
-    );
+  it('掩码与位数组同源，且不超过 8 位', () => {
+    const sensors = liquidSensorStates({ a: 95, b: 95, mix: 115, product: 290 });
     const bits = liquidSensorBits(sensors);
     const mask = liquidSensorMask(sensors);
     expect(bits.reduce((acc, on, i) => acc | (on ? 1 << i : 0), 0)).toBe(mask);
-    expect(mask).toBeLessThan(1 << 14);
+    expect(mask).toBeLessThan(1 << 8);
   });
 
-  it('S7 / 三菱布尔表覆盖 7 个执行器输出 + 3 个三色灯 + 14 路反馈', () => {
+  it('S7 / 三菱布尔表覆盖 5 执行器 + 3 三色灯 + 7 操作站输入 + 8 路反馈', () => {
     for (const name of LIQUID_OUTPUT_COIL_NAMES) {
       expect(LIQUID_BOOL_S7[name]).toBeTruthy();
       expect(LIQUID_BOOL_MITSUBISHI[name]).toBeTruthy();
@@ -226,7 +228,7 @@ describe('S5 模拟量 / 开关量双路与回写表', () => {
       expect(LIQUID_BOOL_S7[row.key]).toBe(row.s7);
       expect(LIQUID_BOOL_MITSUBISHI[row.key]).toBe(row.mitsubishi);
     }
-    expect(Object.keys(LIQUID_BOOL_S7)).toHaveLength(24);
+    expect(Object.keys(LIQUID_BOOL_S7)).toHaveLength(23);
   });
 
   it('设备侧 300ms 链路把 REAL 位模式写回，且开关量仅在掩码变化时发帧', () => {
@@ -270,18 +272,19 @@ describe('传感器信号组合与三色灯塔', () => {
     expect(LIQUID_LEVEL_SWITCHES.mix.map((s) => s.ratio)).toEqual([0.1, 0.35, 0.65, 0.9]);
     expect(LIQUID_LEVEL_SWITCHES.mix.map((s) => s.mode)).toEqual(['low', 'high', 'high', 'high']);
     // 原料罐不再有上限：字段本身就是只保留下限
-    const empty = liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0);
+    const empty = liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 });
     expect(Object.keys(empty).some((k) => k === 'aHigh' || k === 'bHigh')).toBe(false);
   });
 
-  it('回写表前 8 路与液位开关表逐路同名同序，后 6 路是执行器反馈', () => {
-    const levelRows = LIQUID_SENSOR_FEEDBACK.slice(0, 8);
+  it('回写表 8 路与液位开关表逐路同名同序，搅拌与阀位不再出现', () => {
     LIQUID_LEVEL_SWITCH_ORDER.forEach((sw, i) => {
-      expect(levelRows[i].sensor, sw.key).toBe(sw.key);
-      expect(levelRows[i].signal, sw.key).toBe(sw.label);
+      expect(LIQUID_SENSOR_FEEDBACK[i].sensor, sw.key).toBe(sw.key);
+      expect(LIQUID_SENSOR_FEEDBACK[i].signal, sw.key).toBe(sw.label);
     });
-    expect(LIQUID_SENSOR_FEEDBACK.slice(8).map((r) => r.sensor))
-      .toEqual(['stirring', 'forward', 'reverse', 'valveAOpen', 'valveBOpen', 'dischargeOpen']);
+    expect(LIQUID_SENSOR_FEEDBACK).toHaveLength(8);
+    expect(LIQUID_SENSOR_FEEDBACK.map((r) => r.sensor)).toEqual([
+      'aLow', 'bLow', 'mixLow', 'mixMid', 'mixHigh', 'mixOver', 'productLow', 'productHigh',
+    ]);
   });
 
   it('「状态读数」「配方设定」「去皮设定」三个区块已从面板删除，保留回补原液与全部复位', () => {
@@ -308,14 +311,14 @@ describe('传感器信号组合与三色灯塔', () => {
   });
 
   it('三色灯三协议地址与线圈表同源，并进地址表与 300ms 读回', () => {
-    expect(LIQUID_COILS.LIQUID_LAMP_GREEN).toBe(7);
-    expect(LIQUID_COILS.LIQUID_LAMP_YELLOW).toBe(8);
-    expect(LIQUID_COILS.LIQUID_LAMP_RED).toBe(9);
+    expect(LIQUID_COILS.LIQUID_LAMP_GREEN).toBe(5);
+    expect(LIQUID_COILS.LIQUID_LAMP_YELLOW).toBe(6);
+    expect(LIQUID_COILS.LIQUID_LAMP_RED).toBe(7);
     for (const signal of ['三色灯 绿', '三色灯 黄', '三色灯 红']) {
       const row = LIQUID_ADDRESS_ROWS.find((r) => r.signal === signal);
       expect(row, signal).toBeDefined();
-      expect(row?.modbus).toMatch(/^C[789]$/);
-      expect(row?.s7).toMatch(/^M43\.[012]$/);
+      expect(row?.modbus).toMatch(/^C[567]$/);
+      expect(row?.s7).toMatch(/^M40\.[567]$/);
     }
     expect(LIQUID_LAMP_COIL_NAMES).toHaveLength(3);
     expect(effects).toContain('LIQUID_LAMP_COIL_NAMES');
@@ -361,10 +364,12 @@ describe('面板与阶段口径', () => {
   it('阶段枚举含正转与反转两段，演示面板显示阶段与停止请求', () => {
     expect(LIQUID_PHASE.STIR_FWD).toBeLessThan(LIQUID_PHASE.STIR_REV);
     const demo = read('packages/liquid-mixing/src/platform/LiquidDemoPanel.tsx');
-    expect(demo).toContain('requestStopDemo');
+    const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+    expect(demo).toContain('stopRequested');
     expect(demo).toContain('data-dt-liquid-phase');
-    // 紧急停必须真正置 estop（报警 ESTOP 位与快照同源），不能只停演示
-    expect(demo).toContain('setEstop(true)');
+    // 急停不再由演示面板自己实现：统一挂在操作站上，按下即真正置 estop 并切断输出
+    expect(demo).toContain('<LiquidOperatorPanel />');
+    expect(store).toContain("case 'estop':");
     expect(demo).not.toContain('stopDemo()');
   });
 
@@ -459,7 +464,7 @@ describe('搅拌可视化四层：桨叶 / 涡流 / 均匀度 / 转向与机位'
       expect(row.signal).not.toMatch(/均匀度|UNIFORM/i);
     }
     // 本轮按用户要求加了 3 行三色灯、把 8 路液位开关拆成 3 行（净 +5），此后行数应锁死
-    expect(LIQUID_ADDRESS_ROWS.length).toBe(28);
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(31);
   });
 
   it('均匀度在 exportSnapshot / applyBroadcast 成对出现，观众端同源可见', () => {
@@ -505,7 +510,7 @@ describe('成品罐颜色与混合后的液体同源', () => {
     expect(effects).not.toMatch(/PRODUCT_A|PRODUCT_B|productColor/);
     // LIQUID_LEVEL_PRODUCT 是既有 REAL 液位字，与颜色无关；这里只排除颜色 / 组分新键
     expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /PRODUCT_A|PRODUCT_B|COLOR/i.test(k))).toBe(false);
-    expect(LIQUID_ADDRESS_ROWS.length).toBe(28);
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(31);
   });
 });
 
@@ -569,7 +574,7 @@ describe('阀门开关状态色：3D / 面板 / 展台同源', () => {
   });
 
   it('状态色是纯本地派生量，PLC 变量表 / 地址表 / 回写链路零改动', () => {
-    expect(LIQUID_ADDRESS_ROWS.length).toBe(28);
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(31);
     expect(vars).not.toMatch(/VALVE_STATE|VALVE_COLOR/i);
     expect(effects).not.toMatch(/valveStateColor|LIQUID_VALVE_STATE/);
     expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /VALVE_STATE|COLOR/i.test(k))).toBe(false);
@@ -609,12 +614,12 @@ describe('面板变量地址浮框（参考自动配药 AddressHint）', () => {
       }
     }
     // 三色灯三个灯罩各占一行，顺序恒 绿 → 黄 → 红，地址逐灯各自给出
-    expect(liquidAddressRowsFor('lampGreen').map((r) => r.modbus)).toEqual(['C7']);
-    expect(liquidAddressRowsFor('lampYellow').map((r) => r.modbus)).toEqual(['C8']);
-    expect(liquidAddressRowsFor('lampRed').map((r) => r.modbus)).toEqual(['C9']);
+    expect(liquidAddressRowsFor('lampGreen').map((r) => r.modbus)).toEqual(['C5']);
+    expect(liquidAddressRowsFor('lampYellow').map((r) => r.modbus)).toEqual(['C6']);
+    expect(liquidAddressRowsFor('lampRed').map((r) => r.modbus)).toEqual(['C7']);
   });
 
-  it('14 路开关量逐路地址与回写表同源', () => {
+  it('8 路液位开关逐路地址与回写表同源', () => {
     for (const r of LIQUID_SENSOR_FEEDBACK) {
       const [row] = liquidSensorHintRow(r.key);
       expect(row.label).toBe(r.signal);
@@ -643,18 +648,21 @@ describe('面板变量地址浮框（参考自动配药 AddressHint）', () => {
     const all = panel + manual + demo + sim;
     for (const src of [panel, manual, demo, sim]) expect(src).toContain('LiquidHint');
     expect(panel).toContain('LiquidSensorHint');
-    expect(demo).toContain('LiquidSensorHint');
+    // 演示面板的传感器逐路浮框随「正转 / 反转」读数一起移除，操作站改为共享组件
+    expect(demo).toContain('<LiquidOperatorPanel />');
     for (const key of Object.keys(LIQUID_PANEL_HINT_SIGNALS)) {
       // 静态写法 hintKey="xxx"，或经 LEVEL_HINT / EXECUTOR_HINT 映射表引用 'xxx'
       const used = all.includes(`hintKey="${key}"`) || all.includes(`'${key}'`);
       expect(used, `语义键 ${key} 未被任何面板使用`).toBe(true);
     }
-    expect(LIQUID_ADDRESS_ROWS.length).toBe(28);
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(31);
   });
 
   it('纯本地教学量与本地演示主令严禁标地址', () => {
     const keys = Object.keys(LIQUID_PANEL_HINT_SIGNALS);
-    expect(keys.some((k) => /uniform|productA|productB|color|demo|estop/i.test(k))).toBe(false);
+    // 操作站键名形如 opEstop / opStart，属于真实 PLC 输入点；裸 estop / alarm 这种本地量才禁标
+    expect(keys.some((k) => /^(estop|alarm|demo|uniform)$/i.test(k))).toBe(false);
+    expect(keys.some((k) => /uniform|productA|productB|color/i.test(k))).toBe(false);
     // 均匀度是纯本地教学量，不在 PLC 链路上；演示启动 / 停止是本地状态机主令
     expect(panel).not.toMatch(/LiquidHint[^>]*>[^<]*混合均匀度/);
     expect(demo).not.toMatch(/LiquidHint[^>]*>[^<]*(启动|停止本轮后|暂停|紧急停)/);
@@ -689,13 +697,13 @@ describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', (
     // 首次进入场景：展示态（四罐有液体）只出现一次
     expect(store).toContain('const initialComponents = () => ({ ...LIQUID_INITIAL_COMPONENTS });');
     expect((store.match(/\.\.\.initialComponents\(\)/g) ?? []).length).toBe(1);
-    // 全部复位 / frame.reset / 动作字 RESET：只留两个原料罐
+    // 全部复位 / 动作字 RESET / 复位按钮：统一走 processResetPatch 一份补丁，不再各写一遍
     expect(store).toContain('const resetVolumes = (): Volumes => ({ ...LIQUID_RESET_VOLUMES });');
     expect(store).toContain('const emptyComponents = () => ({ ...LIQUID_EMPTY_COMPONENTS });');
-    expect((store.match(/patch\.volumes = resetVolumes\(\)/g) ?? []).length).toBe(2);
-    expect((store.match(/Object\.assign\(patch, emptyComponents\(\)\)/g) ?? []).length).toBe(2);
-    expect(store).toContain('volumes: resetVolumes(), tare: emptyVolumes()');
-    expect(store).toContain('sensors: liquidSensorStates(resetVolumes()');
+    expect((store.match(/function processResetPatch\(\): Partial<LiquidStore>/g) ?? []).length).toBe(1);
+    expect((store.match(/Object\.assign\(patch, processResetPatch\(\)\)/g) ?? []).length).toBe(2);
+    expect((store.match(/const volumes = resetVolumes\(\);/g) ?? []).length).toBe(1);
+    expect(store).toContain('sensors: liquidSensorStates(volumes),');
     expect(LIQUID_RESET_VOLUMES.a).toBe(LIQUID_INITIAL_VOLUMES.a);
     expect(LIQUID_RESET_VOLUMES.b).toBe(LIQUID_INITIAL_VOLUMES.b);
     expect(LIQUID_RESET_VOLUMES.mix).toBe(0);
@@ -709,11 +717,13 @@ describe('精修：工业结构件 / 教学首屏展示态 / 面板可读性', (
     expect(cleanup).toContain('resetRuntime()');
     expect(cleanup).not.toContain('resetAll()');
     expect(store).toContain('resetRuntime: () => set({');
-    expect(store).toContain('volumes: resetVolumes()');
+    // 退出工作区连 operator 姿态也回静止态，不把按下中的按钮带到下一节课
+    expect(store).toContain('operator: emptyOperator(),');
+    expect(store).not.toContain('resetRuntime: () => set(processResetPatch');
   });
 
   it('展示初值仍是纯本地教学量，不进 PLC 变量表与地址表', () => {
-    expect(LIQUID_ADDRESS_ROWS.length).toBe(28);
+    expect(LIQUID_ADDRESS_ROWS.length).toBe(31);
     expect(Object.keys(LIQUID_WORD_VARIABLES).some((k) => /UNIFORM|MIX_A|PRODUCT_A/i.test(k))).toBe(false);
     expect(constants).toContain('不进 PLC 地址表');
   });
@@ -781,8 +791,8 @@ describe('模式切换：进入仿真从空罐开始实验', () => {
     expect(LIQUID_RESET_VOLUMES.product).toBe(0);
     expect(LIQUID_RESET_VOLUMES.a).toBe(LIQUID_INITIAL_VOLUMES.a);
     expect(LIQUID_RESET_VOLUMES.b).toBe(LIQUID_INITIAL_VOLUMES.b);
-    expect(store).toContain('volumes: resetVolumes()');
-    expect(store).toContain('sensors: liquidSensorStates(resetVolumes()');
+    expect(store).toContain('const volumes = resetVolumes();');
+    expect(store).toContain('sensors: liquidSensorStates(volumes),');
   });
 });
 
@@ -846,5 +856,148 @@ describe('面板执行器分簇与全场景统一基线', () => {
     expect(panel).toContain('linear-gradient(135deg, rgba(30,41,59,.9) 0%, rgba(15,23,42,.95) 100%)');
     expect(panel).toContain("padding: '6px 9px'");
     expect(panel).toContain('fontWeight: 600');
+  });
+});
+
+/**
+ * 面板内容契约第三块（11-16 用户拍板）：
+ * ① 传感器只留 8 路液位开关，搅拌运行 / 搅拌方向 / 三阀到位都不是传感器，全部剔除；
+ * ② 报警整体下架（面板区块 / 地址表「报警字」/ 快照键），内部联锁仍在真值层；
+ * ③ 面板与 3D 开关柜新增操作站 6 个操作件并分配地址。
+ */
+describe('操作站与开关柜', () => {
+  const operator = read('packages/liquid-mixing/src/platform/liquidOperator.ts');
+  const cabinet = read('packages/liquid-mixing/src/scenes/components/OperatorCabinet.tsx');
+  const panel = read('packages/liquid-mixing/src/platform/LiquidPanelParts.tsx');
+  const store = read('packages/liquid-mixing/src/stores/useLiquidStore.ts');
+  const scene = read('packages/liquid-mixing/src/scenes/LiquidSceneContent.tsx');
+
+  it('操作件表：5 个点动按钮顺序恒 启动 → 停止 → 复位 → 急停 → 放料，急停是唯一的蘑菇头', () => {
+    expect(LIQUID_OPERATOR_BUTTONS.map((b) => b.key))
+      .toEqual(['start', 'stop', 'reset', 'estop', 'release']);
+    expect(LIQUID_OPERATOR_BUTTONS.map((b) => b.label))
+      .toEqual(['启动', '停止', '复位', '急停', '放料']);
+    expect(LIQUID_OPERATOR_BUTTONS.filter((b) => b.kind === 'estop')).toHaveLength(1);
+    expect(LIQUID_OPERATOR_BUTTONS.find((b) => b.kind === 'estop')?.key).toBe('estop');
+    // 手自动两位选择开关：两档各自一个输入点
+    expect(Object.keys(LIQUID_OPERATOR_SELECTOR.angles)).toEqual(['manual', 'auto']);
+  });
+
+  it('操作站 7 个输入点占 C8~C14 / X0~X6 / M41.0~M41.6，与地址表逐行同源', () => {
+    const labels = ['启动按钮', '停止按钮', '复位按钮', '急停按钮', '手动档', '自动档', '放料按钮'];
+    Object.values(LIQUID_OPERATOR_COIL_NAMES).forEach((name, i) => {
+      expect(LIQUID_COILS[name], name).toBe(8 + i);
+      expect(LIQUID_BOOL_S7[name], name).toBe(`M41.${i}`);
+      expect(LIQUID_BOOL_MITSUBISHI[name], name).toBe(i === 6 ? 'X6' : `X${i}`);
+    });
+    labels.forEach((signal, i) => {
+      const row = LIQUID_ADDRESS_ROWS.find((r) => r.signal === signal);
+      expect(row, signal).toBeDefined();
+      expect(row?.modbus, signal).toBe(`C${8 + i}`);
+      expect(row?.s7, signal).toBe(`M41.${i}`);
+      expect(row?.direction, signal).toBe('设备 → PLC');
+    });
+    // 手动 / 自动两档互锁：一帧写两路，必有一真一假
+    const bits = liquidSelectorBits('auto');
+    expect(bits.names).toEqual(['LIQUID_OP_MANUAL', 'LIQUID_OP_AUTO']);
+    expect(bits.values).toEqual([false, true]);
+    expect(liquidSelectorBits('manual').values).toEqual([true, false]);
+  });
+
+  it('急停 / 复位不再挂在 PLC → 设备 输出簇，只作为操作站输入点', () => {
+    expect(Object.keys(LIQUID_COILS)).not.toContain('LIQUID_ESTOP');
+    expect(Object.keys(LIQUID_COILS)).not.toContain('LIQUID_RESET');
+    expect(LIQUID_OUTPUT_COIL_NAMES).toEqual([
+      'LIQUID_VALVE_A', 'LIQUID_VALVE_B', 'LIQUID_STIR_FWD', 'LIQUID_STIR_REV', 'LIQUID_DISCHARGE',
+    ]);
+    // 连接帧不再下发急停 / 复位布尔，避免与操作站输入同名两套
+    expect(Object.keys(LIQUID_BOOL_S7)).not.toContain('LIQUID_ESTOP');
+    expect(Object.keys(LIQUID_BOOL_S7)).not.toContain('LIQUID_RESET');
+    const effects = read('packages/liquid-mixing/src/platform/LiquidDeviceEffects.tsx');
+    expect(effects).not.toContain('LIQUID_ESTOP');
+    expect(effects).not.toContain('LIQUID_RESET');
+  });
+
+  it('柜面与面板同源：两处都从 LIQUID_OPERATOR_BUTTONS 渲染，不各写一份顺序', () => {
+    for (const src of [cabinet, panel]) {
+      expect(src).toContain('LIQUID_OPERATOR_BUTTONS');
+      expect(src).toContain('LIQUID_OPERATOR_SELECTOR');
+      expect(src).toContain('pressLiquidOperator');
+      expect(src).toContain('selectLiquidOperatorMode');
+    }
+    // 柜面不再自带第二份按钮表；面板也不再硬编码五个按钮的坐标式数组
+    expect(cabinet).not.toContain('const CABINET_BUTTONS');
+    expect(panel).toContain('export function LiquidOperatorPanel');
+    // 三模式面板统一挂同一块操作站
+    for (const f of ['LiquidManualPanel.tsx', 'LiquidDemoPanel.tsx', 'LiquidSimPanel.tsx']) {
+      expect(read(`packages/liquid-mixing/src/platform/${f}`)).toContain('<LiquidOperatorPanel />');
+    }
+  });
+
+  it('写 PLC 只走一个入口：观众端与未连接时零上行，整块写 + 位串去重', () => {
+    expect(operator).toContain('isViewerRuntime()');
+    expect(operator).toContain('if (!st.connected)');
+    expect(operator).toContain('lastKey');
+    expect(operator).toContain("modbusService.getProtocol() === 'modbus'");
+    expect(operator).toContain('modbusService.writeCoils(OP_BASE, bits)');
+    expect(operator).toContain('modbusService.writeVars([...OP_ORDER], bits)');
+    // 300ms 轮询只做去重同步，点动落帧靠事件入口
+    const effects = read('packages/liquid-mixing/src/platform/LiquidDeviceEffects.tsx');
+    expect(effects).toContain('flushLiquidOperator()');
+    // 3D 柜面自己再判一次观众端，双保险
+    expect(cabinet).toContain('if (viewer) return;');
+  });
+
+  it('柜面三盏指示灯镜像塔式三色灯，读同一份 lamps，不新增地址', () => {
+    expect(cabinet).toContain('useLiquidStore((s) => s.lamps)');
+    expect(cabinet).toContain('LM.lampGreen');
+    expect(cabinet).toContain('LM.lampYellow');
+    expect(cabinet).toContain('LM.lampRed');
+    // 灭态复用同一块暗玻璃单例，不逐帧改共享材质
+    expect(cabinet).toContain('LM.ledOff');
+    expect(cabinet).not.toMatch(/LM\.lampGreen\.color\.set/);
+    expect(LIQUID_ADDRESS_ROWS.filter((r) => r.signal.includes('指示灯'))).toHaveLength(0);
+  });
+
+  it('3D 柜体：柜脚落地、元件沿 +Z 逐层派生，绝不用 rotation=[PI/2,0,0] 摆平按钮', () => {
+    expect(scene).toContain('<OperatorCabinet />');
+    expect(scene).toContain('const CABINET_X =');
+    expect(scene).toContain('const CABINET_Z =');
+    expect(scene).toContain('rotation={[0, CABINET_ROT_Y, 0]}');
+    // 圆盘元件统一绕 X 转 90° 让端面朝观察者（与自动配药同一条教训）
+    expect(cabinet).toContain('rotation={[Math.PI / 2, 0, 0]}');
+    // 元件前表面由 FRONT_Z 派生，贴面一律错开 GAP
+    expect(cabinet).toContain('const FRONT_Z = CABINET_SIZE[2] / 2 + PANEL_T;');
+    expect(cabinet).toContain('FRONT_Z + GAP');
+    // 急停用真实蘑菇剖面（车削），不是压扁的球
+    expect(cabinet).toContain('latheGeometry');
+    // 柜体高度由尺寸表派生，柜脚与柜体不共面
+    expect(cabinet).toContain('CABINET_SIZE[1] / 2 + 0.01');
+  });
+
+  it('报警整体下架：面板无报警区块、地址表无「报警字」、快照无报警键', () => {
+    expect(panel).not.toContain('LiquidAlarmPanel');
+    for (const f of ['LiquidManualPanel.tsx', 'LiquidDemoPanel.tsx', 'LiquidSimPanel.tsx']) {
+      expect(read(`packages/liquid-mixing/src/platform/${f}`)).not.toContain('LiquidAlarmPanel');
+    }
+    expect(Object.keys(LIQUID_WORD_VARIABLES)).not.toContain('LIQUID_ALARM_W');
+    expect(LIQUID_ADDRESS_ROWS.filter((r) => r.signal.includes('报警'))).toHaveLength(0);
+    expect(Object.keys(LIQUID_PANEL_HINT_SIGNALS)).not.toContain('alarm');
+    expect(store).not.toContain('LIQUID_ALARM:');
+    expect(store).not.toContain("num('LIQUID_ALARM')");
+    // 内部联锁判据仍在真值层，只是不再对外暴露
+    expect(store).toContain('liquidAlarmFlags(');
+  });
+
+  it('开关量只有 8 路液位开关，掩码为 8 位', () => {
+    expect(LIQUID_SENSOR_FEEDBACK).toHaveLength(8);
+    expect(LIQUID_SENSOR_FEEDBACK.map((r) => r.signal)).toEqual([
+      'A 罐下限', 'B 罐下限', '混合罐下限', '混合罐中液位',
+      '混合罐高液位', '混合罐上极限', '成品罐下限', '成品罐上限',
+    ]);
+    for (const banned of ['搅拌运行', '搅拌正转', '搅拌反转', 'A 阀到位', 'B 阀到位', '出料阀到位']) {
+      expect(LIQUID_SENSOR_FEEDBACK.some((r) => r.signal === banned), banned).toBe(false);
+    }
+    expect(LIQUID_ADDRESS_ROWS.find((r) => r.signal === '开关量掩码')?.note).toBe('8 位');
   });
 });

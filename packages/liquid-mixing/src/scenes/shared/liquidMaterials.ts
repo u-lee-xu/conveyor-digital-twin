@@ -192,6 +192,21 @@ export const LM = {
   lampGreen: lampMat(LIQUID_LAMP_COLOR.green),
   lampYellow: lampMat(LIQUID_LAMP_COLOR.yellow),
   lampRed: lampMat(LIQUID_LAMP_COLOR.red),
+  /** 操作台柜体：深灰钣金，与机架同色系 */
+  cabinetBody: new THREE.MeshStandardMaterial({ color: V.CABINET_COLOR, metalness: 0.55, roughness: 0.5 }),
+  /** 门板：RAL7035 浅灰，托住彩色元件 */
+  cabinetDoor: new THREE.MeshStandardMaterial({ color: '#c3ccd6', metalness: 0.25, roughness: 0.55 }),
+  /** 门板包边 / 门缝 / 元件安装座：深石墨 */
+  cabinetTrim: new THREE.MeshStandardMaterial({ color: '#1b2430', metalness: 0.5, roughness: 0.5 }),
+  /** 按钮安装银环 / 旋钮拨柄：低金属度亮银（无 envMap 时不会渲成深灰） */
+  cabinetBezel: new THREE.MeshStandardMaterial({ color: '#dbe3ec', metalness: 0.18, roughness: 0.3 }),
+  /** 按钮黑色内圈 / 旋钮座 */
+  cabinetCollar: new THREE.MeshStandardMaterial({ color: '#232b35', metalness: 0.4, roughness: 0.5 }),
+  /** 丝印贴片（分区线 / 档位刻点）：贴面薄片，带 polygonOffset 抗闪烁 */
+  cabinetDecal: new THREE.MeshStandardMaterial({
+    color: '#4b5563', metalness: 0.4, roughness: 0.55,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }),
 } as const;
 
 /* ---------------------- 程序化金属拉丝纹理（惰性烘焙） ---------------------- */

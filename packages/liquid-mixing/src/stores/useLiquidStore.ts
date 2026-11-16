@@ -16,11 +16,12 @@ import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
   LIQUID_PROCESS, LIQUID_CAPACITY, LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
   LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS, LIQUID_DEFAULT_RECIPE,
-  LIQUID_EMPTY_OUTPUTS, LIQUID_EMPTY_LAMPS, LIQUID_PHASE, TANK_IDS,
+  LIQUID_EMPTY_OUTPUTS, LIQUID_EMPTY_LAMPS, LIQUID_EMPTY_OPERATOR, LIQUID_PHASE, TANK_IDS,
   clamp, clampVolume, clampUniformity, clampRecipe, LIQUID_RECIPE_LIMITS,
   liquidSensorStates, resolveStirDirection, liquidAlarmFlags,
   type Volumes, type Outputs, type Recipe, type LiquidPhase, type TankId,
   type LiquidSensors, type Lamps, type LiquidLampKind,
+  type OperatorState, type LiquidOperatorKey, type LiquidOperatorMode,
 } from '../constants/liquidConstants';
 import {
   LIQUID_ACTION, LIQUID_PLC_SCALE, decodeAction, LIQUID_SENSOR_FEEDBACK, liquidSensorMask,
@@ -38,8 +39,6 @@ export interface LiquidPlcFrame {
   recipeB?: number;
   stirForwardSec?: number;
   stirReverseSec?: number;
-  estop?: boolean;
-  reset?: boolean;
 }
 
 interface LiquidStore {
@@ -49,6 +48,12 @@ interface LiquidStore {
   outputs: Outputs;
   /** 三色灯塔三个灯罩：PLC 三个线圈给定，手动面板也可本地点动 */
   lamps: Lamps;
+  /**
+   * 操作站真值（物理输入件姿态）：五个点动按钮 + 手自动两位档位。
+   * 柜面按钮与面板按钮同源显示；仿真模式把这七路原样写成 PLC 输入线圈，
+   * 本地动作只在 controlSource==='local' 时执行（仿真连上 PLC 后动作权归 PLC）。
+   */
+  operator: OperatorState;
   sensors: LiquidSensors;
   phase: LiquidPhase;
   phaseElapsed: number;
@@ -80,6 +85,10 @@ interface LiquidStore {
   setOutput: (name: keyof Outputs, on: boolean) => void;
   setOutputs: (patch: Partial<Outputs>) => void;
   setLamp: (kind: LiquidLampKind, on: boolean) => void;
+  /** 操作站点动件：按下 / 松开（本地语义只在 controlSource==='local' 时生效） */
+  pressOperator: (key: LiquidOperatorKey, down: boolean) => void;
+  /** 手自动两位选择开关：切手动档立即停自动流程，切自动档不自动启动 */
+  setOperatorMode: (mode: LiquidOperatorMode) => void;
   setRecipe: (patch: Partial<Recipe>) => void;
   /** 手动补液 / 调试用：直接改体积真值（唯一入口） */
   setVolume: (tank: TankId, value: number) => void;
@@ -112,6 +121,39 @@ const initialComponents = () => ({ ...LIQUID_INITIAL_COMPONENTS });
 /** 工艺复位态：全部复位 / PLC RESET 动作字 / frame.reset 三处同源，只留两个原料罐 */
 const resetVolumes = (): Volumes => ({ ...LIQUID_RESET_VOLUMES });
 const emptyComponents = () => ({ ...LIQUID_EMPTY_COMPONENTS });
+const emptyOperator = (): OperatorState => ({ ...LIQUID_EMPTY_OPERATOR });
+
+/**
+ * 工艺复位补丁：只留 A/B 原料罐、排空混合与成品罐、清组分 / 急停 / 内部联锁、停桨叶与执行器。
+ * 「全部复位」、复位按钮、PLC RESET 动作字（含 frame.reset 的历史语义）三处共用这一份，
+ * 避免「只改体积不清输出」导致下一帧又进料、排空形同虚设。
+ */
+function processResetPatch(): Partial<LiquidStore> {
+  const volumes = resetVolumes();
+  const outputs = { ...LIQUID_EMPTY_OUTPUTS };
+  return {
+    volumes,
+    tare: emptyVolumes(),
+    ...emptyComponents(),
+    outputs,
+    lamps: { ...LIQUID_EMPTY_LAMPS },
+    // 传感器初值必须与复位后的体积真值同源，否则空罐仍上报下限 / 上限旧态
+    sensors: liquidSensorStates(volumes),
+    phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, agitatorAngle: 0, stirDirection: 0,
+    round: 0, alarm: 0, estop: false,
+  };
+}
+
+/** 启动自动循环的补丁：按「启动」按钮与演示面板「▶ 启动」共用同一份语义 */
+function startDemoPatch(s: LiquidStore): Partial<LiquidStore> {
+  return {
+    demoRunning: true, stopRequested: false, demoPaused: false,
+    phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, round: 0,
+    controlSource: 'local', estop: false, alarm: 0,
+    outputs: { ...LIQUID_EMPTY_OUTPUTS },
+    batchStartA: s.volumes.a, batchStartB: s.volumes.b,
+  };
+}
 
 /** 当前混合罐 A 液占比 0..1（纯函数，面板 / 快照 / PLC 同源） */
 export function liquidRatioA(mixA: number, mixB: number): number {
@@ -125,7 +167,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   recipe: { ...LIQUID_DEFAULT_RECIPE },
   outputs: { ...LIQUID_EMPTY_OUTPUTS },
   lamps: { ...LIQUID_EMPTY_LAMPS },
-  sensors: liquidSensorStates(initialVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
+  operator: emptyOperator(),
+  sensors: liquidSensorStates(initialVolumes()),
   phase: LIQUID_PHASE.IDLE,
   phaseElapsed: 0,
   agitatorAngle: 0,
@@ -147,6 +190,69 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   setOutputs: (patch) => set((s) => ({ outputs: { ...s.outputs, ...patch } })),
   /** 三色灯三个灯罩各自独立（对应 PLC 三个线圈），不做互斥锁定 */
   setLamp: (kind, on) => set((s) => ({ lamps: { ...s.lamps, [kind]: on } })),
+
+  /**
+   * 操作站点动件：先落姿态真值（柜面与面板同源显示），再按档位与主控权执行本地动作。
+   * - 仿真模式（controlSource==='plc'）：只置姿态，动作权完全交给学生 PLC 程序；
+   * - 手动 / 演示模式：急停立即断电（硬线直切，不经 PLC）、复位=工艺复位、
+   *   启动仅在自动档生效、停止只置停止请求、放料仅在手动档点动出料阀。
+   */
+  pressOperator: (key, down) => set((s) => {
+    const operator: OperatorState = { ...s.operator, [key]: down };
+    const patch: Partial<LiquidStore> = { operator };
+    if (s.controlSource !== 'local') return patch;
+    if (!down) {
+      // 放料是点动保持：松手即关阀
+      if (key === 'release') patch.outputs = { ...s.outputs, discharge: false };
+      return patch;
+    }
+    switch (key) {
+      case 'estop':
+        Object.assign(patch, {
+          estop: true,
+          outputs: { ...LIQUID_EMPTY_OUTPUTS },
+          lamps: { ...LIQUID_EMPTY_LAMPS },
+          demoRunning: false,
+        });
+        break;
+      case 'reset':
+        // 与「全部复位」同一份工艺复位补丁，但保留按钮按下姿态
+        Object.assign(patch, processResetPatch());
+        break;
+      case 'start':
+        // 自动档按启动才开自动循环；手动档按启动无动作（手动模式直接操作执行器）
+        if (s.operator.mode === 'auto') Object.assign(patch, startDemoPatch(s));
+        break;
+      case 'stop':
+        Object.assign(patch, {
+          stopRequested: true,
+          // 手动档没有「本轮」概念，直接停执行器；自动档等本轮收尾
+          ...(s.operator.mode === 'manual'
+            ? { outputs: { ...LIQUID_EMPTY_OUTPUTS }, demoRunning: false, phase: LIQUID_PHASE.IDLE, phaseElapsed: 0 }
+            : {}),
+        });
+        break;
+      case 'release':
+        if (s.operator.mode === 'manual') patch.outputs = { ...s.outputs, discharge: true };
+        break;
+      default:
+        break;
+    }
+    return patch;
+  }),
+
+  /** 手自动切换：切手动档立即停自动流程，切自动档不自动启动，必须再按「启动」 */
+  setOperatorMode: (mode) => set((s) => {
+    if (s.operator.mode === mode) return {};
+    const operator: OperatorState = { ...s.operator, mode };
+    if (mode !== 'manual' || s.controlSource !== 'local') return { operator };
+    return {
+      operator,
+      demoRunning: false, stopRequested: false, demoPaused: false,
+      phase: LIQUID_PHASE.IDLE, phaseElapsed: 0,
+      outputs: { ...LIQUID_EMPTY_OUTPUTS },
+    };
+  }),
   /** 面板输入统一过守卫：非法值保留上次设定，绝不把 NaN / 负值放进演示状态机 */
   setRecipe: (patch) => set((s) => ({ recipe: clampRecipe(patch, s.recipe) })),
   setVolume: (tank, value) => set((s) => {
@@ -200,20 +306,6 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (typeof frame.stirReverseSec === 'number' && Number.isFinite(frame.stirReverseSec)) {
       patch.recipe = { ...(patch.recipe ?? s.recipe), stirReverseSec: clamp(frame.stirReverseSec / LIQUID_PLC_SCALE.DURATION, 0, LIQUID_RECIPE_LIMITS.MAX_DURATION_SEC) };
     }
-    if (typeof frame.estop === 'boolean') patch.estop = frame.estop;
-    if (frame.reset) {
-      // 与「全部复位」同一套工艺真值：只留原料罐、排空混合/成品罐、停桨叶与执行器。
-      // 若不清 outputs，复位后开着的进料阀下一帧就又进料，排空会形同虚设。
-      patch.volumes = resetVolumes();
-      patch.tare = emptyVolumes();
-      Object.assign(patch, emptyComponents());
-      patch.outputs = { ...LIQUID_EMPTY_OUTPUTS };
-      patch.lamps = { ...LIQUID_EMPTY_LAMPS };
-      patch.sensors = liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0);
-      patch.agitatorAngle = 0; patch.stirDirection = 0;
-      patch.round = 0;
-      patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
-    }
     if (typeof frame.actionWord === 'number' && Number.isFinite(frame.actionWord)) {
       const { code, seq } = decodeAction(frame.actionWord);
       if (seq !== s.actionSeq) {
@@ -224,16 +316,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
             patch.round = 0;
             break;
           case LIQUID_ACTION.RESET:
-            // 与 frame.reset / 面板全部复位同源，见上方注释
-            patch.volumes = resetVolumes();
-            patch.tare = emptyVolumes();
-            Object.assign(patch, emptyComponents());
-            patch.outputs = { ...LIQUID_EMPTY_OUTPUTS };
-            patch.lamps = { ...LIQUID_EMPTY_LAMPS };
-            patch.sensors = liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0);
-            patch.agitatorAngle = 0; patch.stirDirection = 0;
-            patch.round = 0;
-            patch.phase = LIQUID_PHASE.IDLE; patch.alarm = 0;
+            // 与「全部复位」同源，见 processResetPatch
+            Object.assign(patch, processResetPatch());
             break;
           case LIQUID_ACTION.ALARM_RESET:
             patch.alarm = 0;
@@ -250,13 +334,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     return patch;
   }),
 
-  startDemo: () => set((s) => ({
-    demoRunning: true, stopRequested: false, demoPaused: false,
-    phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, round: 0,
-    controlSource: 'local', estop: false, alarm: 0,
-    outputs: { ...LIQUID_EMPTY_OUTPUTS },
-    batchStartA: s.volumes.a, batchStartB: s.volumes.b,
-  })),
+  startDemo: () => set((s) => startDemoPatch(s)),
   /** 用户按停止：不打断当前循环，等 DONE 阶段收尾后再停 */
   requestStopDemo: () => set({ stopRequested: true }),
   stopDemo: () => set({
@@ -274,6 +352,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   resetRuntime: () => set({
     outputs: { ...LIQUID_EMPTY_OUTPUTS },
     lamps: { ...LIQUID_EMPTY_LAMPS },
+    operator: emptyOperator(),
     demoRunning: false, stopRequested: false, demoPaused: false,
     phase: LIQUID_PHASE.IDLE, phaseElapsed: 0,
     alarm: 0, estop: false, controlSource: 'local', connected: false,
@@ -281,20 +360,15 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   }),
 
   /** 全部复位 = 一批开始前：只留 A/B 原料罐，混合罐与成品罐排空，组分 / 均匀度 / 去皮全清 */
-  resetAll: () => set({
-    volumes: resetVolumes(), tare: emptyVolumes(),
+  resetAll: () => set(() => ({
+    ...processResetPatch(),
     recipe: { ...LIQUID_DEFAULT_RECIPE },
-    outputs: { ...LIQUID_EMPTY_OUTPUTS },
-    lamps: { ...LIQUID_EMPTY_LAMPS },
-    // 传感器初值必须与复位后的体积真值同源，否则空罐仍上报下限 / 上限旧态
-    sensors: liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
-    phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, agitatorAngle: 0, stirDirection: 0,
-    ...emptyComponents(),
-    demoRunning: false, stopRequested: false, demoPaused: false, round: 0,
-    alarm: 0, estop: false, controlSource: 'local', connected: false,
+    operator: emptyOperator(),
+    demoRunning: false, stopRequested: false, demoPaused: false,
+    controlSource: 'local', connected: false,
     actionSeq: 0,
     batchStartA: LIQUID_INITIAL_VOLUMES.a, batchStartB: LIQUID_INITIAL_VOLUMES.b,
-  }),
+  })),
 
   tick: (delta) => {
     const s = get();
@@ -462,7 +536,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       demoRunning = false;
       phase = LIQUID_PHASE.IDLE;
     }
-    const sensors = liquidSensorStates(volumes, outputs, stirDirection);
+    const sensors = liquidSensorStates(volumes);
     // 报警锁存：停机后触发条件会自我消失（例如阀断电后低液位判据不再成立），
     // 必须保持上一次报警，直到「报警复位」/ ALARM_RESET / 启动演示 / resetAll 显式清除。
     if (s.alarm !== 0 && alarm === 0) alarm = s.alarm;
@@ -517,8 +591,6 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     if (phase !== undefined) patch.phase = clamp(Math.trunc(phase), 0, LIQUID_PHASE.DONE) as LiquidPhase;
     const round = num('LIQUID_ROUND');
     if (round !== undefined) patch.round = Math.trunc(round);
-    const alarm = num('LIQUID_ALARM');
-    if (alarm !== undefined) patch.alarm = Math.trunc(alarm);
     const angle = signed('LIQUID_ANGLE');
     if (angle !== undefined) patch.agitatorAngle = angle;
     const dir = signed('LIQUID_STIR_DIR');
@@ -539,7 +611,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       red: bit('LIQUID_LAMP_RED', s.lamps.red),
     };
     const mask = num('LIQUID_SENSOR_MASK');
-    const bits = liquidSensorStates(volumes, outputs, patch.stirDirection ?? s.stirDirection);
+    const bits = liquidSensorStates(volumes);
     if (mask !== undefined) {
       // 主控快照优先：掩码逐位覆盖到回写表声明的同一批字段，新增 / 删除传感器不丢字段
       const on = (i: number) => (Math.trunc(mask) & (1 << i)) !== 0;
@@ -553,6 +625,9 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     patch.stopRequested = bit('LIQUID_STOP_REQUESTED', s.stopRequested);
     patch.demoPaused = bit('LIQUID_PAUSED', s.demoPaused);
     patch.estop = bit('LIQUID_ESTOP', s.estop);
+    // 手自动档位是持久操作件，观众端必须跟随主控；五个点动按钮是瞬时态，不进快照
+    const opMode = num('LIQUID_OP_MODE');
+    if (opMode !== undefined) patch.operator = { ...s.operator, mode: opMode >= 1 ? 'auto' : 'manual' };
     set(patch);
   },
 }));
@@ -577,7 +652,6 @@ export function exportLiquidSnapshot(): Record<string, number> {
     LIQUID_PRODUCT_B: round2(s.productB),
     LIQUID_PHASE: s.phase,
     LIQUID_ROUND: s.round,
-    LIQUID_ALARM: s.alarm,
     LIQUID_ANGLE: round2(s.agitatorAngle),
     LIQUID_STIR_DIR: s.stirDirection,
     LIQUID_VALVE_A: s.outputs.valveA ? 1 : 0,
@@ -593,5 +667,6 @@ export function exportLiquidSnapshot(): Record<string, number> {
     LIQUID_STOP_REQUESTED: s.stopRequested ? 1 : 0,
     LIQUID_PAUSED: s.demoPaused ? 1 : 0,
     LIQUID_ESTOP: s.estop ? 1 : 0,
+    LIQUID_OP_MODE: s.operator.mode === 'auto' ? 1 : 0,
   };
 }

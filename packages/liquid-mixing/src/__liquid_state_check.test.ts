@@ -12,7 +12,7 @@ import {
   LIQUID_INITIAL_COMPONENTS, LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS,
   liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
   liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
-  liquidValveStateColor, liquidLampStateColor, clampUniformity, mixHexColor,
+  liquidValveStateColor, liquidLampStateColor, clampUniformity, mixHexColor, LIQUID_EMPTY_OPERATOR,
 } from './constants/liquidConstants';
 import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION, liquidSensorHintRow } from './constants/liquidVariables';
 
@@ -57,15 +57,13 @@ describe('去皮 / 零点语义（项目红线）', () => {
 describe('模拟量与开关量同源', () => {
   it('8 路液位开关按罐分档：原料罐只判下限，混合罐四档，成品罐上下限', () => {
     // 满量程：混合罐 90% 以上同时点亮中 / 高 / 上极限，成品罐点亮上限、不点亮下限
-    const full = liquidSensorStates(
-      { a: 100, b: 100, mix: 120, product: 300 }, LIQUID_EMPTY_OUTPUTS, 0,
-    );
+    const full = liquidSensorStates({ a: 100, b: 100, mix: 120, product: 300 });
     expect([full.mixMid, full.mixHigh, full.mixOver]).toEqual([true, true, true]);
     expect(full.mixLow).toBe(false);
     expect(full.productHigh).toBe(true);
     expect(full.productLow).toBe(false);
     // 空罐：四罐下限全亮，中 / 高 / 上极限与成品上限全灭
-    const empty = liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0);
+    const empty = liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 });
     expect([empty.aLow, empty.bLow, empty.mixLow, empty.productLow])
       .toEqual([true, true, true, true]);
     expect([empty.mixMid, empty.mixHigh, empty.mixOver, empty.productHigh])
@@ -74,9 +72,7 @@ describe('模拟量与开关量同源', () => {
   });
 
   it('混合罐四档按 10 / 35 / 65 / 90 % 逐档点亮，档与档之间不串', () => {
-    const at = (pct: number) => liquidSensorStates(
-      { a: 80, b: 80, mix: LIQUID_CAPACITY.mix * pct, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0,
-    );
+    const at = (pct: number) => liquidSensorStates({ a: 80, b: 80, mix: LIQUID_CAPACITY.mix * pct, product: 0 });
     const levels = [0.05, 0.4, 0.7, 0.95].map(at);
     expect(levels.map((s) => s.mixLow)).toEqual([true, false, false, false]);
     expect(levels.map((s) => s.mixMid)).toEqual([false, true, true, true]);
@@ -681,7 +677,7 @@ describe('全部复位：只保留原料罐（工艺复位态）', () => {
     expect(S().outputs).toEqual(LIQUID_EMPTY_OUTPUTS);
     expect(S().agitatorAngle).toBe(0);
     expect(S().stirDirection).toBe(0);
-    expect(S().sensors).toEqual(liquidSensorStates(LIQUID_RESET_VOLUMES, LIQUID_EMPTY_OUTPUTS, 0));
+    expect(S().sensors).toEqual(liquidSensorStates(LIQUID_RESET_VOLUMES));
   };
 
   it('面板「全部复位」把混合罐 / 成品罐排空，A/B 原料罐保持满量', () => {
@@ -690,12 +686,13 @@ describe('全部复位：只保留原料罐（工艺复位态）', () => {
     expectResetState();
   });
 
-  it('PLC RESET 动作字与 frame.reset 与面板全部复位同一套工艺真值', () => {
+  it('PLC RESET 动作字与面板全部复位同一套工艺真值', () => {
     dirtyState();
     S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 11) });
     expectResetState();
+    // 同一 seq 不重复触发（边沿锁存），加一才再执行一次
     dirtyState();
-    S().setPlcFrame({ reset: true });
+    S().setPlcFrame({ actionWord: encodeAction(LIQUID_ACTION.RESET, 12) });
     expectResetState();
   });
 
@@ -738,9 +735,123 @@ describe('仿真起点：只留原料罐', () => {
 
   it('空罐起点不残留组分 / 上限态，传感器与体积真值同源', () => {
     S().resetAll();
-    expect(S().sensors).toEqual(liquidSensorStates(LIQUID_RESET_VOLUMES, LIQUID_EMPTY_OUTPUTS, 0));
+    expect(S().sensors).toEqual(liquidSensorStates(LIQUID_RESET_VOLUMES));
     expect(S().mixA + S().mixB).toBe(0);
     expect(S().productA + S().productB).toBe(0);
     expect(S().mixUniformity).toBe(0);
+  });
+});
+
+/**
+ * 操作站第三块（11-16 用户拍板）：面板与 3D 开关柜同步新增
+ * 启动 / 停止 / 复位 / 急停 / 手自动切换 / 放料 六个操作件。
+ * 五个点动件 + 手自动两位 = 7 个 PLC 输入点；本地语义只在手动 / 演示模式生效。
+ */
+describe('操作站：点动 / 手自动 / 急停 / 放料', () => {
+  it('手动档按启动无动作，自动档按启动进入自动循环', () => {
+    expect(S().operator.mode).toBe('manual');
+    S().pressOperator('start', true);
+    expect(S().demoRunning).toBe(false);
+    S().pressOperator('start', false);
+    S().setOperatorMode('auto');
+    S().pressOperator('start', true);
+    expect(S().demoRunning).toBe(true);
+    expect(S().phase).toBe(LIQUID_PHASE.IDLE);
+    S().pressOperator('start', false);
+    run(2);
+    expect(S().phase).toBe(LIQUID_PHASE.FEED_A);
+  });
+
+  it('停止在自动档只置停止请求，不打断当前轮', () => {
+    S().setOperatorMode('auto');
+    S().pressOperator('start', true);
+    S().pressOperator('start', false);
+    run(4);
+    S().pressOperator('stop', true);
+    expect(S().stopRequested).toBe(true);
+    expect(S().demoRunning).toBe(true);
+  });
+
+  it('急停立即切断输出与三色灯并停演示，复位解除且保留按钮姿态', () => {
+    S().setOperatorMode('auto');
+    S().pressOperator('start', true);
+    S().pressOperator('start', false);
+    run(6);
+    S().setLamp('green', true);
+    S().pressOperator('estop', true);
+    expect(S().estop).toBe(true);
+    expect(S().outputs).toEqual(LIQUID_EMPTY_OUTPUTS);
+    expect(S().lamps).toEqual({ green: false, yellow: false, red: false });
+    expect(S().demoRunning).toBe(false);
+    expect(S().operator.estop).toBe(true);
+    S().pressOperator('estop', false);
+    S().pressOperator('reset', true);
+    expect(S().estop).toBe(false);
+    // 复位只清设备状态，按钮按下姿态仍如实反映物理件
+    expect(S().operator.reset).toBe(true);
+  });
+
+  it('放料在手动档点动出料阀，松手即关', () => {
+    S().setVolume('mix', 40);
+    S().pressOperator('release', true);
+    expect(S().outputs.discharge).toBe(true);
+    run(4);
+    expect(S().volumes.product).toBeGreaterThan(0);
+    S().pressOperator('release', false);
+    expect(S().outputs.discharge).toBe(false);
+  });
+
+  it('仿真接管后操作站只落姿态，不驱动执行器', () => {
+    S().setControlSource('plc');
+    S().pressOperator('release', true);
+    expect(S().operator.release).toBe(true);
+    expect(S().outputs.discharge).toBe(false);
+  });
+
+  it('手自动切换：切手动档停自动流程，切自动档不自动启动', () => {
+    S().setOperatorMode('auto');
+    S().pressOperator('start', true);
+    S().pressOperator('start', false);
+    run(3);
+    expect(S().demoRunning).toBe(true);
+    S().setOperatorMode('manual');
+    expect(S().demoRunning).toBe(false);
+    expect(S().outputs).toEqual(LIQUID_EMPTY_OUTPUTS);
+    S().setOperatorMode('auto');
+    expect(S().demoRunning).toBe(false);
+  });
+
+  it('复位与退出工作区把操作站回到静止态', () => {
+    S().setOperatorMode('auto');
+    S().pressOperator('start', true);
+    S().resetAll();
+    expect(S().operator).toEqual(LIQUID_EMPTY_OPERATOR);
+    S().pressOperator('reset', true);
+    S().resetRuntime();
+    expect(S().operator).toEqual(LIQUID_EMPTY_OPERATOR);
+  });
+
+  it('快照镜像手自动档位；五个点动件是瞬时态不进快照', () => {
+    S().setOperatorMode('auto');
+    expect(exportLiquidSnapshot().LIQUID_OP_MODE).toBe(1);
+    S().pressOperator('start', true);
+    const keys = Object.keys(exportLiquidSnapshot());
+    expect(keys.filter((k) => /^LIQUID_OP_(START|STOP|RESET|ESTOP|RELEASE)$/.test(k))).toEqual([]);
+    S().pressOperator('start', false);
+    S().setOperatorMode('manual');
+    expect(exportLiquidSnapshot().LIQUID_OP_MODE).toBe(0);
+    S().applyBroadcast({ LIQUID_OP_MODE: 1 });
+    expect(S().operator.mode).toBe('auto');
+  });
+
+  it('报警只在内部联锁，不再进快照与广播', () => {
+    expect(Object.keys(exportLiquidSnapshot())).not.toContain('LIQUID_ALARM');
+    // 内部联锁仍生效：原液抽空时开进料阀即切断输出
+    S().setVolume('a', 0);
+    S().setControlSource('plc');
+    S().setPlcFrame({ outputs: { valveA: true } });
+    run(3);
+    expect(S().alarm).toBe(LIQUID_ALARM.LOW_LEVEL);
+    expect(S().outputs.valveA).toBe(false);
   });
 });

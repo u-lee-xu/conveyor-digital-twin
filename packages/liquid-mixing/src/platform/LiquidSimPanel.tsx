@@ -1,10 +1,10 @@
-/** 仿真模式：连接 PLC + 三个主令 + 四罐 REAL 寄存器读数 + 变量地址表 + 只读读数 */
+/** 仿真模式：连接 PLC + 操作站 + 动作字主令 + 四罐 REAL 寄存器读数 + 变量地址表 + 只读读数 */
 import { useLiquidStore } from '../stores/useLiquidStore';
 import { LIQUID_ADDRESS_ROWS } from '../constants/liquidVariables';
 import { TANK_IDS, LIQUID_TANKS } from '../constants/liquidConstants';
 import {
   box, btn, LEVEL_HINT,
-  LiquidVariableTable, LiquidLevelReadout, LiquidSensorPanel, LiquidAlarmPanel,
+  LiquidOperatorPanel, LiquidVariableTable, LiquidLevelReadout, LiquidSensorPanel,
 } from './LiquidPanelParts';
 import { LiquidHint } from './LiquidAddressHint';
 import { LiquidPlcConnection, pulseLiquidAction, LIQUID_ACTION_BUTTONS } from './LiquidPlcConnection';
@@ -16,6 +16,8 @@ export function LiquidSimPanel() {
   return (
     <div data-dt-liquid-sim>
       <LiquidPlcConnection modeLabel="仿真模式" />
+      {/* 操作站七路输入点全部回写 PLC；本地动作权在连上 PLC 后交给学生程序 */}
+      <LiquidOperatorPanel />
       <div style={box}>
         <b><LiquidHint hintKey="actionWord" title="显式动作字">主令控制</LiquidHint></b>
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
@@ -43,7 +45,6 @@ export function LiquidSimPanel() {
       {/* 关键读数上移；变量地址表默认折叠并放到末尾，避免地址表挤掉液位读数与传感器信号 */}
       <LiquidLevelReadout />
       <LiquidSensorPanel />
-      <LiquidAlarmPanel />
       <LiquidVariableTable />
     </div>
   );

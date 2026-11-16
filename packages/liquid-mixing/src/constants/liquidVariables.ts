@@ -3,17 +3,19 @@
  * 面板地址表、连接帧、300ms 轮询、传感器回写、静态自检全部读这一份，不另抄。
  *
  * 通道划分（项目红线）：
- *  - 设备 → 控制器（输入）：四罐 32 位 REAL 模拟量液位 + 14 路开关量反馈 + 阶段/报警/轮次/配比字；
- *  - 控制器 → 设备（输出）：进料阀 A/B、搅拌正转/反转、出料阀、急停、复位、三色灯（线圈）
+ *  - 设备 → 控制器（输入）：四罐 32 位 REAL 模拟量液位 + 8 路液位开关 + 操作站 7 个输入点
+ *    + 阶段/轮次/配比/开关量掩码字；
+ *  - 控制器 → 设备（输出）：进料阀 A/B、搅拌正转/反转、出料阀、三色灯（线圈）
  *    + 配方/动作/时长字；
  *  - 数值量单列：REAL 占两个保持寄存器（低字在前），离散量单字 uint16。
  *
- * 线圈按信号类型分簇（地址分配规范 P1~P6）：执行器输出 C0~C6、三色灯输出 C7~C9、
- * 设备反馈 C10~C23。三簇各自连续，不为避让其它场景后移。
+ * 地址按信号类型分簇（地址分配规范 P1~P6），四簇各自连续、从低地址起、不为避让其它场景后移：
+ *   执行器输出 C0~C4 · 三色灯输出 C5~C7 · 操作站输入 C8~C14 · 液位开关输入 C15~C22。
+ * 字变量同样按方向分簇：设备 → PLC 的 HR8~HR11，PLC → 设备 的 HR12~HR16。
  * 现场总线只保留变量 / 信号映射语义，不实现任何底层链路。
  */
 import { LIQUID_REAL32_WORD_ORDER } from './real32';
-import type { LiquidSensors } from './liquidConstants';
+import type { LiquidOperatorKey, LiquidSensors } from './liquidConstants';
 
 /**
  * 网关 connect 帧下发的字变量表。
@@ -27,18 +29,17 @@ export const LIQUID_WORD_VARIABLES = {
   LIQUID_LEVEL_B: { type: 'dint32', wordOrder: LIQUID_REAL32_WORD_ORDER, modbus: { address: 2, words: 2 }, s7: { address: 'MD4', words: 2 }, mitsubishi: { address: 'D2', words: 2 } },
   LIQUID_LEVEL_MIX: { type: 'dint32', wordOrder: LIQUID_REAL32_WORD_ORDER, modbus: { address: 4, words: 2 }, s7: { address: 'MD8', words: 2 }, mitsubishi: { address: 'D4', words: 2 } },
   LIQUID_LEVEL_PRODUCT: { type: 'dint32', wordOrder: LIQUID_REAL32_WORD_ORDER, modbus: { address: 6, words: 2 }, s7: { address: 'MD12', words: 2 }, mitsubishi: { address: 'D6', words: 2 } },
-  // 设备 → PLC：阶段 / 报警 / 轮次 / 配比 / 开关量掩码（单字 uint16）
+  // 设备 → PLC：阶段 / 轮次 / 配比 / 开关量掩码（单字 uint16）
   LIQUID_PHASE_W: { type: 'uint16', modbus: { address: 8, words: 1 }, s7: { address: 'MW16', words: 1 }, mitsubishi: { address: 'D8', words: 1 } },
-  LIQUID_ALARM_W: { type: 'uint16', modbus: { address: 9, words: 1 }, s7: { address: 'MW18', words: 1 }, mitsubishi: { address: 'D9', words: 1 } },
-  LIQUID_ROUND_W: { type: 'uint16', modbus: { address: 10, words: 1 }, s7: { address: 'MW20', words: 1 }, mitsubishi: { address: 'D10', words: 1 } },
-  LIQUID_RATIO_A: { type: 'uint16', modbus: { address: 16, words: 1 }, s7: { address: 'MW32', words: 1 }, mitsubishi: { address: 'D16', words: 1 } },
-  LIQUID_SENSOR_MASK: { type: 'uint16', modbus: { address: 17, words: 1 }, s7: { address: 'MW34', words: 1 }, mitsubishi: { address: 'D17', words: 1 } },
+  LIQUID_ROUND_W: { type: 'uint16', modbus: { address: 9, words: 1 }, s7: { address: 'MW18', words: 1 }, mitsubishi: { address: 'D9', words: 1 } },
+  LIQUID_RATIO_A: { type: 'uint16', modbus: { address: 10, words: 1 }, s7: { address: 'MW20', words: 1 }, mitsubishi: { address: 'D10', words: 1 } },
+  LIQUID_SENSOR_MASK: { type: 'uint16', modbus: { address: 11, words: 1 }, s7: { address: 'MW22', words: 1 }, mitsubishi: { address: 'D11', words: 1 } },
   // PLC → 设备：显式动作序号 / 配方 / 搅拌时长（单位：0.1 L 与 0.1 s 的 uint16）
-  LIQUID_ACTION_W: { type: 'uint16', modbus: { address: 11, words: 1 }, s7: { address: 'MW22', words: 1 }, mitsubishi: { address: 'D11', words: 1 } },
-  LIQUID_RECIPE_A: { type: 'uint16', modbus: { address: 12, words: 1 }, s7: { address: 'MW24', words: 1 }, mitsubishi: { address: 'D12', words: 1 } },
-  LIQUID_RECIPE_B: { type: 'uint16', modbus: { address: 13, words: 1 }, s7: { address: 'MW26', words: 1 }, mitsubishi: { address: 'D13', words: 1 } },
-  LIQUID_STIR_FWD_W: { type: 'uint16', modbus: { address: 14, words: 1 }, s7: { address: 'MW28', words: 1 }, mitsubishi: { address: 'D14', words: 1 } },
-  LIQUID_STIR_REV_W: { type: 'uint16', modbus: { address: 15, words: 1 }, s7: { address: 'MW30', words: 1 }, mitsubishi: { address: 'D15', words: 1 } },
+  LIQUID_ACTION_W: { type: 'uint16', modbus: { address: 12, words: 1 }, s7: { address: 'MW24', words: 1 }, mitsubishi: { address: 'D12', words: 1 } },
+  LIQUID_RECIPE_A: { type: 'uint16', modbus: { address: 13, words: 1 }, s7: { address: 'MW26', words: 1 }, mitsubishi: { address: 'D13', words: 1 } },
+  LIQUID_RECIPE_B: { type: 'uint16', modbus: { address: 14, words: 1 }, s7: { address: 'MW28', words: 1 }, mitsubishi: { address: 'D14', words: 1 } },
+  LIQUID_STIR_FWD_W: { type: 'uint16', modbus: { address: 15, words: 1 }, s7: { address: 'MW30', words: 1 }, mitsubishi: { address: 'D15', words: 1 } },
+  LIQUID_STIR_REV_W: { type: 'uint16', modbus: { address: 16, words: 1 }, s7: { address: 'MW32', words: 1 }, mitsubishi: { address: 'D16', words: 1 } },
 } as const;
 
 export const LIQUID_REAL_NAMES = [
@@ -48,7 +49,7 @@ export type LiquidRealName = (typeof LIQUID_REAL_NAMES)[number];
 
 /** 设备 → PLC 的单字上报项（写入 PLC 输入区，绝不与 PLC 下发项混写） */
 export const LIQUID_REPORT_WORD_NAMES = [
-  'LIQUID_PHASE_W', 'LIQUID_ALARM_W', 'LIQUID_ROUND_W', 'LIQUID_RATIO_A', 'LIQUID_SENSOR_MASK',
+  'LIQUID_PHASE_W', 'LIQUID_ROUND_W', 'LIQUID_RATIO_A', 'LIQUID_SENSOR_MASK',
 ] as const;
 
 /** PLC → 设备 的单字下发项（轮询读回，不回写） */
@@ -58,48 +59,48 @@ export const LIQUID_COMMAND_WORD_NAMES = [
 
 export const LIQUID_WORD_NAMES = Object.keys(LIQUID_WORD_VARIABLES);
 
-/** Modbus 线圈：0~6 执行器输出、7~9 三色灯输出、10~23 设备反馈 */
+/** Modbus 线圈：0~4 执行器输出、5~7 三色灯输出、8~14 操作站输入、15~22 液位开关输入 */
 export const LIQUID_COILS = {
-  // PLC → 设备：5 个执行器 + 急停 / 复位
+  // PLC → 设备：5 个执行器
   LIQUID_VALVE_A: 0,
   LIQUID_VALVE_B: 1,
   LIQUID_STIR_FWD: 2,
   LIQUID_STIR_REV: 3,
   LIQUID_DISCHARGE: 4,
-  LIQUID_ESTOP: 5,
-  LIQUID_RESET: 6,
   // PLC → 设备：三色灯塔三个灯罩
-  LIQUID_LAMP_GREEN: 7,
-  LIQUID_LAMP_YELLOW: 8,
-  LIQUID_LAMP_RED: 9,
-  // 设备 → PLC：8 路液位开关 + 3 路搅拌反馈 + 3 路阀门到位
-  LIQUID_SENSOR_A_LOW: 10,
-  LIQUID_SENSOR_B_LOW: 11,
-  LIQUID_SENSOR_MIX_LOW: 12,
-  LIQUID_SENSOR_MIX_MID: 13,
-  LIQUID_SENSOR_MIX_HIGH: 14,
-  LIQUID_SENSOR_MIX_OVER: 15,
-  LIQUID_SENSOR_PRODUCT_LOW: 16,
-  LIQUID_SENSOR_PRODUCT_HIGH: 17,
-  LIQUID_STIR_RUNNING: 18,
-  LIQUID_STIR_FORWARD: 19,
-  LIQUID_STIR_REVERSE: 20,
-  LIQUID_VALVE_A_OPEN: 21,
-  LIQUID_VALVE_B_OPEN: 22,
-  LIQUID_DISCHARGE_OPEN: 23,
+  LIQUID_LAMP_GREEN: 5,
+  LIQUID_LAMP_YELLOW: 6,
+  LIQUID_LAMP_RED: 7,
+  // 设备 → PLC：操作站 5 个点动按钮 + 手自动两位选择开关
+  LIQUID_OP_START: 8,
+  LIQUID_OP_STOP: 9,
+  LIQUID_OP_RESET: 10,
+  LIQUID_OP_ESTOP: 11,
+  LIQUID_OP_MANUAL: 12,
+  LIQUID_OP_AUTO: 13,
+  LIQUID_OP_RELEASE: 14,
+  // 设备 → PLC：8 路液位开关
+  LIQUID_SENSOR_A_LOW: 15,
+  LIQUID_SENSOR_B_LOW: 16,
+  LIQUID_SENSOR_MIX_LOW: 17,
+  LIQUID_SENSOR_MIX_MID: 18,
+  LIQUID_SENSOR_MIX_HIGH: 19,
+  LIQUID_SENSOR_MIX_OVER: 20,
+  LIQUID_SENSOR_PRODUCT_LOW: 21,
+  LIQUID_SENSOR_PRODUCT_HIGH: 22,
 } as const;
+
+export type LiquidCoilName = keyof typeof LIQUID_COILS;
 
 /** PLC 输出的执行器线圈变量名（readVars 用，S7 / 三菱按名字读） */
 export const LIQUID_OUTPUT_COIL_NAMES = [
-  'LIQUID_VALVE_A', 'LIQUID_VALVE_B', 'LIQUID_STIR_FWD', 'LIQUID_STIR_REV',
-  'LIQUID_DISCHARGE', 'LIQUID_ESTOP', 'LIQUID_RESET',
+  'LIQUID_VALVE_A', 'LIQUID_VALVE_B', 'LIQUID_STIR_FWD', 'LIQUID_STIR_REV', 'LIQUID_DISCHARGE',
 ] as const;
 export type LiquidOutputCoilName = (typeof LIQUID_OUTPUT_COIL_NAMES)[number];
 
 /**
  * 三色灯三个输出线圈（PLC → 设备，顺序恒 绿 → 黄 → 红）。
- * 单独成簇：Modbus 紧接执行器占 C7~C9、三菱 Y7·Y10·Y11（八进制连续）、
- * S7 用 M43.0~M43.2，避开反馈占用的 M41 / M42 两个字节。
+ * 紧接执行器占 C5~C7 / Y5~Y7 / M40.5~M40.7，与执行器共用同一次连续读。
  */
 export const LIQUID_LAMP_COIL_NAMES = [
   'LIQUID_LAMP_GREEN', 'LIQUID_LAMP_YELLOW', 'LIQUID_LAMP_RED',
@@ -107,31 +108,60 @@ export const LIQUID_LAMP_COIL_NAMES = [
 export type LiquidLampCoilName = (typeof LIQUID_LAMP_COIL_NAMES)[number];
 
 /**
- * 14 路开关量反馈（设备 → PLC）：8 路液位开关 + 搅拌运行/方向 + 三阀到位。
+ * 操作站输入点（设备 → PLC，顺序恒 启动 → 停止 → 复位 → 急停 → 手动档 → 自动档 → 放料）。
+ * 五个按钮是点动件，手自动两位互锁（必有一真一假）。
+ * 柜面按钮、面板操作站区块、地址浮框、地址表全部读这一张表，顺序不可能再漂移。
+ */
+export const LIQUID_OPERATOR_COIL_NAMES = {
+  start: 'LIQUID_OP_START',
+  stop: 'LIQUID_OP_STOP',
+  reset: 'LIQUID_OP_RESET',
+  estop: 'LIQUID_OP_ESTOP',
+  manual: 'LIQUID_OP_MANUAL',
+  auto: 'LIQUID_OP_AUTO',
+  release: 'LIQUID_OP_RELEASE',
+} as const satisfies Record<LiquidOperatorKey | 'manual' | 'auto', LiquidCoilName>;
+
+export type LiquidOperatorCoilName = (typeof LIQUID_OPERATOR_COIL_NAMES)[keyof typeof LIQUID_OPERATOR_COIL_NAMES];
+
+/** 5 个点动按钮的输入线圈名（不含选择开关两档） */
+export const LIQUID_OPERATOR_BUTTON_COILS: readonly LiquidOperatorCoilName[] = [
+  LIQUID_OPERATOR_COIL_NAMES.start,
+  LIQUID_OPERATOR_COIL_NAMES.stop,
+  LIQUID_OPERATOR_COIL_NAMES.reset,
+  LIQUID_OPERATOR_COIL_NAMES.estop,
+  LIQUID_OPERATOR_COIL_NAMES.release,
+];
+
+/** 一帧写两路互锁输入：手自动档位切换的唯一入口 */
+export function liquidSelectorBits(mode: 'manual' | 'auto'): { names: LiquidOperatorCoilName[]; values: boolean[] } {
+  return {
+    names: [LIQUID_OPERATOR_COIL_NAMES.manual, LIQUID_OPERATOR_COIL_NAMES.auto],
+    values: [mode === 'manual', mode === 'auto'],
+  };
+}
+
+/**
+ * 8 路液位开关反馈（设备 → PLC）：A/B 下限 + 混合罐四档 + 成品罐上下限。
  * `sensor` 直接指向 LiquidSensors 字段，liquidSensorBits() 按本表取位，
  * 面板顺序、回写线圈、位掩码三者不可能再漂移。
+ * 搅拌运行与阀门到位不是传感器（用户 11-16 明确剔除），本表只有 8 行。
  */
 export const LIQUID_SENSOR_FEEDBACK = [
-  { key: 'LIQUID_SENSOR_A_LOW', sensor: 'aLow', signal: 'A 罐下限', modbus: 10, s7: 'M41.0', mitsubishi: 'X0' },
-  { key: 'LIQUID_SENSOR_B_LOW', sensor: 'bLow', signal: 'B 罐下限', modbus: 11, s7: 'M41.1', mitsubishi: 'X1' },
-  { key: 'LIQUID_SENSOR_MIX_LOW', sensor: 'mixLow', signal: '混合罐下限', modbus: 12, s7: 'M41.2', mitsubishi: 'X2' },
-  { key: 'LIQUID_SENSOR_MIX_MID', sensor: 'mixMid', signal: '混合罐中液位', modbus: 13, s7: 'M41.3', mitsubishi: 'X3' },
-  { key: 'LIQUID_SENSOR_MIX_HIGH', sensor: 'mixHigh', signal: '混合罐高液位', modbus: 14, s7: 'M41.4', mitsubishi: 'X4' },
-  { key: 'LIQUID_SENSOR_MIX_OVER', sensor: 'mixOver', signal: '混合罐上极限', modbus: 15, s7: 'M41.5', mitsubishi: 'X5' },
-  { key: 'LIQUID_SENSOR_PRODUCT_LOW', sensor: 'productLow', signal: '成品罐下限', modbus: 16, s7: 'M41.6', mitsubishi: 'X6' },
-  { key: 'LIQUID_SENSOR_PRODUCT_HIGH', sensor: 'productHigh', signal: '成品罐上限', modbus: 17, s7: 'M41.7', mitsubishi: 'X7' },
-  { key: 'LIQUID_STIR_RUNNING', sensor: 'stirring', signal: '搅拌运行', modbus: 18, s7: 'M42.0', mitsubishi: 'X10' },
-  { key: 'LIQUID_STIR_FORWARD', sensor: 'forward', signal: '搅拌正转', modbus: 19, s7: 'M42.1', mitsubishi: 'X11' },
-  { key: 'LIQUID_STIR_REVERSE', sensor: 'reverse', signal: '搅拌反转', modbus: 20, s7: 'M42.2', mitsubishi: 'X12' },
-  { key: 'LIQUID_VALVE_A_OPEN', sensor: 'valveAOpen', signal: 'A 阀到位', modbus: 21, s7: 'M42.3', mitsubishi: 'X13' },
-  { key: 'LIQUID_VALVE_B_OPEN', sensor: 'valveBOpen', signal: 'B 阀到位', modbus: 22, s7: 'M42.4', mitsubishi: 'X14' },
-  { key: 'LIQUID_DISCHARGE_OPEN', sensor: 'dischargeOpen', signal: '出料阀到位', modbus: 23, s7: 'M42.5', mitsubishi: 'X15' },
+  { key: 'LIQUID_SENSOR_A_LOW', sensor: 'aLow', signal: 'A 罐下限', modbus: 15, s7: 'M42.0', mitsubishi: 'X7' },
+  { key: 'LIQUID_SENSOR_B_LOW', sensor: 'bLow', signal: 'B 罐下限', modbus: 16, s7: 'M42.1', mitsubishi: 'X10' },
+  { key: 'LIQUID_SENSOR_MIX_LOW', sensor: 'mixLow', signal: '混合罐下限', modbus: 17, s7: 'M42.2', mitsubishi: 'X11' },
+  { key: 'LIQUID_SENSOR_MIX_MID', sensor: 'mixMid', signal: '混合罐中液位', modbus: 18, s7: 'M42.3', mitsubishi: 'X12' },
+  { key: 'LIQUID_SENSOR_MIX_HIGH', sensor: 'mixHigh', signal: '混合罐高液位', modbus: 19, s7: 'M42.4', mitsubishi: 'X13' },
+  { key: 'LIQUID_SENSOR_MIX_OVER', sensor: 'mixOver', signal: '混合罐上极限', modbus: 20, s7: 'M42.5', mitsubishi: 'X14' },
+  { key: 'LIQUID_SENSOR_PRODUCT_LOW', sensor: 'productLow', signal: '成品罐下限', modbus: 21, s7: 'M42.6', mitsubishi: 'X15' },
+  { key: 'LIQUID_SENSOR_PRODUCT_HIGH', sensor: 'productHigh', signal: '成品罐上限', modbus: 22, s7: 'M42.7', mitsubishi: 'X16' },
 ] as const;
 
 export const LIQUID_SENSOR_FEEDBACK_BASE = LIQUID_SENSOR_FEEDBACK[0].modbus;
 export const LIQUID_SENSOR_VAR_NAMES: string[] = LIQUID_SENSOR_FEEDBACK.map((r) => r.key);
 
-/** 面板 / 广播 / 回写 / 地址掩码同源：按回写表顺序取位，14 位固定 */
+/** 面板 / 广播 / 回写 / 地址掩码同源：按回写表顺序取位，8 位固定 */
 export function liquidSensorBits(s: LiquidSensors): boolean[] {
   return LIQUID_SENSOR_FEEDBACK.map((r) => s[r.sensor]);
 }
@@ -140,20 +170,29 @@ export function liquidSensorMask(s: LiquidSensors): number {
   return liquidSensorBits(s).reduce((acc, on, i) => acc | (on ? 1 << i : 0), 0);
 }
 
-/** S7 / 三菱按变量名读写布尔；输出线圈、三色灯与反馈线圈全部随 connect 帧下发 */
+/**
+ * S7 / 三菱按变量名读写布尔；输出线圈、三色灯、操作站输入与反馈线圈全部随 connect 帧下发。
+ * S7 按字节分簇：M40 = 输出 + 灯，M41 = 操作站，M42 = 液位开关。
+ */
 export const LIQUID_BOOL_S7: Record<string, string> = {
   LIQUID_VALVE_A: 'M40.0', LIQUID_VALVE_B: 'M40.1',
   LIQUID_STIR_FWD: 'M40.2', LIQUID_STIR_REV: 'M40.3',
-  LIQUID_DISCHARGE: 'M40.4', LIQUID_ESTOP: 'M40.5', LIQUID_RESET: 'M40.6',
-  LIQUID_LAMP_GREEN: 'M43.0', LIQUID_LAMP_YELLOW: 'M43.1', LIQUID_LAMP_RED: 'M43.2',
+  LIQUID_DISCHARGE: 'M40.4',
+  LIQUID_LAMP_GREEN: 'M40.5', LIQUID_LAMP_YELLOW: 'M40.6', LIQUID_LAMP_RED: 'M40.7',
+  LIQUID_OP_START: 'M41.0', LIQUID_OP_STOP: 'M41.1', LIQUID_OP_RESET: 'M41.2',
+  LIQUID_OP_ESTOP: 'M41.3', LIQUID_OP_MANUAL: 'M41.4', LIQUID_OP_AUTO: 'M41.5',
+  LIQUID_OP_RELEASE: 'M41.6',
   ...Object.fromEntries(LIQUID_SENSOR_FEEDBACK.map((r) => [r.key, r.s7])),
 };
 
 export const LIQUID_BOOL_MITSUBISHI: Record<string, string> = {
   LIQUID_VALVE_A: 'Y0', LIQUID_VALVE_B: 'Y1',
   LIQUID_STIR_FWD: 'Y2', LIQUID_STIR_REV: 'Y3',
-  LIQUID_DISCHARGE: 'Y4', LIQUID_ESTOP: 'Y5', LIQUID_RESET: 'Y6',
-  LIQUID_LAMP_GREEN: 'Y7', LIQUID_LAMP_YELLOW: 'Y10', LIQUID_LAMP_RED: 'Y11',
+  LIQUID_DISCHARGE: 'Y4',
+  LIQUID_LAMP_GREEN: 'Y5', LIQUID_LAMP_YELLOW: 'Y6', LIQUID_LAMP_RED: 'Y7',
+  LIQUID_OP_START: 'X0', LIQUID_OP_STOP: 'X1', LIQUID_OP_RESET: 'X2',
+  LIQUID_OP_ESTOP: 'X3', LIQUID_OP_MANUAL: 'X4', LIQUID_OP_AUTO: 'X5',
+  LIQUID_OP_RELEASE: 'X6',
   ...Object.fromEntries(LIQUID_SENSOR_FEEDBACK.map((r) => [r.key, r.mitsubishi])),
 };
 
@@ -166,6 +205,7 @@ export function liquidBoolVarsFor(protocol: string): Record<string, string> | un
 /**
  * 显式动作字：PLC 用「序号变化」触发动作，浏览器不靠滞后的液位读数猜工艺意图。
  * 短脉冲由边沿记忆锁存，见 useLiquidStore.setPlcFrame。
+ * ALARM_RESET 保留为契约码位（清内部联锁与急停），面板上不再有独立报警区块。
  */
 export const LIQUID_ACTION = {
   NONE: 0,
@@ -213,29 +253,32 @@ export const LIQUID_ADDRESS_ROWS: readonly LiquidAddressRow[] = [
   { signal: '混合罐液位 REAL', mitsubishi: 'D4·D5', modbus: 'HR4·5', s7: 'MD8', direction: '设备 → PLC', note: '32 位浮点 L' },
   { signal: '成品罐液位 REAL', mitsubishi: 'D6·D7', modbus: 'HR6·7', s7: 'MD12', direction: '设备 → PLC', note: '32 位浮点 L' },
   { signal: '工艺阶段', mitsubishi: 'D8', modbus: 'HR8', s7: 'MW16', direction: '设备 → PLC', note: '0~6' },
-  { signal: '报警字', mitsubishi: 'D9', modbus: 'HR9', s7: 'MW18', direction: '设备 → PLC', note: '按位' },
-  { signal: '循环轮次', mitsubishi: 'D10', modbus: 'HR10', s7: 'MW20', direction: '设备 → PLC', note: '计数' },
-  { signal: 'A 液配比', mitsubishi: 'D16', modbus: 'HR16', s7: 'MW32', direction: '设备 → PLC', note: '0~100' },
-  { signal: '开关量掩码', mitsubishi: 'D17', modbus: 'HR17', s7: 'MW34', direction: '设备 → PLC', note: '14 位' },
-  { signal: '显式动作字', mitsubishi: 'D11', modbus: 'HR11', s7: 'MW22', direction: 'PLC → 设备', note: '序号变化触发' },
-  { signal: 'A 目标量', mitsubishi: 'D12', modbus: 'HR12', s7: 'MW24', direction: 'PLC → 设备', note: '0.1 L' },
-  { signal: 'B 目标量', mitsubishi: 'D13', modbus: 'HR13', s7: 'MW26', direction: 'PLC → 设备', note: '0.1 L' },
-  { signal: '正转时长', mitsubishi: 'D14', modbus: 'HR14', s7: 'MW28', direction: 'PLC → 设备', note: '0.1 s' },
-  { signal: '反转时长', mitsubishi: 'D15', modbus: 'HR15', s7: 'MW30', direction: 'PLC → 设备', note: '0.1 s' },
+  { signal: '循环轮次', mitsubishi: 'D9', modbus: 'HR9', s7: 'MW18', direction: '设备 → PLC', note: '计数' },
+  { signal: 'A 液配比', mitsubishi: 'D10', modbus: 'HR10', s7: 'MW20', direction: '设备 → PLC', note: '0~100' },
+  { signal: '开关量掩码', mitsubishi: 'D11', modbus: 'HR11', s7: 'MW22', direction: '设备 → PLC', note: '8 位' },
+  { signal: '显式动作字', mitsubishi: 'D12', modbus: 'HR12', s7: 'MW24', direction: 'PLC → 设备', note: '序号变化触发' },
+  { signal: 'A 目标量', mitsubishi: 'D13', modbus: 'HR13', s7: 'MW26', direction: 'PLC → 设备', note: '0.1 L' },
+  { signal: 'B 目标量', mitsubishi: 'D14', modbus: 'HR14', s7: 'MW28', direction: 'PLC → 设备', note: '0.1 L' },
+  { signal: '正转时长', mitsubishi: 'D15', modbus: 'HR15', s7: 'MW30', direction: 'PLC → 设备', note: '0.1 s' },
+  { signal: '反转时长', mitsubishi: 'D16', modbus: 'HR16', s7: 'MW32', direction: 'PLC → 设备', note: '0.1 s' },
   { signal: 'A 进料阀 / 泵', mitsubishi: 'Y0', modbus: 'C0', s7: 'M40.0', direction: 'PLC → 设备', note: '开关量' },
   { signal: 'B 进料阀 / 泵', mitsubishi: 'Y1', modbus: 'C1', s7: 'M40.1', direction: 'PLC → 设备', note: '开关量' },
   { signal: '搅拌正转', mitsubishi: 'Y2', modbus: 'C2', s7: 'M40.2', direction: 'PLC → 设备', note: '开关量' },
   { signal: '搅拌反转', mitsubishi: 'Y3', modbus: 'C3', s7: 'M40.3', direction: 'PLC → 设备', note: '开关量' },
   { signal: '出料阀', mitsubishi: 'Y4', modbus: 'C4', s7: 'M40.4', direction: 'PLC → 设备', note: '开关量' },
-  { signal: '急停 / 复位', mitsubishi: 'Y5·Y6', modbus: 'C5·C6', s7: 'M40.5·M40.6', direction: 'PLC → 设备', note: '开关量' },
-  { signal: '三色灯 绿', mitsubishi: 'Y7', modbus: 'C7', s7: 'M43.0', direction: 'PLC → 设备', note: '灯罩 1' },
-  { signal: '三色灯 黄', mitsubishi: 'Y10', modbus: 'C8', s7: 'M43.1', direction: 'PLC → 设备', note: '灯罩 2' },
-  { signal: '三色灯 红', mitsubishi: 'Y11', modbus: 'C9', s7: 'M43.2', direction: 'PLC → 设备', note: '灯罩 3' },
-  { signal: 'A/B 罐下限', mitsubishi: 'X0~X1', modbus: 'C10~C11', s7: 'M41.0~M41.1', direction: '设备 → PLC', note: '2 路液位开关' },
-  { signal: '混合罐四档液位', mitsubishi: 'X2~X5', modbus: 'C12~C15', s7: 'M41.2~M41.5', direction: '设备 → PLC', note: '低 / 中 / 高 / 上极限' },
-  { signal: '成品罐上下限', mitsubishi: 'X6~X7', modbus: 'C16~C17', s7: 'M41.6~M41.7', direction: '设备 → PLC', note: '2 路液位开关' },
-  { signal: '搅拌运行与方向', mitsubishi: 'X10~X12', modbus: 'C18~C20', s7: 'M42.0~M42.2', direction: '设备 → PLC', note: '3 路开关量' },
-  { signal: '三阀到位反馈', mitsubishi: 'X13~X15', modbus: 'C21~C23', s7: 'M42.3~M42.5', direction: '设备 → PLC', note: '3 路开关量' },
+  { signal: '三色灯 绿', mitsubishi: 'Y5', modbus: 'C5', s7: 'M40.5', direction: 'PLC → 设备', note: '灯罩 1' },
+  { signal: '三色灯 黄', mitsubishi: 'Y6', modbus: 'C6', s7: 'M40.6', direction: 'PLC → 设备', note: '灯罩 2' },
+  { signal: '三色灯 红', mitsubishi: 'Y7', modbus: 'C7', s7: 'M40.7', direction: 'PLC → 设备', note: '灯罩 3' },
+  { signal: '启动按钮', mitsubishi: 'X0', modbus: 'C8', s7: 'M41.0', direction: '设备 → PLC', note: '点动输入' },
+  { signal: '停止按钮', mitsubishi: 'X1', modbus: 'C9', s7: 'M41.1', direction: '设备 → PLC', note: '点动输入' },
+  { signal: '复位按钮', mitsubishi: 'X2', modbus: 'C10', s7: 'M41.2', direction: '设备 → PLC', note: '点动输入' },
+  { signal: '急停按钮', mitsubishi: 'X3', modbus: 'C11', s7: 'M41.3', direction: '设备 → PLC', note: '点动输入' },
+  { signal: '手动档', mitsubishi: 'X4', modbus: 'C12', s7: 'M41.4', direction: '设备 → PLC', note: '选择开关' },
+  { signal: '自动档', mitsubishi: 'X5', modbus: 'C13', s7: 'M41.5', direction: '设备 → PLC', note: '选择开关' },
+  { signal: '放料按钮', mitsubishi: 'X6', modbus: 'C14', s7: 'M41.6', direction: '设备 → PLC', note: '点动输入' },
+  { signal: 'A/B 罐下限', mitsubishi: 'X7·X10', modbus: 'C15~C16', s7: 'M42.0~M42.1', direction: '设备 → PLC', note: '2 路液位开关' },
+  { signal: '混合罐四档液位', mitsubishi: 'X11~X14', modbus: 'C17~C20', s7: 'M42.2~M42.5', direction: '设备 → PLC', note: '低 / 中 / 高 / 上极限' },
+  { signal: '成品罐上下限', mitsubishi: 'X15~X16', modbus: 'C21~C22', s7: 'M42.6~M42.7', direction: '设备 → PLC', note: '2 路液位开关' },
 ] as const;
 
 /** 教学映射表：只声明变量 / 信号对应关系，不实现任何底层链路 */
@@ -244,7 +287,9 @@ export const LIQUID_IO_MAP = [
   { signal: 'LIQUID_LEVEL_B', direction: 'analog → PLC', source: 'B 罐液位变送器' },
   { signal: 'LIQUID_LEVEL_MIX', direction: 'analog → PLC', source: '混合罐液位变送器' },
   { signal: 'LIQUID_LEVEL_PRODUCT', direction: 'analog → PLC', source: '成品罐液位变送器' },
-  { signal: 'LIQUID_SENSOR_FEEDBACK', direction: 'digital → PLC', source: '8 路液位开关与执行器到位开关' },
+  { signal: 'LIQUID_SENSOR_FEEDBACK', direction: 'digital → PLC', source: '8 路液位开关' },
+  { signal: 'LIQUID_OP_START / STOP / RESET / ESTOP / RELEASE', direction: 'digital → PLC', source: '操作站按钮箱点动按钮' },
+  { signal: 'LIQUID_OP_MANUAL / AUTO', direction: 'digital → PLC', source: '操作站手动 / 自动两位选择开关' },
   { signal: 'LIQUID_VALVE_A / B', direction: 'PLC → actuator', source: '进料球阀与泵' },
   { signal: 'LIQUID_STIR_FWD / REV', direction: 'PLC → actuator', source: '搅拌电机正反转' },
   { signal: 'LIQUID_DISCHARGE', direction: 'PLC → actuator', source: '底部出料阀' },
@@ -279,7 +324,6 @@ export const LIQUID_PANEL_HINT_SIGNALS = {
   levelMix: ['混合罐液位 REAL'],
   levelProduct: ['成品罐液位 REAL'],
   phase: ['工艺阶段'],
-  alarm: ['报警字'],
   round: ['循环轮次'],
   sensorMask: ['开关量掩码'],
   actionWord: ['显式动作字'],
@@ -292,6 +336,14 @@ export const LIQUID_PANEL_HINT_SIGNALS = {
   lampGreen: ['三色灯 绿'],
   lampYellow: ['三色灯 黄'],
   lampRed: ['三色灯 红'],
+  /** 操作站六个操作件：五个点动按钮 + 手自动两位各占一个输入点 */
+  opStart: ['启动按钮'],
+  opStop: ['停止按钮'],
+  opReset: ['复位按钮'],
+  opEstop: ['急停按钮'],
+  opRelease: ['放料按钮'],
+  opManual: ['手动档'],
+  opAuto: ['自动档'],
 } as const;
 
 export type LiquidPanelHintKey = keyof typeof LIQUID_PANEL_HINT_SIGNALS;
@@ -311,7 +363,7 @@ export function liquidAddressRowsFor(key: LiquidPanelHintKey): LiquidHintRow[] {
   });
 }
 
-/** 14 路开关量逐路浮框行：直接取回写表，保证「面板信号名 / 三协议地址 / 回写线圈」同源 */
+/** 8 路液位开关逐路浮框行：直接取回写表，保证「面板信号名 / 三协议地址 / 回写线圈」同源 */
 export function liquidSensorHintRow(key: string): LiquidHintRow[] {
   const row = LIQUID_SENSOR_FEEDBACK.find((r) => r.key === key);
   if (!row) throw new Error(`液体混装开关量表缺少信号：${key}`);

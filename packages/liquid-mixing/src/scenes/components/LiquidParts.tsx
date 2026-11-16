@@ -868,6 +868,8 @@ const STAGE_CAMERAS: Record<LiquidPartKind, RigGoal> = {
   valve: { camera: [0.17, 0.14, 0.22], target: [0, 0.01, 0] },
   pump: { camera: [0.24, 0.19, 0.30], target: [0, 0, 0] },
   pipe: { camera: [0.52, 0.44, 0.66], target: [0, 0.14, 0] },
+  /** 操作台 0.30×0.52×0.16：正前方略偏右，柜面五件元件与三盏灯全在画面内 */
+  cabinet: { camera: [0.46, 0.40, 0.88], target: [0, 0.27, 0] },
 };
 
 export function LiquidCameraRig() {

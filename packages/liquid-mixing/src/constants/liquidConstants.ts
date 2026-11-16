@@ -45,12 +45,6 @@ export interface LiquidSensors {
   mixOver: boolean;
   productLow: boolean;
   productHigh: boolean;
-  stirring: boolean;
-  forward: boolean;
-  reverse: boolean;
-  valveAOpen: boolean;
-  valveBOpen: boolean;
-  dischargeOpen: boolean;
 }
 
 /**
@@ -66,6 +60,54 @@ export interface Lamps {
 export type LiquidLampKind = keyof Lamps;
 
 export const LIQUID_EMPTY_LAMPS: Lamps = { green: false, yellow: false, red: false };
+
+/* ------------------------------ 操作站（操作件单一来源） ------------------------------ */
+
+/**
+ * 操作站按钮：3D 开关柜柜面、面板操作站区块、地址浮框、地址表全部读这一张表，
+ * 顺序 / 铭牌 / 颜色 / 点动或蘑菇头都在这里定义一次。
+ * 五个都是**点动件**（按下置位、松开复位），对应 PLC 一个输入点。
+ */
+export interface LiquidOperatorButton {
+  /** 真值字段名，同时是 PLC 输入线圈语义键 */
+  key: 'start' | 'stop' | 'reset' | 'estop' | 'release';
+  /** 柜面丝印铭牌 / 面板按钮短标签 */
+  label: string;
+  /** 按钮头颜色，柜面与面板共用 */
+  color: string;
+  /** push = 平头按钮；estop = 蘑菇头急停（柜面外形不同） */
+  kind: 'push' | 'estop';
+}
+
+export const LIQUID_OPERATOR_BUTTONS: readonly LiquidOperatorButton[] = [
+  { key: 'start', label: '启动', color: '#15803d', kind: 'push' },
+  { key: 'stop', label: '停止', color: '#c62828', kind: 'push' },
+  { key: 'reset', label: '复位', color: '#d99a1b', kind: 'push' },
+  { key: 'estop', label: '急停', color: '#c62828', kind: 'estop' },
+  { key: 'release', label: '放料', color: '#2563a8', kind: 'push' },
+] as const;
+
+export type LiquidOperatorKey = LiquidOperatorButton['key'];
+
+/**
+ * 手动 / 自动两位选择开关：物理输入件，两档各占一个 PLC 输入点、必有一真一假。
+ * 档位只由 store 的 `operatorMode` 真值决定，柜面旋钮与面板自锁按钮共用。
+ */
+export const LIQUID_OPERATOR_SELECTOR = {
+  manual: '手动',
+  auto: '自动',
+  /** 柜面旋钮拨柄角度（rad，面板平面内）：实物左右档接近 ±60° */
+  angles: { manual: -1.0, auto: 1.0 },
+} as const;
+export type LiquidOperatorMode = keyof typeof LIQUID_OPERATOR_SELECTOR.angles;
+
+/** 操作站整体静止态：五个按钮全松开、档位落在手动档 */
+export interface OperatorState extends Record<LiquidOperatorKey, boolean> {
+  mode: LiquidOperatorMode;
+}
+export const LIQUID_EMPTY_OPERATOR: OperatorState = {
+  start: false, stop: false, reset: false, estop: false, release: false, mode: 'manual',
+};
 
 
 export interface Recipe {
@@ -202,7 +244,7 @@ export interface LiquidLevelSwitch {
  * 液位开关布置（11-15 用户定稿）：
  * A / B 原料罐只要下限（防泵抽空）；混合罐低 / 中 / 高 / 上极限四档（进料分段与溢流保护）；
  * 成品罐上下限（满罐停止出料 / 低液位提示）。
- * 顺序即 PLC 回写表的顺序，8 路之后接搅拌 3 路与阀门到位 3 路，共 14 路。
+ * 顺序即 PLC 回写表的顺序，全场景开关量只有这 8 路（搅拌与阀门到位不是传感器，已剔除）。
  */
 export const LIQUID_LEVEL_SWITCHES: Record<TankId, readonly LiquidLevelSwitch[]> = {
   a: [{ key: 'aLow', label: 'A 罐下限', ratio: LIQUID_PROCESS.RAW_LOW_RATIO, mode: 'low' }],
@@ -245,7 +287,12 @@ export const LIQUID_PHASE_LABEL: Record<number, string> = {
   [LIQUID_PHASE.DONE]: '本轮完成',
 };
 
-/** 报警位（可叠加），0 表示无报警 */
+/**
+ * 内部联锁位（可叠加），0 表示无联锁。
+ * 11-16 用户要求「报警不要」：这一层只留作设备内部保护判据（越限即切断输出、停演示），
+ * **不进 PLC 地址表、不进面板、不进快照**，学生程序看不到也不需要处理。
+ * 清除方式与工艺复位同源：全部复位 / 启动演示 / 复位按钮。
+ */
 export const LIQUID_ALARM = {
   NONE: 0,
   LOW_LEVEL: 1,
@@ -253,13 +300,6 @@ export const LIQUID_ALARM = {
   OVERFLOW: 4,
   ESTOP: 8,
 } as const;
-
-export const LIQUID_ALARM_LABEL: Record<number, string> = {
-  [LIQUID_ALARM.LOW_LEVEL]: '原液低液位',
-  [LIQUID_ALARM.PRODUCT_FULL]: '成品罐满',
-  [LIQUID_ALARM.OVERFLOW]: '混合罐溢流',
-  [LIQUID_ALARM.ESTOP]: '急停',
-};
 
 /** 视觉：结构色 / 布光 / 间隙一律取自共享令牌，液体色为本场景新增项 */
 export const LIQUID_VISUAL = {
@@ -373,6 +413,7 @@ export const LIQUID_PART_STAGES = {
   valve: { label: '球阀', grid: 0.5, gridY: -0.02 },
   pump: { label: '进料泵', grid: 0.5, gridY: -0.02 },
   pipe: { label: '管路', grid: 0.8, gridY: -0.02 },
+  cabinet: { label: '操作台', grid: 1.0, gridY: -0.02 },
 } as const;
 export type LiquidPartKind = keyof typeof LIQUID_PART_STAGES;
 
@@ -382,7 +423,7 @@ export function isLiquidPartStage(v: string | null): v is LiquidPartKind {
 
 export const LIQUID_PART_STAGE_ORIGIN: Record<LiquidPartKind, [number, number, number]> = {
   tank: [0, 0, 0], window: [0, 0, 0], agitator: [0, 0, 0],
-  valve: [0, 0, 0], pump: [0, 0, 0], pipe: [0, 0, 0],
+  valve: [0, 0, 0], pump: [0, 0, 0], pipe: [0, 0, 0], cabinet: [0, 0, 0],
 };
 
 /* ------------------------------ 纯函数派生 ------------------------------ */
@@ -531,7 +572,11 @@ export function liquidSwirlStrength(uniformity: number, direction: -1 | 0 | 1): 
  * 触发点比较派生，搅拌方向与阀门到位由输出派生。
  * 面板、3D 灯泡、回写表、快照共用这一份结果，任何一处都不另算阈值。
  */
-export function liquidSensorStates(volumes: Volumes, outputs: Outputs, stirDirection: -1 | 0 | 1): LiquidSensors {
+/**
+ * 8 路液位开关同源派生：3D 灯泡、面板「传感器信号」、PLC 回写表、位掩码四处读这一份。
+ * 搅拌方向与阀门到位不是传感器（用户 11-16 明确剔除），不再出现在开关量真值里。
+ */
+export function liquidSensorStates(volumes: Volumes): LiquidSensors {
   const state = {} as Record<keyof LiquidSensors, boolean>;
   for (const tank of TANK_IDS) {
     const ratio = liquidLevelRatio(tank, volumes[tank]);
@@ -539,12 +584,6 @@ export function liquidSensorStates(volumes: Volumes, outputs: Outputs, stirDirec
       state[sw.key] = sw.mode === 'low' ? ratio <= sw.ratio : ratio >= sw.ratio;
     }
   }
-  state.stirring = stirDirection !== 0;
-  state.forward = stirDirection === 1;
-  state.reverse = stirDirection === -1;
-  state.valveAOpen = outputs.valveA;
-  state.valveBOpen = outputs.valveB;
-  state.dischargeOpen = outputs.discharge;
   return state;
 }
 
@@ -581,12 +620,4 @@ export function liquidAlarmFlags(volumes: Volumes, outputs: Outputs, estop: bool
   }
   if (estop) mask |= LIQUID_ALARM.ESTOP;
   return mask;
-}
-
-export function liquidAlarmText(mask: number): string {
-  if (!mask) return '正常';
-  return Object.entries(LIQUID_ALARM_LABEL)
-    .filter(([bit]) => (mask & Number(bit)) !== 0)
-    .map(([, text]) => text)
-    .join(' · ');
 }

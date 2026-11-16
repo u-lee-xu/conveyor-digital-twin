@@ -1,18 +1,22 @@
-/** 三模式面板共享的样式、液位读数、传感器信号、变量地址表与报警控件 */
+/**
+ * 三模式面板共享的样式、四罐读数、传感器信号、操作站、变量地址表
+ */
 /* eslint-disable react-refresh/only-export-components */
 import { useState, type CSSProperties } from 'react';
 import { useLiquidStore } from '../stores/useLiquidStore';
 import {
   TANK_IDS, LIQUID_CAPACITY, LIQUID_TANKS,
-  liquidDisplay, liquidLevelRatio, liquidAlarmText,
+  liquidDisplay, liquidLevelRatio,
   liquidBlendColor, liquidProductColor,
-  type TankId,
+  LIQUID_OPERATOR_BUTTONS, LIQUID_OPERATOR_SELECTOR,
+  type TankId, type LiquidOperatorKey, type LiquidOperatorMode,
 } from '../constants/liquidConstants';
 import {
   LIQUID_SENSOR_FEEDBACK, LIQUID_ADDRESS_ROWS, liquidSensorBits,
   type LiquidPanelHintKey,
 } from '../constants/liquidVariables';
 import { LiquidHint, LiquidSensorHint } from './LiquidAddressHint';
+import { pressLiquidOperator, selectLiquidOperatorMode } from './liquidOperator';
 
 /**
  * 设计令牌对齐平台壳 packages/platform/src/index.css 的 .device-card / .btn-outline。
@@ -90,9 +94,9 @@ export function LiquidLevelReadout() {
 }
 
 /**
- * 传感器信号：14 路开关量，顺序与回写表 / 位掩码 / 三协议地址完全一致。
- * 8 路液位开关（原料罐下限 / 混合罐四档 / 成品罐上下限）+ 搅拌 3 路 + 阀门到位 3 路，
- * 逐路悬停可看该路的三协议地址。
+ * 传感器信号：8 路液位开关，顺序与回写表 / 位掩码 / 三协议地址完全一致。
+ * A/B 罐下限 + 混合罐四档（低 / 中 / 高 / 上极限）+ 成品罐上下限；
+ * 搅拌运行与阀门到位不是传感器，已按用户口径剔除。
  */
 export function LiquidSensorPanel() {
   const sensors = useLiquidStore((s) => s.sensors);
@@ -108,6 +112,101 @@ export function LiquidSensorPanel() {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------ 操作站 ------------------------------ */
+
+/** 操作件 → 地址浮框键，取值由 LIQUID_PANEL_HINT_SIGNALS 校验 */
+const OP_HINT: Record<LiquidOperatorKey, LiquidPanelHintKey> = {
+  start: 'opStart', stop: 'opStop', reset: 'opReset',
+  estop: 'opEstop', release: 'opRelease',
+};
+
+/** 点动按钮的松开态：中性灰，按下时才亮该件自己的柜面颜色 */
+const OP_OFF_COLOR = '#334155';
+/** 手自动两档的按下色：手动中性灰、自动语义蓝，与柜面旋钮铭牌一致 */
+const OP_MODE_ON_COLOR: Record<LiquidOperatorMode, string> = {
+  manual: '#64748b', auto: '#2563a8',
+};
+
+/** 单个点动按钮：柜面颜色 → --dt-state-color，按下 / 松开走同一写通道 */
+function OperatorPushButton({ item }: { item: (typeof LIQUID_OPERATOR_BUTTONS)[number] }) {
+  const on = useLiquidStore((s) => s.operator[item.key]);
+  const press = (down: boolean) => pressLiquidOperator(item.key, down);
+  return (
+    <button type="button" aria-label={item.label} aria-pressed={on}
+      data-dt-liquid-op={item.key} data-on={on ? '1' : '0'}
+      className="btn btn-xs dt-executor touch-manipulation"
+      style={{ '--dt-state-color': on ? item.color : OP_OFF_COLOR } as CSSProperties}
+      onPointerDown={(e) => { e.preventDefault(); press(true); }}
+      onPointerUp={() => press(false)}
+      onPointerCancel={() => press(false)}
+      onPointerLeave={() => { if (on) press(false); }}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); press(true); }
+      }}
+      onKeyUp={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') press(false);
+      }}>
+      <span className="dt-state-led" />
+      <LiquidHint hintKey={OP_HINT[item.key]} title={item.label} underline={false}>
+        {item.label}
+      </LiquidHint>
+    </button>
+  );
+}
+
+/**
+ * 操作站：五个点动按钮 + 手自动两位选择开关。
+ * 与 3D 开关柜柜面同源同序（LIQUID_OPERATOR_BUTTONS 是唯一来源），
+ * 按下即写 PLC 输入点（见 liquidOperator.ts），仿真模式下动作权交给学生 PLC 程序。
+ */
+export function LiquidOperatorPanel() {
+  const operator = useLiquidStore((s) => s.operator);
+  const held = LIQUID_OPERATOR_BUTTONS.filter((b) => operator[b.key]);
+  const pushRow = LIQUID_OPERATOR_BUTTONS.filter((b) => b.key !== 'release');
+  const release = LIQUID_OPERATOR_BUTTONS.find((b) => b.key === 'release')!;
+  return (
+    <div style={box} data-dt-liquid-operator>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span className="section-title" style={{ flex: 1, fontSize: 11, color: '#94a3b8', marginBottom: 0 }}>
+          操作站
+        </span>
+        <span className={`badge ${operator.mode === 'auto' ? 'badge-blue' : 'badge-slate'}`} data-dt-liquid-op-mode-badge>
+          {LIQUID_OPERATOR_SELECTOR[operator.mode]}档
+        </span>
+        <span className={`badge ${held.length ? 'badge-yellow' : 'badge-slate'}`}>
+          {held.length} / {LIQUID_OPERATOR_BUTTONS.length}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 5 }}>
+        {pushRow.map((b) => <OperatorPushButton key={b.key} item={b} />)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, marginTop: 5 }}>
+        {(['manual', 'auto'] as const).map((m) => {
+          const on = operator.mode === m;
+          const label = LIQUID_OPERATOR_SELECTOR[m];
+          return (
+            <button key={m} type="button" aria-label={`${label}档`} aria-pressed={on}
+              data-dt-liquid-op-mode={m} data-on={on ? '1' : '0'}
+              className="btn btn-xs dt-executor touch-manipulation"
+              style={{ '--dt-state-color': on ? OP_MODE_ON_COLOR[m] : OP_OFF_COLOR } as CSSProperties}
+              onClick={() => selectLiquidOperatorMode(m)}>
+              <span className="dt-state-led" />
+              <LiquidHint hintKey={m === 'auto' ? 'opAuto' : 'opManual'} title={`${label}档`} underline={false}>
+                {label}
+              </LiquidHint>
+            </button>
+          );
+        })}
+        <OperatorPushButton item={release} />
+      </div>
+      {/* 操作站真值诊断锚点：档位 + 五个点动件姿态，供验收脚本核对「面板与柜面同源」 */}
+      <span data-dt-liquid-operator-state style={{ display: 'none' }}>
+        {`mode=${operator.mode}|${LIQUID_OPERATOR_BUTTONS.map((b) => `${b.key}=${operator[b.key] ? 1 : 0}`).join(',')}`}
+      </span>
     </div>
   );
 }
@@ -147,16 +246,4 @@ export function LiquidVariableTable() {
   );
 }
 
-/** 报警灯 + 文本 + 复位 */
-export function LiquidAlarmPanel() {
-  const alarm = useLiquidStore((s) => s.alarm);
-  const clearAlarm = useLiquidStore((s) => s.clearAlarm);
-  return (
-    <div data-dt-liquid-alarm style={{ ...box, display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={led(alarm !== 0, '#ef4444')} />
-      <b><LiquidHint hintKey="alarm" title="报警字">报警</LiquidHint></b>
-      <span style={{ fontFamily: 'monospace', color: alarm !== 0 ? '#fca5a5' : '#86efac' }}>{liquidAlarmText(alarm)}</span>
-      <button aria-label="报警复位" style={{ ...btn, marginLeft: 'auto' }} onClick={() => clearAlarm()}>报警复位</button>
-    </div>
-  );
-}
+/** 报警灯 + 文本 + 复位已按用户口径整体移除：内部联锁仍在真值层，但既不进面板也不进地址表 */

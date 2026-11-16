@@ -12,7 +12,7 @@ import type { ReactNode } from 'react';
 import { Grid } from '@react-three/drei';
 import {
   LIQUID_VISUAL as V, LIQUID_TANKS, LIQUID_GEOM as G, LIQUID_PART_STAGES,
-  LIQUID_PART_STAGE_ORIGIN, TANK_IDS, type LiquidPartKind,
+  LIQUID_PART_STAGE_ORIGIN, LIQUID_VIEW_PRESETS, TANK_IDS, type LiquidPartKind,
 } from '../constants/liquidConstants';
 import { useLiquidStore } from '../stores/useLiquidStore';
 import { useLiquidViewStore } from '../stores/useLiquidViewStore';
@@ -22,6 +22,7 @@ import {
   TankShell, LiquidColumn, SightWindow, ScaleRule, ReadoutPlate, TowerLamp,
   type Vec3,
 } from './components/LiquidParts';
+import { OperatorCabinet } from './components/OperatorCabinet';
 
 const L = V.SCENE_LIGHTING;
 const TA = LIQUID_TANKS.a;
@@ -49,6 +50,20 @@ const LAMP_X = Math.max(...ALL_TANKS.map((t) => t.position[0] + t.radius)) - G.P
 const LAMP_Z = Math.min(...ALL_TANKS.map((t) => t.position[2] - t.radius)) + G.PIPE_R * 3;
 /** 灯塔底面坐在机架台面上，与 PlatformFrame 同一份台面高度 */
 const LAMP_Y = G.PLATFORM_Y + G.PLATFORM_H / 2;
+
+/**
+ * 操作台开关柜落点：机架右后角地面、三色灯塔旁，柜脚落地、门板转向观察者。
+ * 全部由四罐包围盒派生，不写裸坐标；选「右后」而不是「左前」是因为整机默认机位下
+ * 左前正好压在左侧面板抽屉下方，柜体连同按钮会被面板整块挡住。
+ * x 退到罐体最右之外（与台面边缘留 PIPE_R 以上净距），z 退到台面后缘之外，
+ * 与成品罐、灯塔都不相交；门板朝向取整机默认机位，保证默认视图第一眼能看到柜面元件。
+ */
+const CABINET_X = Math.max(...ALL_TANKS.map((t) => t.position[0] + t.radius)) + G.PIPE_R * 8;
+const CABINET_Z = Math.min(...ALL_TANKS.map((t) => t.position[2] - t.radius)) - G.PIPE_R * 14;
+const CABINET_ROT_Y = Math.atan2(
+  LIQUID_VIEW_PRESETS.overview.position[0] - CABINET_X,
+  LIQUID_VIEW_PRESETS.overview.position[2] - CABINET_Z,
+);
 
 /** A 罐底 → 泵 → 进料球阀 → 上升 → 混合罐顶（B 路镜像 z） */
 const PIPE_A: Vec3[] = [
@@ -114,6 +129,10 @@ function AssembledScene() {
       <PipeRun points={PIPE_OUT} supports />
       {/* 三色灯塔：机架右后角，绿 / 黄 / 红灯罩由 PLC 三个线圈或手动面板控制 */}
       <group position={[LAMP_X, LAMP_Y, LAMP_Z]}><TowerLamp /></group>
+      {/* 操作台开关柜：柜脚落地，五个点动按钮 + 手自动旋钮 + 三盏指示灯（镜像塔灯） */}
+      <group position={[CABINET_X, 0, CABINET_Z]} rotation={[0, CABINET_ROT_Y, 0]}>
+        <OperatorCabinet />
+      </group>
     </group>
   );
 }
@@ -143,6 +162,9 @@ function renderBarePart(kind: LiquidPartKind, valveOpen: boolean): ReactNode {
     case 'pipe':
       // 展台与整机同源：管卡 / 拐点法兰环 / 立管支架都要在放大视图里可见
       return <PipeRun points={STAGE_PIPE} supports />;
+    case 'cabinet':
+      // 1:1 展台：按钮 / 旋钮 / 指示灯 / 铭牌都能近距逐个核对，与整机同一组件
+      return <OperatorCabinet />;
     default:
       return null;
   }

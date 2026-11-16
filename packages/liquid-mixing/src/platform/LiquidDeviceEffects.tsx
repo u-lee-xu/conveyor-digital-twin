@@ -1,6 +1,9 @@
 /**
  * 常驻副作用：每帧推进流量积分 / 演示状态机；连接 PLC 时 300ms 读回命令字、
- * 执行器线圈与三色灯线圈，并把四罐 32 位 REAL 模拟量 + 5 个状态字 + 14 路开关量回写 PLC。
+ * 执行器线圈与三色灯线圈，并把四罐 32 位 REAL 模拟量 + 3 个状态字 + 8 路液位开关回写 PLC。
+ *
+ * 操作站 7 个输入点不走本循环的定时写：点动按钮必须即时落帧，
+ * 由 liquidOperator.ts 的事件入口写成整块，本循环每轮只做一次去重同步。
  *
  * 观众端不挂载本地推进、不写 PLC（只读零上行）。
  * 本地手动 / 演示模式 connected=false，整个通信分支不发任何帧。
@@ -17,11 +20,14 @@ import {
 } from '../constants/liquidVariables';
 import { floatToDintBits } from '../constants/real32';
 import type { Lamps, Outputs } from '../constants/liquidConstants';
+import { flushLiquidOperator } from './liquidOperator';
 
-/** 与 LIQUID_OUTPUT_COIL_NAMES 同序：C0~C6 执行器一次读回；基址从变量表派生，改地址不必再动此处 */
+/**
+ * 与 LIQUID_OUTPUT_COIL_NAMES 同序：C0~C4 执行器一次读回；基址从变量表派生，改地址不必再动此处。
+ * 三色灯紧接执行器占 C5~C7，与执行器共用同一次连续读（C0~C7）。
+ */
 const OUTPUT_COIL_BASE = LIQUID_COILS.LIQUID_VALVE_A;
 const OUTPUT_COIL_COUNT = LIQUID_OUTPUT_COIL_NAMES.length;
-/** 三色灯紧接执行器占 C7~C9，与执行器共用同一次连续读（C0~C9） */
 const LAMP_COIL_OFFSET = LIQUID_COILS.LIQUID_LAMP_GREEN - OUTPUT_COIL_BASE;
 const OUTPUT_BLOCK_COUNT = OUTPUT_COIL_COUNT + LIQUID_LAMP_COIL_NAMES.length;
 /** S7 / 三菱按变量名读，执行器与三色灯一起读回 */
@@ -75,8 +81,6 @@ export function LiquidDeviceEffects() {
         };
         let outputs: Partial<Outputs> = {};
         let lamps: Partial<Lamps> = {};
-        let estop: boolean | undefined;
-        let reset = false;
         if (modbusService.getProtocol() === 'modbus') {
           const coils = await modbusService.readCoils(OUTPUT_COIL_BASE, OUTPUT_BLOCK_COUNT);
           if (stopped) return;
@@ -86,8 +90,6 @@ export function LiquidDeviceEffects() {
               valveA: !!v[0], valveB: !!v[1], stirForward: !!v[2],
               stirReverse: !!v[3], discharge: !!v[4],
             };
-            estop = !!v[5];
-            reset = !!v[6];
             lamps = {
               green: !!v[LAMP_COIL_OFFSET],
               yellow: !!v[LAMP_COIL_OFFSET + 1],
@@ -104,8 +106,6 @@ export function LiquidDeviceEffects() {
               stirForward: !!v.LIQUID_STIR_FWD, stirReverse: !!v.LIQUID_STIR_REV,
               discharge: !!v.LIQUID_DISCHARGE,
             };
-            estop = !!v.LIQUID_ESTOP;
-            reset = !!v.LIQUID_RESET;
             lamps = {
               green: !!v.LIQUID_LAMP_GREEN,
               yellow: !!v.LIQUID_LAMP_YELLOW,
@@ -121,8 +121,6 @@ export function LiquidDeviceEffects() {
           recipeB: num('LIQUID_RECIPE_B'),
           stirForwardSec: num('LIQUID_STIR_FWD_W'),
           stirReverseSec: num('LIQUID_STIR_REV_W'),
-          estop,
-          reset,
         });
 
         /* 2) 设备 → PLC：四罐 REAL 模拟量（双字单帧原子写，低字在前） */
@@ -140,11 +138,10 @@ export function LiquidDeviceEffects() {
           if (wrote.success) lastRealKey = realKey;
         }
 
-        /* 3) 设备 → PLC：阶段 / 报警 / 轮次 / 配比 / 开关量掩码（单字） */
+        /* 3) 设备 → PLC：阶段 / 轮次 / 配比 / 开关量掩码（单字） */
         const mask = liquidSensorMask(s.sensors);
         await modbusService.writeWords([...LIQUID_REPORT_WORD_NAMES], [
           s.phase,
-          s.alarm,
           s.round,
           Math.round(liquidRatioA(s.mixA, s.mixB) * LIQUID_PLC_SCALE.RATIO),
           mask,
@@ -160,6 +157,9 @@ export function LiquidDeviceEffects() {
           if (stopped) return;
           if (write.success) lastSensorMask = mask;
         }
+
+        /* 5) 设备 → PLC：操作站 7 个输入点（位串没变就跳过，点动由事件入口即时落帧） */
+        flushLiquidOperator();
       } catch {
         // 断开瞬间的读写失败不打断演示
       }

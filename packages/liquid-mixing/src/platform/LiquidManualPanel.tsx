@@ -1,4 +1,4 @@
-/** 手动模式：5 执行器 / 三色灯 / 液位读数 / 传感器信号 / 调试主令 */
+/** 手动模式：操作站 / 5 执行器 / 三色灯 / 液位读数 / 传感器信号 / 调试主令 */
 import type { CSSProperties } from 'react';
 import { useLiquidStore } from '../stores/useLiquidStore';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../constants/liquidConstants';
 import {
   box, btn,
-  LiquidLevelReadout, LiquidSensorPanel, LiquidAlarmPanel,
+  LiquidOperatorPanel, LiquidLevelReadout, LiquidSensorPanel,
 } from './LiquidPanelParts';
 import { LiquidHint } from './LiquidAddressHint';
 import { type LiquidPanelHintKey } from '../constants/liquidVariables';
@@ -66,6 +66,8 @@ export function LiquidManualPanel() {
 
   return (
     <div data-dt-liquid-manual>
+      <LiquidOperatorPanel />
+
       <div style={box}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <span className="section-title" style={{ flex: 1, fontSize: 11, color: '#94a3b8', marginBottom: 0 }}>
@@ -142,7 +144,6 @@ export function LiquidManualPanel() {
       {/* 关键读数上移：常规视口首屏就能看到四罐液位与传感器信号 */}
       <LiquidLevelReadout />
       <LiquidSensorPanel />
-      <LiquidAlarmPanel />
 
       <div style={box}>
         <b>调试主令</b>
