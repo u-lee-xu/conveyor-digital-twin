@@ -44,26 +44,37 @@ const pumpXB = TB.position[0] + TB.radius + G.PIPE_R * 6;
 const valveXB = pumpXB + G.PUMP_R * 3;
 const dischargeValveX = (TM.position[0] + TP.position[0]) / 2;
 
-/** 三色灯塔落点：机架右后角，由四罐包围盒派生（不写裸坐标），不挡罐体视窗 */
+/** 四罐包围盒：所有近景设备落点由它派生，不写裸坐标 */
 const ALL_TANKS = [TA, TB, TM, TP];
-const LAMP_X = Math.max(...ALL_TANKS.map((t) => t.position[0] + t.radius)) - G.PIPE_R * 3;
-const LAMP_Z = Math.min(...ALL_TANKS.map((t) => t.position[2] - t.radius)) + G.PIPE_R * 3;
-/** 灯塔底面坐在机架台面上，与 PlatformFrame 同一份台面高度 */
-const LAMP_Y = G.PLATFORM_Y + G.PLATFORM_H / 2;
+const TANK_X_MAX = Math.max(...ALL_TANKS.map((t) => t.position[0] + t.radius));
+const TANK_Z_MID = (
+  Math.min(...ALL_TANKS.map((t) => t.position[2] - t.radius))
+  + Math.max(...ALL_TANKS.map((t) => t.position[2] + t.radius))
+) / 2;
 
 /**
- * 操作台开关柜落点：机架右后角地面、三色灯塔旁，柜脚落地、门板转向观察者。
- * 全部由四罐包围盒派生，不写裸坐标；选「右后」而不是「左前」是因为整机默认机位下
- * 左前正好压在左侧面板抽屉下方，柜体连同按钮会被面板整块挡住。
- * x 退到罐体最右之外（与台面边缘留 PIPE_R 以上净距），z 退到台面后缘之外，
- * 与成品罐、灯塔都不相交；门板朝向取整机默认机位，保证默认视图第一眼能看到柜面元件。
+ * 操作台开关柜落点：机架右侧、罐体纵向中部的地面，柜脚落地、门板转向观察者。
+ * 控制柜是要走到跟前按按钮的设备，必须放在观察者一侧——原来缩在机架右后角地面，
+ * 默认机位下离得远又小；现在整组前移到近景，柜面元件第一眼就能看清。
+ * x 退到罐体最右之外（与台面边缘留 PIPE_R 以上净距），z 收到罐体纵向中部，
+ * 与成品罐、台面都不相交；门板朝向取整机默认机位，保证默认视图正对柜面。
  */
-const CABINET_X = Math.max(...ALL_TANKS.map((t) => t.position[0] + t.radius)) + G.PIPE_R * 8;
-const CABINET_Z = Math.min(...ALL_TANKS.map((t) => t.position[2] - t.radius)) - G.PIPE_R * 14;
+const CABINET_X = TANK_X_MAX + G.PIPE_R * 13;
+const CABINET_Z = TANK_Z_MID + G.PIPE_R * 6;
 const CABINET_ROT_Y = Math.atan2(
   LIQUID_VIEW_PRESETS.overview.position[0] - CABINET_X,
   LIQUID_VIEW_PRESETS.overview.position[2] - CABINET_Z,
 );
+
+/**
+ * 三色灯塔落点：柜体左前方的地面，比柜体更靠观察者一侧。
+ * 三色灯是「给人看」的信号件，藏在机架后角等于没装；挪到近景并与柜体并排，
+ * 两者在默认机位下同处画面下方，互不遮挡、也不压住任何罐体视窗。
+ */
+const LAMP_X = TANK_X_MAX + G.PIPE_R * 6;
+const LAMP_Z = CABINET_Z + G.PIPE_R * 21;
+/** 灯塔已随柜体移出机架，底面直接落在车间地面 */
+const LAMP_Y = 0;
 
 /** A 罐底 → 泵 → 进料球阀 → 上升 → 混合罐顶（B 路镜像 z） */
 const PIPE_A: Vec3[] = [
@@ -127,7 +138,7 @@ function AssembledScene() {
       <PipeRun points={PIPE_A} supports />
       <PipeRun points={PIPE_B} supports />
       <PipeRun points={PIPE_OUT} supports />
-      {/* 三色灯塔：机架右后角，绿 / 黄 / 红灯罩由 PLC 三个线圈或手动面板控制 */}
+      {/* 三色灯塔：柜体左前方地面近景，绿 / 黄 / 红灯罩由 PLC 三个线圈或手动面板控制 */}
       <group position={[LAMP_X, LAMP_Y, LAMP_Z]}><TowerLamp /></group>
       {/* 操作台开关柜：柜脚落地，五个点动按钮 + 手自动旋钮 + 三盏指示灯（镜像塔灯） */}
       <group position={[CABINET_X, 0, CABINET_Z]} rotation={[0, CABINET_ROT_Y, 0]}>

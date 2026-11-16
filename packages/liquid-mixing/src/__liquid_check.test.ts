@@ -341,9 +341,9 @@ describe('传感器信号组合与三色灯塔', () => {
     expect(manual).toContain('liquidLampStateColor(t.key, on)');
     expect(manual).toContain('data-dt-liquid-lamp={t.key}');
     expect(scene).toContain('<TowerLamp />');
-    // 灯塔落点由四罐包围盒派生，不写裸坐标；灯罩颜色不逐帧改共享材质
-    expect(scene).toContain('const LAMP_X = Math.max(');
-    expect(scene).toContain('const LAMP_Z = Math.min(');
+    // 灯塔落点由四罐包围盒与柜体派生，不写裸坐标；灯罩颜色不逐帧改共享材质
+    expect(scene).toContain('const LAMP_X = TANK_X_MAX +');
+    expect(scene).toContain('const LAMP_Z = CABINET_Z +');
     expect(parts).not.toContain('LM.lampGreen.color.set');
   });
 });
@@ -963,6 +963,11 @@ describe('操作站与开关柜', () => {
     expect(scene).toContain('<OperatorCabinet />');
     expect(scene).toContain('const CABINET_X =');
     expect(scene).toContain('const CABINET_Z =');
+    // 柜体与灯塔都落在观察者一侧：z 从罐体纵向中部往前派生，灯塔再往前让出开门站位
+    expect(scene).toContain('const CABINET_Z = TANK_Z_MID +');
+    expect(scene).toContain('const LAMP_Z = CABINET_Z +');
+    // 灯塔已随柜体移出机架，底面直接落地（不再坐在台面上）
+    expect(scene).toContain('const LAMP_Y = 0;');
     expect(scene).toContain('rotation={[0, CABINET_ROT_Y, 0]}');
     // 圆盘元件统一绕 X 转 90° 让端面朝观察者（与自动配药同一条教训）
     expect(cabinet).toContain('rotation={[Math.PI / 2, 0, 0]}');

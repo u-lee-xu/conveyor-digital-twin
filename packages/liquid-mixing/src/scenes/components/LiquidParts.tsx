@@ -460,12 +460,13 @@ export function LevelSwitches({ tank }: { tank: TankId }) {
 }
 
 /* --------------------------------------------------------------------------
- * 三色灯塔：机架右后角立柱，绿 / 黄 / 红三个灯罩自下而上叠放。
+ * 三色灯塔：立杆 + 绿 / 黄 / 红三个灯罩自下而上叠放，立在操作台旁的地面近景。
  * 灯罩颜色只由 liquidLampStateColor()（面板按钮同源）二选一成组单例材质，
  * 不做逐帧改色；相邻灯罩之间由 LAMP_RING_H 错开 ≥ GAP，杜绝共面闪烁。
  * ------------------------------------------------------------------------ */
 const LAMP_POLE_R = PIPE_R * 0.62;
-const LAMP_POLE_H = PUMP_R * 5.4;
+/** 立杆高度比坐台面时多出 0.12 m：灯塔已从台面挪到地面，不补回来会缩成矮墩 */
+const LAMP_POLE_H = PUMP_R * 8;
 const LAMP_R = PUMP_R * 0.86;
 const LAMP_MODULE_H = PUMP_R * 0.72;
 const LAMP_RING_H = GAP * 3;
