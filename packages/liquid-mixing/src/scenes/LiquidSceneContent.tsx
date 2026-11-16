@@ -19,7 +19,7 @@ import { useLiquidViewStore } from '../stores/useLiquidViewStore';
 import { GAP, applyLiquidProceduralTextures } from './shared/liquidMaterials';
 import {
   TankAssembly, Agitator, BallValve, PumpUnit, PipeRun, PlatformFrame, LiquidCameraRig,
-  TankShell, LiquidColumn, SightWindow, ScaleRule, ReadoutPlate,
+  TankShell, LiquidColumn, SightWindow, ScaleRule, ReadoutPlate, TowerLamp,
   type Vec3,
 } from './components/LiquidParts';
 
@@ -42,6 +42,13 @@ const valveXA = pumpXA + G.PUMP_R * 3;
 const pumpXB = TB.position[0] + TB.radius + G.PIPE_R * 6;
 const valveXB = pumpXB + G.PUMP_R * 3;
 const dischargeValveX = (TM.position[0] + TP.position[0]) / 2;
+
+/** 三色灯塔落点：机架右后角，由四罐包围盒派生（不写裸坐标），不挡罐体视窗 */
+const ALL_TANKS = [TA, TB, TM, TP];
+const LAMP_X = Math.max(...ALL_TANKS.map((t) => t.position[0] + t.radius)) - G.PIPE_R * 3;
+const LAMP_Z = Math.min(...ALL_TANKS.map((t) => t.position[2] - t.radius)) + G.PIPE_R * 3;
+/** 灯塔底面坐在机架台面上，与 PlatformFrame 同一份台面高度 */
+const LAMP_Y = G.PLATFORM_Y + G.PLATFORM_H / 2;
 
 /** A 罐底 → 泵 → 进料球阀 → 上升 → 混合罐顶（B 路镜像 z） */
 const PIPE_A: Vec3[] = [
@@ -105,6 +112,8 @@ function AssembledScene() {
       <PipeRun points={PIPE_A} supports />
       <PipeRun points={PIPE_B} supports />
       <PipeRun points={PIPE_OUT} supports />
+      {/* 三色灯塔：机架右后角，绿 / 黄 / 红灯罩由 PLC 三个线圈或手动面板控制 */}
+      <group position={[LAMP_X, LAMP_Y, LAMP_Z]}><TowerLamp /></group>
     </group>
   );
 }

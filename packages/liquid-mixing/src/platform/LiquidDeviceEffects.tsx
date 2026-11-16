@@ -1,6 +1,6 @@
 /**
- * 常驻副作用：每帧推进流量积分 / 演示状态机；连接 PLC 时 300ms 读回命令字与
- * 输出线圈，并把四罐 32 位 REAL 模拟量 + 5 个状态字 + 14 路开关量回写 PLC。
+ * 常驻副作用：每帧推进流量积分 / 演示状态机；连接 PLC 时 300ms 读回命令字、
+ * 执行器线圈与三色灯线圈，并把四罐 32 位 REAL 模拟量 + 5 个状态字 + 14 路开关量回写 PLC。
  *
  * 观众端不挂载本地推进、不写 PLC（只读零上行）。
  * 本地手动 / 演示模式 connected=false，整个通信分支不发任何帧。
@@ -11,15 +11,21 @@ import { modbusService } from '@digital-twin/shared/services/modbus-websocket';
 import { useLiquidStore, liquidRatioA } from '../stores/useLiquidStore';
 import {
   LIQUID_COILS, LIQUID_COMMAND_WORD_NAMES, LIQUID_REAL_NAMES, LIQUID_REPORT_WORD_NAMES,
-  LIQUID_OUTPUT_COIL_NAMES, LIQUID_SENSOR_FEEDBACK_BASE, LIQUID_SENSOR_VAR_NAMES,
+  LIQUID_OUTPUT_COIL_NAMES, LIQUID_LAMP_COIL_NAMES,
+  LIQUID_SENSOR_FEEDBACK_BASE, LIQUID_SENSOR_VAR_NAMES,
   liquidSensorBits, liquidSensorMask, LIQUID_PLC_SCALE,
 } from '../constants/liquidVariables';
 import { floatToDintBits } from '../constants/real32';
-import type { Outputs } from '../constants/liquidConstants';
+import type { Lamps, Outputs } from '../constants/liquidConstants';
 
-/** 与 LIQUID_OUTPUT_COIL_NAMES 同序：C0~C6 一次读回；基址从变量表派生，改地址不必再动此处 */
+/** 与 LIQUID_OUTPUT_COIL_NAMES 同序：C0~C6 执行器一次读回；基址从变量表派生，改地址不必再动此处 */
 const OUTPUT_COIL_BASE = LIQUID_COILS.LIQUID_VALVE_A;
 const OUTPUT_COIL_COUNT = LIQUID_OUTPUT_COIL_NAMES.length;
+/** 三色灯紧接执行器占 C7~C9，与执行器共用同一次连续读（C0~C9） */
+const LAMP_COIL_OFFSET = LIQUID_COILS.LIQUID_LAMP_GREEN - OUTPUT_COIL_BASE;
+const OUTPUT_BLOCK_COUNT = OUTPUT_COIL_COUNT + LIQUID_LAMP_COIL_NAMES.length;
+/** S7 / 三菱按变量名读，执行器与三色灯一起读回 */
+const OUTPUT_VAR_NAMES = [...LIQUID_OUTPUT_COIL_NAMES, ...LIQUID_LAMP_COIL_NAMES];
 
 export function LiquidDeviceEffects() {
   useEffect(() => {
@@ -68,10 +74,11 @@ export function LiquidDeviceEffects() {
           return Number.isFinite(n) ? n : undefined;
         };
         let outputs: Partial<Outputs> = {};
+        let lamps: Partial<Lamps> = {};
         let estop: boolean | undefined;
         let reset = false;
         if (modbusService.getProtocol() === 'modbus') {
-          const coils = await modbusService.readCoils(OUTPUT_COIL_BASE, OUTPUT_COIL_COUNT);
+          const coils = await modbusService.readCoils(OUTPUT_COIL_BASE, OUTPUT_BLOCK_COUNT);
           if (stopped) return;
           if (coils.success && coils.values) {
             const v = coils.values;
@@ -81,9 +88,14 @@ export function LiquidDeviceEffects() {
             };
             estop = !!v[5];
             reset = !!v[6];
+            lamps = {
+              green: !!v[LAMP_COIL_OFFSET],
+              yellow: !!v[LAMP_COIL_OFFSET + 1],
+              red: !!v[LAMP_COIL_OFFSET + 2],
+            };
           }
         } else {
-          const vars = await modbusService.readVars([...LIQUID_OUTPUT_COIL_NAMES]);
+          const vars = await modbusService.readVars(OUTPUT_VAR_NAMES);
           if (stopped) return;
           if (vars.success && vars.values) {
             const v = vars.values;
@@ -94,10 +106,16 @@ export function LiquidDeviceEffects() {
             };
             estop = !!v.LIQUID_ESTOP;
             reset = !!v.LIQUID_RESET;
+            lamps = {
+              green: !!v.LIQUID_LAMP_GREEN,
+              yellow: !!v.LIQUID_LAMP_YELLOW,
+              red: !!v.LIQUID_LAMP_RED,
+            };
           }
         }
         useLiquidStore.getState().setPlcFrame({
           outputs,
+          lamps,
           actionWord: num('LIQUID_ACTION_W'),
           recipeA: num('LIQUID_RECIPE_A'),
           recipeB: num('LIQUID_RECIPE_B'),

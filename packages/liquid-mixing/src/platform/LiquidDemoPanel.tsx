@@ -1,9 +1,9 @@
-/** 演示模式：循环启停 / 暂停 / 紧急停 + 配方与只读读数 */
+/** 演示模式：循环启停 / 暂停 / 紧急停 + 只读读数与传感器信号 */
 import { useLiquidStore } from '../stores/useLiquidStore';
 import { LIQUID_PHASE_LABEL } from '../constants/liquidConstants';
 import {
   box, btn,
-  LiquidRecipeEditor, LiquidLevelReadout, LiquidStatusPanel, LiquidAlarmPanel,
+  LiquidLevelReadout, LiquidSensorPanel, LiquidAlarmPanel,
 } from './LiquidPanelParts';
 import { LiquidHint, LiquidSensorHint } from './LiquidAddressHint';
 
@@ -45,11 +45,10 @@ export function LiquidDemoPanel() {
           </div>
         </div>
       </div>
-      {/* 关键读数上移，配方设定下沉：常规视口首屏即可读全四罐液位 */}
+      {/* 关键读数上移：常规视口首屏即可读全四罐液位与传感器信号 */}
       <LiquidLevelReadout />
-      <LiquidStatusPanel />
+      <LiquidSensorPanel />
       <LiquidAlarmPanel />
-      <LiquidRecipeEditor />
     </div>
   );
 }

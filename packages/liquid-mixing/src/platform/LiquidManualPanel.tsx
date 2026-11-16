@@ -1,18 +1,19 @@
-/** 手动模式：5 执行器切换 / 配方设定 / 四罐去皮与任意读数 / 调试主令 + 只读读数 */
-import { useState, type CSSProperties } from 'react';
+/** 手动模式：5 执行器 / 三色灯 / 液位读数 / 传感器信号 / 调试主令 */
+import type { CSSProperties } from 'react';
 import { useLiquidStore } from '../stores/useLiquidStore';
 import {
-  TANK_IDS, LIQUID_INITIAL_VOLUMES, LIQUID_TANKS,
-  liquidValveStateColor, type TankId, type Outputs,
+  LIQUID_INITIAL_VOLUMES,
+  liquidValveStateColor, liquidLampStateColor,
+  type Outputs, type LiquidLampKind,
 } from '../constants/liquidConstants';
 import {
-  box, btn, inputStyle,
-  LiquidLevelReadout, LiquidStatusPanel, LiquidAlarmPanel, LiquidRecipeEditor,
+  box, btn,
+  LiquidLevelReadout, LiquidSensorPanel, LiquidAlarmPanel,
 } from './LiquidPanelParts';
 import { LiquidHint } from './LiquidAddressHint';
 import { type LiquidPanelHintKey } from '../constants/liquidVariables';
 
-/** 五个执行器按钮 → 输出线圈地址浮框键；去皮 / 调试主令是本地动作，不标地址 */
+/** 五个执行器按钮 → 输出线圈地址浮框键；调试主令是本地动作，不标地址 */
 const EXECUTOR_HINT: Record<keyof Outputs, LiquidPanelHintKey> = {
   valveA: 'valveA', valveB: 'valveB',
   stirForward: 'stirForward', stirReverse: 'stirReverse', discharge: 'discharge',
@@ -34,6 +35,16 @@ const EXECUTOR_ROWS: { key: keyof Outputs; label: string; title: string }[][] = 
   ],
 ];
 
+/**
+ * 面板内容契约第二块：三色灯独立成簇，绿 / 黄 / 红三个灯罩对应 PLC 三个输出线圈。
+ * 顺序与 LIQUID_LAMP_COIL_NAMES、地址表、3D 灯塔自下而上完全一致。
+ */
+const LAMP_ROWS: { key: LiquidLampKind; label: string; title: string; hint: LiquidPanelHintKey }[] = [
+  { key: 'green', label: '绿', title: '三色灯 绿', hint: 'lampGreen' },
+  { key: 'yellow', label: '黄', title: '三色灯 黄', hint: 'lampYellow' },
+  { key: 'red', label: '红', title: '三色灯 红', hint: 'lampRed' },
+];
+
 /** 三个阀门用与 3D 同源的状态色；搅拌点动用共享语义蓝，避免与阀位混淆 */
 const valveKeys: (keyof Outputs)[] = ['valveA', 'valveB', 'discharge'];
 const STIR_ON_COLOR = '#3b82f6';
@@ -44,18 +55,14 @@ const stateStyle = (color: string): CSSProperties => ({ '--dt-state-color': colo
 
 export function LiquidManualPanel() {
   const outputs = useLiquidStore((s) => s.outputs);
-  const volumes = useLiquidStore((s) => s.volumes);
+  const lamps = useLiquidStore((s) => s.lamps);
   const setOutput = useLiquidStore((s) => s.setOutput);
+  const setLamp = useLiquidStore((s) => s.setLamp);
   const setVolume = useLiquidStore((s) => s.setVolume);
-  const tareTo = useLiquidStore((s) => s.tareTo);
-  const resetTare = useLiquidStore((s) => s.resetTare);
   const resetAll = useLiquidStore((s) => s.resetAll);
-  const clearAlarm = useLiquidStore((s) => s.clearAlarm);
-  const [tareInputs, setTareInputs] = useState<Record<TankId, string>>({
-    a: '0.0', b: '0.0', mix: '0.0', product: '0.0',
-  });
 
   const activeCount = EXECUTOR_ROWS.flat().filter((t) => outputs[t.key]).length;
+  const lampCount = LAMP_ROWS.filter((t) => lamps[t.key]).length;
 
   return (
     <div data-dt-liquid-manual>
@@ -95,45 +102,56 @@ export function LiquidManualPanel() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* 关键读数上移：常规视口首屏就能看到四罐液位与状态，设定类控件下沉 */}
-      <LiquidLevelReadout />
-      <LiquidStatusPanel />
-      <LiquidAlarmPanel />
-
-      <LiquidRecipeEditor />
-
-      <div style={box}>
-        <b>去皮设定</b>
-        {TANK_IDS.map((tank) => (
-          <div key={tank} style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 5, fontFamily: 'monospace', flexWrap: 'wrap' }}>
-            <span style={{ width: 84, color: '#94a3b8' }}>{LIQUID_TANKS[tank].label}</span>
-            <button aria-label={`${LIQUID_TANKS[tank].label} 设 0.0 点`} style={{ ...btn, background: '#1d4ed8' }}
-              onClick={() => { tareTo(tank, 0); setTareInputs((p) => ({ ...p, [tank]: '0.0' })); }}>
-              设 0.0 点
-            </button>
-            <input aria-label={`${LIQUID_TANKS[tank].label} 当前点读数`} type="number" style={inputStyle}
-              value={tareInputs[tank]} onChange={(e) => setTareInputs((p) => ({ ...p, [tank]: e.target.value }))} />
-            <button aria-label={`${LIQUID_TANKS[tank].label} 设置当前点`} style={btn}
-              onClick={() => tareTo(tank, Number(tareInputs[tank]))}>设置</button>
-          </div>
-        ))}
-        <span data-dt-liquid-tare style={{ display: 'none' }}>
-          {TANK_IDS.map((tank) => volumes[tank].toFixed(3)).join(',')}
+        {/* 阀门状态色诊断锚点：与 3D 同一纯函数，供验收脚本核对「面板与场景同源」 */}
+        <span data-dt-liquid-valve style={{ display: 'none' }}>
+          {`valveA=${outputs.valveA ? 1 : 0}:${liquidValveStateColor(outputs.valveA)}|valveB=${outputs.valveB ? 1 : 0}:${liquidValveStateColor(outputs.valveB)}|discharge=${outputs.discharge ? 1 : 0}:${liquidValveStateColor(outputs.discharge)}`}
         </span>
       </div>
 
       <div style={box}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <span className="section-title" style={{ flex: 1, fontSize: 11, color: '#94a3b8', marginBottom: 0 }}>
+            三色灯
+          </span>
+          <span className={`badge ${lampCount ? 'badge-yellow' : 'badge-slate'}`}>
+            {lampCount} / {LAMP_ROWS.length}
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${LAMP_ROWS.length}, minmax(0, 1fr))`, gap: 5 }}>
+          {LAMP_ROWS.map((t) => {
+            const on = lamps[t.key];
+            return (
+              <button key={t.key} type="button" aria-label={`三色灯 ${t.label}`} aria-pressed={on}
+                data-dt-liquid-lamp={t.key} data-on={on ? '1' : '0'}
+                className="btn btn-xs dt-executor touch-manipulation"
+                style={stateStyle(liquidLampStateColor(t.key, on))}
+                onClick={() => setLamp(t.key, !on)}>
+                <span className="dt-state-led" />
+                <LiquidHint hintKey={t.hint} title={t.title} underline={false}>
+                  {t.label}
+                </LiquidHint>
+              </button>
+            );
+          })}
+        </div>
+        <span data-dt-liquid-lamps style={{ display: 'none' }}>
+          {LAMP_ROWS.map((t) => `${t.key}=${lamps[t.key] ? 1 : 0}`).join(',')}
+        </span>
+      </div>
+
+      {/* 关键读数上移：常规视口首屏就能看到四罐液位与传感器信号 */}
+      <LiquidLevelReadout />
+      <LiquidSensorPanel />
+      <LiquidAlarmPanel />
+
+      <div style={box}>
         <b>调试主令</b>
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          <button aria-label="去皮复位" style={btn} onClick={() => resetTare()}>去皮复位</button>
           <button aria-label="回补原液" style={btn}
             onClick={() => { setVolume('a', LIQUID_INITIAL_VOLUMES.a); setVolume('b', LIQUID_INITIAL_VOLUMES.b); }}>
             回补原液
           </button>
           <button aria-label="全部复位" style={btn} onClick={() => resetAll()}>全部复位</button>
-          <button aria-label="报警复位" style={btn} onClick={() => clearAlarm()}>报警复位</button>
         </div>
       </div>
 

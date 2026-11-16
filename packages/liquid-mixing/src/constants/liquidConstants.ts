@@ -31,16 +31,20 @@ export interface Outputs {
   discharge: boolean;
 }
 
-/** 四罐上下限液位（开关量）+ 搅拌 / 阀门反馈，全部由 REAL 液位与输出同源派生 */
+/**
+ * 8 路液位开关 + 3 路搅拌反馈 + 3 路阀门到位反馈 = 14 路开关量，
+ * 全部由 REAL 液位与输出同源派生。液位开关的组成见 LIQUID_LEVEL_SWITCHES：
+ * A / B 原料罐只判下限，混合罐低 / 中 / 高 / 上极限四档，成品罐上下限。
+ */
 export interface LiquidSensors {
-  aHigh: boolean;
   aLow: boolean;
-  bHigh: boolean;
   bLow: boolean;
-  mixHigh: boolean;
   mixLow: boolean;
-  productHigh: boolean;
+  mixMid: boolean;
+  mixHigh: boolean;
+  mixOver: boolean;
   productLow: boolean;
+  productHigh: boolean;
   stirring: boolean;
   forward: boolean;
   reverse: boolean;
@@ -48,6 +52,21 @@ export interface LiquidSensors {
   valveBOpen: boolean;
   dischargeOpen: boolean;
 }
+
+/**
+ * 三色灯塔三个灯罩的亮灭（设备 → PLC 的指示灯输出由 PLC 三个线圈回读）。
+ * 独立于 5 个执行器的 Outputs：演示状态机每步都会全量重写 outputs，
+ * 把灯塔塞进 outputs 会被每帧熄灭；面板 / PLC 帧 / 快照单独走这一份真值。
+ */
+export interface Lamps {
+  green: boolean;
+  yellow: boolean;
+  red: boolean;
+}
+export type LiquidLampKind = keyof Lamps;
+
+export const LIQUID_EMPTY_LAMPS: Lamps = { green: false, yellow: false, red: false };
+
 
 export interface Recipe {
   /** 每轮从 A / B 罐取用的体积（L，REAL） */
@@ -84,9 +103,18 @@ export const LIQUID_PROCESS = {
   /** 演示每轮结束后回补 A/B 原液、转出成品，保证「启动后一直循环」不会自己停 */
   REFILL_RATE: 120,
   PRODUCT_DRAIN_RATE: 200,
-  /** 开关量液位阈值（占容量比） */
-  HIGH_RATIO: 0.9,
-  LOW_RATIO: 0.1,
+  /**
+   * 液位开关阈值（占容量比）：11-15 用户定稿 —— 原料罐只判下限，
+   * 混合罐低 / 中 / 高 / 上极限四档，成品罐上下限。
+   * 3D 灯泡高度、liquidSensorStates()、PLC 回写表全部读 LIQUID_LEVEL_SWITCHES，不另算。
+   */
+  RAW_LOW_RATIO: 0.1,
+  MIX_LOW_RATIO: 0.1,
+  MIX_MID_RATIO: 0.35,
+  MIX_HIGH_RATIO: 0.65,
+  MIX_OVER_RATIO: 0.9,
+  PRODUCT_LOW_RATIO: 0.1,
+  PRODUCT_HIGH_RATIO: 0.9,
   /** 搅拌角速度 rad/s，只影响 3D 桨叶观感，不参与真值 */
   STIR_OMEGA: 5.2,
   /** 混合均匀度积分速率（1/s）：正反转同速，默认 3s + 3s 恰好推进到 1 */
@@ -158,6 +186,43 @@ export const LIQUID_EMPTY_OUTPUTS: Outputs = {
   valveA: false, valveB: false, stirForward: false, stirReverse: false, discharge: false,
 };
 
+/** 一路液位开关：传感器字段 + PLC 信号名 + 触发点 + 比较方向 */
+export interface LiquidLevelSwitch {
+  /** LiquidSensors 里的字段名 */
+  key: keyof LiquidSensors;
+  /** 面板 / 3D / PLC 回写表共用的信号名，不允许各处另写一份 */
+  label: string;
+  /** 触发点：占罐高（满量程）比 0..1 */
+  ratio: number;
+  /** low = 液位低于等于触发点；high = 液位高于等于触发点 */
+  mode: 'low' | 'high';
+}
+
+/**
+ * 液位开关布置（11-15 用户定稿）：
+ * A / B 原料罐只要下限（防泵抽空）；混合罐低 / 中 / 高 / 上极限四档（进料分段与溢流保护）；
+ * 成品罐上下限（满罐停止出料 / 低液位提示）。
+ * 顺序即 PLC 回写表的顺序，8 路之后接搅拌 3 路与阀门到位 3 路，共 14 路。
+ */
+export const LIQUID_LEVEL_SWITCHES: Record<TankId, readonly LiquidLevelSwitch[]> = {
+  a: [{ key: 'aLow', label: 'A 罐下限', ratio: LIQUID_PROCESS.RAW_LOW_RATIO, mode: 'low' }],
+  b: [{ key: 'bLow', label: 'B 罐下限', ratio: LIQUID_PROCESS.RAW_LOW_RATIO, mode: 'low' }],
+  mix: [
+    { key: 'mixLow', label: '混合罐下限', ratio: LIQUID_PROCESS.MIX_LOW_RATIO, mode: 'low' },
+    { key: 'mixMid', label: '混合罐中液位', ratio: LIQUID_PROCESS.MIX_MID_RATIO, mode: 'high' },
+    { key: 'mixHigh', label: '混合罐高液位', ratio: LIQUID_PROCESS.MIX_HIGH_RATIO, mode: 'high' },
+    { key: 'mixOver', label: '混合罐上极限', ratio: LIQUID_PROCESS.MIX_OVER_RATIO, mode: 'high' },
+  ],
+  product: [
+    { key: 'productLow', label: '成品罐下限', ratio: LIQUID_PROCESS.PRODUCT_LOW_RATIO, mode: 'low' },
+    { key: 'productHigh', label: '成品罐上限', ratio: LIQUID_PROCESS.PRODUCT_HIGH_RATIO, mode: 'high' },
+  ],
+};
+
+/** 8 路液位开关的扁平顺序：A 下限 → B 下限 → 混合罐自下而上四档 → 成品罐下 / 上限 */
+export const LIQUID_LEVEL_SWITCH_ORDER: readonly LiquidLevelSwitch[] =
+  TANK_IDS.flatMap((tank) => LIQUID_LEVEL_SWITCHES[tank]);
+
 /** 工艺阶段：正转与反转是两段独立阶段，演示交替执行 */
 export const LIQUID_PHASE = {
   IDLE: 0,
@@ -228,6 +293,22 @@ export const LIQUID_VALVE_STATE = {
 
 export function liquidValveStateColor(open: boolean): string {
   return open ? LIQUID_VALVE_STATE.open : LIQUID_VALVE_STATE.closed;
+}
+
+/**
+ * 三色灯塔灯罩色：亮色取共享工业灯色令牌，灭态取 LAMP_DARK。
+ * 必须定义在 LIQUID_VISUAL 之后（模块级 const 前向引用会撞 TDZ）。
+ * 3D 灯罩材质与手动面板按钮共用这一份，不再出现第二套灯色。
+ */
+export const LIQUID_LAMP_COLOR: Record<LiquidLampKind | 'off', string> = {
+  green: LIQUID_VISUAL.LAMP_GREEN,
+  yellow: LIQUID_VISUAL.LAMP_YELLOW,
+  red: LIQUID_VISUAL.LAMP_RED,
+  off: LIQUID_VISUAL.LAMP_DARK,
+};
+
+export function liquidLampStateColor(kind: LiquidLampKind, on: boolean): string {
+  return on ? LIQUID_LAMP_COLOR[kind] : LIQUID_LAMP_COLOR.off;
 }
 
 /** 几何单一来源：米。罐底 y 即支腿台面高度，液面从罐底沿 +Y 上升 */
@@ -446,25 +527,25 @@ export function liquidSwirlStrength(uniformity: number, direction: -1 | 0 | 1): 
 }
 
 /**
- * 模拟量 → 开关量：四罐上下限全部由同一个 REAL 液位与阈值比较派生，
- * 搅拌 / 阀门反馈由输出派生。面板、3D、回写表、快照共用这一份结果。
+ * 模拟量 → 开关量：8 路液位开关全部由同一个 REAL 液位与 LIQUID_LEVEL_SWITCHES 的
+ * 触发点比较派生，搅拌方向与阀门到位由输出派生。
+ * 面板、3D 灯泡、回写表、快照共用这一份结果，任何一处都不另算阈值。
  */
 export function liquidSensorStates(volumes: Volumes, outputs: Outputs, stirDirection: -1 | 0 | 1): LiquidSensors {
-  const level = (tank: TankId) => liquidLevelRatio(tank, volumes[tank]);
-  const high = (tank: TankId) => level(tank) >= LIQUID_PROCESS.HIGH_RATIO;
-  const low = (tank: TankId) => level(tank) <= LIQUID_PROCESS.LOW_RATIO;
-  return {
-    aHigh: high('a'), aLow: low('a'),
-    bHigh: high('b'), bLow: low('b'),
-    mixHigh: high('mix'), mixLow: low('mix'),
-    productHigh: high('product'), productLow: low('product'),
-    stirring: stirDirection !== 0,
-    forward: stirDirection === 1,
-    reverse: stirDirection === -1,
-    valveAOpen: outputs.valveA,
-    valveBOpen: outputs.valveB,
-    dischargeOpen: outputs.discharge,
-  };
+  const state = {} as Record<keyof LiquidSensors, boolean>;
+  for (const tank of TANK_IDS) {
+    const ratio = liquidLevelRatio(tank, volumes[tank]);
+    for (const sw of LIQUID_LEVEL_SWITCHES[tank]) {
+      state[sw.key] = sw.mode === 'low' ? ratio <= sw.ratio : ratio >= sw.ratio;
+    }
+  }
+  state.stirring = stirDirection !== 0;
+  state.forward = stirDirection === 1;
+  state.reverse = stirDirection === -1;
+  state.valveAOpen = outputs.valveA;
+  state.valveBOpen = outputs.valveB;
+  state.dischargeOpen = outputs.discharge;
+  return state;
 }
 
 /**

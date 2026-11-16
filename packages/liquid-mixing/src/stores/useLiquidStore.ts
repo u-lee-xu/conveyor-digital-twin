@@ -16,18 +16,21 @@ import { patchChanged } from '@digital-twin/shared/sync/patchChanged';
 import {
   LIQUID_PROCESS, LIQUID_CAPACITY, LIQUID_INITIAL_VOLUMES, LIQUID_INITIAL_COMPONENTS,
   LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS, LIQUID_DEFAULT_RECIPE,
-  LIQUID_EMPTY_OUTPUTS, LIQUID_PHASE, TANK_IDS,
+  LIQUID_EMPTY_OUTPUTS, LIQUID_EMPTY_LAMPS, LIQUID_PHASE, TANK_IDS,
   clamp, clampVolume, clampUniformity, clampRecipe, LIQUID_RECIPE_LIMITS,
   liquidSensorStates, resolveStirDirection, liquidAlarmFlags,
-  type Volumes, type Outputs, type Recipe, type LiquidPhase, type TankId, type LiquidSensors,
+  type Volumes, type Outputs, type Recipe, type LiquidPhase, type TankId,
+  type LiquidSensors, type Lamps, type LiquidLampKind,
 } from '../constants/liquidConstants';
 import {
-  LIQUID_ACTION, LIQUID_PLC_SCALE, decodeAction, liquidSensorMask,
+  LIQUID_ACTION, LIQUID_PLC_SCALE, decodeAction, LIQUID_SENSOR_FEEDBACK, liquidSensorMask,
 } from '../constants/liquidVariables';
 
 export interface LiquidPlcFrame {
   /** PLC 输出的 5 个执行器线圈，缺字段保留上次值 */
   outputs?: Partial<Outputs>;
+  /** PLC 输出的三色灯三个灯罩线圈，缺字段保留上次值 */
+  lamps?: Partial<Lamps>;
   /** 显式动作字（code*1000 + seq），序号变化沿触发一次性动作 */
   actionWord?: number;
   /** PLC 下发的配方与时长，已是 PLC 缩放后的原值 */
@@ -44,6 +47,8 @@ interface LiquidStore {
   tare: Volumes;
   recipe: Recipe;
   outputs: Outputs;
+  /** 三色灯塔三个灯罩：PLC 三个线圈给定，手动面板也可本地点动 */
+  lamps: Lamps;
   sensors: LiquidSensors;
   phase: LiquidPhase;
   phaseElapsed: number;
@@ -74,6 +79,7 @@ interface LiquidStore {
 
   setOutput: (name: keyof Outputs, on: boolean) => void;
   setOutputs: (patch: Partial<Outputs>) => void;
+  setLamp: (kind: LiquidLampKind, on: boolean) => void;
   setRecipe: (patch: Partial<Recipe>) => void;
   /** 手动补液 / 调试用：直接改体积真值（唯一入口） */
   setVolume: (tank: TankId, value: number) => void;
@@ -118,6 +124,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   tare: emptyVolumes(),
   recipe: { ...LIQUID_DEFAULT_RECIPE },
   outputs: { ...LIQUID_EMPTY_OUTPUTS },
+  lamps: { ...LIQUID_EMPTY_LAMPS },
   sensors: liquidSensorStates(initialVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
   phase: LIQUID_PHASE.IDLE,
   phaseElapsed: 0,
@@ -138,6 +145,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
 
   setOutput: (name, on) => set((s) => ({ outputs: { ...s.outputs, [name]: on } })),
   setOutputs: (patch) => set((s) => ({ outputs: { ...s.outputs, ...patch } })),
+  /** 三色灯三个灯罩各自独立（对应 PLC 三个线圈），不做互斥锁定 */
+  setLamp: (kind, on) => set((s) => ({ lamps: { ...s.lamps, [kind]: on } })),
   /** 面板输入统一过守卫：非法值保留上次设定，绝不把 NaN / 负值放进演示状态机 */
   setRecipe: (patch) => set((s) => ({ recipe: clampRecipe(patch, s.recipe) })),
   setVolume: (tank, value) => set((s) => {
@@ -163,6 +172,8 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   setEstop: (on) => set((s) => ({
     estop: on,
     outputs: on ? { ...LIQUID_EMPTY_OUTPUTS } : s.outputs,
+    // 急停同样切断指示灯：灯罩由输出线圈驱动，不能停在亮态
+    lamps: on ? { ...LIQUID_EMPTY_LAMPS } : s.lamps,
     demoRunning: on ? false : s.demoRunning,
   })),
   setConnected: (on) => set({ connected: on }),
@@ -176,6 +187,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
   setPlcFrame: (frame) => set((s) => {
     const patch: Partial<LiquidStore> = { controlSource: 'plc' };
     if (frame.outputs) patch.outputs = { ...s.outputs, ...frame.outputs };
+    if (frame.lamps) patch.lamps = { ...s.lamps, ...frame.lamps };
     if (typeof frame.recipeA === 'number' && Number.isFinite(frame.recipeA)) {
       patch.recipe = { ...(patch.recipe ?? s.recipe), targetA: clamp(frame.recipeA / LIQUID_PLC_SCALE.RECIPE, 0, LIQUID_CAPACITY.a) };
     }
@@ -196,6 +208,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       patch.tare = emptyVolumes();
       Object.assign(patch, emptyComponents());
       patch.outputs = { ...LIQUID_EMPTY_OUTPUTS };
+      patch.lamps = { ...LIQUID_EMPTY_LAMPS };
       patch.sensors = liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0);
       patch.agitatorAngle = 0; patch.stirDirection = 0;
       patch.round = 0;
@@ -216,6 +229,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
             patch.tare = emptyVolumes();
             Object.assign(patch, emptyComponents());
             patch.outputs = { ...LIQUID_EMPTY_OUTPUTS };
+            patch.lamps = { ...LIQUID_EMPTY_LAMPS };
             patch.sensors = liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0);
             patch.agitatorAngle = 0; patch.stirDirection = 0;
             patch.round = 0;
@@ -259,6 +273,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
    */
   resetRuntime: () => set({
     outputs: { ...LIQUID_EMPTY_OUTPUTS },
+    lamps: { ...LIQUID_EMPTY_LAMPS },
     demoRunning: false, stopRequested: false, demoPaused: false,
     phase: LIQUID_PHASE.IDLE, phaseElapsed: 0,
     alarm: 0, estop: false, controlSource: 'local', connected: false,
@@ -270,6 +285,7 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
     volumes: resetVolumes(), tare: emptyVolumes(),
     recipe: { ...LIQUID_DEFAULT_RECIPE },
     outputs: { ...LIQUID_EMPTY_OUTPUTS },
+    lamps: { ...LIQUID_EMPTY_LAMPS },
     // 传感器初值必须与复位后的体积真值同源，否则空罐仍上报下限 / 上限旧态
     sensors: liquidSensorStates(resetVolumes(), LIQUID_EMPTY_OUTPUTS, 0),
     phase: LIQUID_PHASE.IDLE, phaseElapsed: 0, agitatorAngle: 0, stirDirection: 0,
@@ -516,18 +532,20 @@ export const useLiquidStore = create<LiquidStore>((set, get) => ({
       discharge: bit('LIQUID_DISCHARGE', s.outputs.discharge),
     };
     patch.outputs = outputs;
+    // 三色灯与执行器一样：主控快照有位就用它，缺字段保留上次值
+    patch.lamps = {
+      green: bit('LIQUID_LAMP_GREEN', s.lamps.green),
+      yellow: bit('LIQUID_LAMP_YELLOW', s.lamps.yellow),
+      red: bit('LIQUID_LAMP_RED', s.lamps.red),
+    };
     const mask = num('LIQUID_SENSOR_MASK');
     const bits = liquidSensorStates(volumes, outputs, patch.stirDirection ?? s.stirDirection);
     if (mask !== undefined) {
-      // 主控快照优先：掩码与纯函数派生同源同序，掩码逐位覆盖后不丢字段
+      // 主控快照优先：掩码逐位覆盖到回写表声明的同一批字段，新增 / 删除传感器不丢字段
       const on = (i: number) => (Math.trunc(mask) & (1 << i)) !== 0;
-      patch.sensors = {
-        ...bits,
-        aHigh: on(0), aLow: on(1), bHigh: on(2), bLow: on(3),
-        mixHigh: on(4), mixLow: on(5), productHigh: on(6), productLow: on(7),
-        stirring: on(8), forward: on(9), reverse: on(10),
-        valveAOpen: on(11), valveBOpen: on(12), dischargeOpen: on(13),
-      };
+      const merged = { ...bits };
+      LIQUID_SENSOR_FEEDBACK.forEach((r, i) => { merged[r.sensor] = on(i); });
+      patch.sensors = merged;
     } else {
       patch.sensors = bits;
     }
@@ -567,6 +585,9 @@ export function exportLiquidSnapshot(): Record<string, number> {
     LIQUID_STIR_FWD: s.outputs.stirForward ? 1 : 0,
     LIQUID_STIR_REV: s.outputs.stirReverse ? 1 : 0,
     LIQUID_DISCHARGE: s.outputs.discharge ? 1 : 0,
+    LIQUID_LAMP_GREEN: s.lamps.green ? 1 : 0,
+    LIQUID_LAMP_YELLOW: s.lamps.yellow ? 1 : 0,
+    LIQUID_LAMP_RED: s.lamps.red ? 1 : 0,
     LIQUID_SENSOR_MASK: liquidSensorMask(s.sensors),
     LIQUID_DEMO_RUNNING: s.demoRunning ? 1 : 0,
     LIQUID_STOP_REQUESTED: s.stopRequested ? 1 : 0,

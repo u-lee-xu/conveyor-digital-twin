@@ -11,7 +11,7 @@
  * 从根上避免「贴面与本体混叠 / 贴面埋进本体」。
  */
 import * as THREE from 'three';
-import { LIQUID_VISUAL, LIQUID_TANKS } from '../../constants/liquidConstants';
+import { LIQUID_VISUAL, LIQUID_TANKS, LIQUID_LAMP_COLOR } from '../../constants/liquidConstants';
 
 const V = LIQUID_VISUAL;
 
@@ -54,6 +54,16 @@ function translucentLiquidMat(color: string): THREE.MeshStandardMaterial {
     transparent: true,
     opacity: 0.66,
     depthWrite: false,
+  });
+}
+
+/**
+ * 三色灯灯罩亮态：高自发光，整机机位也能一眼看出哪一层亮着。
+ * 与阀位灯同一写法（成组单例、按状态二选一），不做逐帧改色。
+ */
+function lampMat(color: string): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color, emissive: color, emissiveIntensity: 1.9, metalness: 0.15, roughness: 0.28,
   });
 }
 
@@ -174,6 +184,14 @@ export const LM = {
     color: V.LAMP_DARK, emissive: V.MAGSWITCH_COLOR, emissiveIntensity: 0,
     roughness: 0.6, metalness: 0.4,
   }),
+  /**
+   * 三色灯塔灯罩（亮态）：成组单例，TowerLamp 按 lamp[kind] 二选一，
+   * 颜色取 LIQUID_LAMP_COLOR，与手动面板按钮的 --dt-state-color 同一份常量。
+   * 灭态直接复用 LM.ledOff，三个灯罩共用一块暗玻璃。
+   */
+  lampGreen: lampMat(LIQUID_LAMP_COLOR.green),
+  lampYellow: lampMat(LIQUID_LAMP_COLOR.yellow),
+  lampRed: lampMat(LIQUID_LAMP_COLOR.red),
 } as const;
 
 /* ---------------------- 程序化金属拉丝纹理（惰性烘焙） ---------------------- */

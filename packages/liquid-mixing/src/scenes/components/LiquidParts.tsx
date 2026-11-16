@@ -18,10 +18,10 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   LIQUID_TANKS, LIQUID_GEOM, LIQUID_CAPACITY, LIQUID_PROCESS,
-  LIQUID_VIEW_PRESETS,
+  LIQUID_VIEW_PRESETS, LIQUID_LEVEL_SWITCHES,
   liquidLevelHeight, liquidMixBandColors, liquidMixStratification,
   liquidProductColor, liquidSwirlStrength, liquidDisplay,
-  type TankId, type LiquidSensors, type LiquidPartKind,
+  type TankId, type LiquidPartKind, type LiquidLampKind,
 } from '../../constants/liquidConstants';
 import { useLiquidStore } from '../../stores/useLiquidStore';
 import { useLiquidViewStore } from '../../stores/useLiquidViewStore';
@@ -77,17 +77,15 @@ const VALVE_HANDLE_L = VALVE_R * 2.3;
 const CLAMP_R = PIPE_R + GAP * 2;
 const CLAMP_TUBE = GAP * 1.6;
 
-const SENSOR_HIGH: Record<TankId, keyof LiquidSensors> = {
-  a: 'aHigh', b: 'bHigh', mix: 'mixHigh', product: 'productHigh',
-};
-const SENSOR_LOW: Record<TankId, keyof LiquidSensors> = {
-  a: 'aLow', b: 'bLow', mix: 'mixLow', product: 'productLow',
-};
 const LIQUID_MAT: Record<TankId, THREE.MeshStandardMaterial> = {
   a: LM.liquidA, b: LM.liquidB, mix: LM.liquidMix, product: LM.liquidProduct,
 };
 const SURFACE_MAT: Record<TankId, THREE.MeshStandardMaterial> = {
   a: LM.surfaceA, b: LM.surfaceB, mix: LM.surfaceMix, product: LM.surfaceProduct,
+};
+/** 三色灯亮态材质：与面板按钮共用同一批灯色常量，按灯罩各自选一，不逐帧改色 */
+const LAMP_ON_MAT: Record<LiquidLampKind, THREE.MeshStandardMaterial> = {
+  green: LM.lampGreen, yellow: LM.lampYellow, red: LM.lampRed,
 };
 
 /* --------------------------------------------------------------------------
@@ -432,30 +430,27 @@ export function ReadoutPlate({ tank }: { tank: TankId }) {
 }
 
 /* --------------------------------------------------------------------------
- * 开关量液位传感器：罐侧上部 / 下部，LED 亮绿 / 暗由 sensors 对应布尔驱动
+ * 液位开关组：路数与位置全部取自 LIQUID_LEVEL_SWITCHES
+ * （A / B 各 1 路下限、混合罐低/中/高/上极限 4 路、成品罐上下限 2 路），
+ * LED 亮绿 / 暗由 sensors 对应布尔驱动，面板 14 路与 PLC 回写表同一份顺序。
  * ------------------------------------------------------------------------ */
-export function LevelSensorPair({ tank }: { tank: TankId }) {
+export function LevelSwitches({ tank }: { tank: TankId }) {
   const g = LIQUID_TANKS[tank];
-  const high = useLiquidStore((s) => s.sensors[SENSOR_HIGH[tank]]);
-  const low = useLiquidStore((s) => s.sensors[SENSOR_LOW[tank]]);
+  const sensors = useLiquidStore((s) => s.sensors);
+  const switches = LIQUID_LEVEL_SWITCHES[tank];
   const r = g.radius;
   const h = g.height;
   const bodyX = -(r + WINDOW_GAP + GAP);
-  const yHigh = h * LIQUID_PROCESS.HIGH_RATIO;
-  const yLow = h * LIQUID_PROCESS.LOW_RATIO;
   return (
     <group>
-      {([
-        { y: yHigh, on: high, id: 'high' },
-        { y: yLow, on: low, id: 'low' },
-      ] as const).map(({ y, on, id }) => (
-        <group key={id} position={[bodyX, y, 0]}>
+      {switches.map((sw) => (
+        <group key={sw.key} position={[bodyX, h * sw.ratio, 0]}>
           {/* 本体横向短圆柱，根部插入罐壁 ≥ GAP */}
           <mesh rotation={[0, 0, Math.PI / 2]} material={LM.motor}>
             <cylinderGeometry args={[PIPE_R, PIPE_R, WINDOW_W, 12]} />
           </mesh>
           <mesh position={[-(WINDOW_W / 2 + GAP + BOLT_R), 0, 0]}
-            material={on ? LM.ledOn : LM.ledOff}>
+            material={sensors[sw.key] ? LM.ledOn : LM.ledOff}>
             <sphereGeometry args={[BOLT_R, 12, 8]} />
           </mesh>
         </group>
@@ -465,7 +460,59 @@ export function LevelSensorPair({ tank }: { tank: TankId }) {
 }
 
 /* --------------------------------------------------------------------------
- * 罐体总装：五件液位可视要素 + 开关量传感器，四罐共用同一份实现
+ * 三色灯塔：机架右后角立柱，绿 / 黄 / 红三个灯罩自下而上叠放。
+ * 灯罩颜色只由 liquidLampStateColor()（面板按钮同源）二选一成组单例材质，
+ * 不做逐帧改色；相邻灯罩之间由 LAMP_RING_H 错开 ≥ GAP，杜绝共面闪烁。
+ * ------------------------------------------------------------------------ */
+const LAMP_POLE_R = PIPE_R * 0.62;
+const LAMP_POLE_H = PUMP_R * 5.4;
+const LAMP_R = PUMP_R * 0.86;
+const LAMP_MODULE_H = PUMP_R * 0.72;
+const LAMP_RING_H = GAP * 3;
+const LAMP_TOP_H = GAP * 4;
+const LAMP_ORDER: LiquidLampKind[] = ['green', 'yellow', 'red'];
+
+export function TowerLamp() {
+  const lamps = useLiquidStore((s) => s.lamps);
+  const poleTop = LAMP_POLE_H;
+  const capY = poleTop + GAP * 2;
+  return (
+    <group>
+      {/* 立柱：底端插入机架台面 ≥ GAP */}
+      <mesh position={[0, poleTop / 2, 0]} material={LM.pipeClamp} castShadow>
+        <cylinderGeometry args={[LAMP_POLE_R, LAMP_POLE_R, poleTop, 12]} />
+      </mesh>
+      {/* 底座法兰：与立柱侧面错开 ≥ GAP */}
+      <mesh position={[0, GAP * 2, 0]} material={LM.cap}>
+        <cylinderGeometry args={[LAMP_R * 0.9, LAMP_R * 0.9, GAP * 4, 20]} />
+      </mesh>
+      {/* 三层灯罩：自下而上 绿 → 黄 → 红，层间夹金属隔环 */}
+      {LAMP_ORDER.map((kind, i) => {
+        const bottom = capY + i * (LAMP_MODULE_H + LAMP_RING_H);
+        const on = lamps[kind];
+        return (
+          <group key={kind}>
+            <mesh position={[0, bottom + LAMP_MODULE_H / 2, 0]}
+              material={on ? LAMP_ON_MAT[kind] : LM.ledOff} castShadow>
+              <cylinderGeometry args={[LAMP_R, LAMP_R, LAMP_MODULE_H, 24]} />
+            </mesh>
+            <mesh position={[0, bottom + LAMP_MODULE_H + LAMP_RING_H / 2, 0]} material={LM.cap}>
+              <cylinderGeometry args={[LAMP_R + GAP, LAMP_R + GAP, LAMP_RING_H, 20]} />
+            </mesh>
+          </group>
+        );
+      })}
+      {/* 顶盖 */}
+      <mesh position={[0, capY + LAMP_ORDER.length * (LAMP_MODULE_H + LAMP_RING_H) + LAMP_TOP_H / 2, 0]}
+        material={LM.cap}>
+        <cylinderGeometry args={[LAMP_R * 0.82, LAMP_R + GAP, LAMP_TOP_H, 20]} />
+      </mesh>
+    </group>
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * 罐体总装：五件液位可视要素 + 液位开关组，四罐共用同一份实现
  * ------------------------------------------------------------------------ */
 export function TankAssembly({ tank }: { tank: TankId }) {
   return (
@@ -475,7 +522,7 @@ export function TankAssembly({ tank }: { tank: TankId }) {
       <SightWindow tank={tank} />     {/* ③ 罐壁竖向观察窗 */}
       <ScaleRule tank={tank} />       {/* ④ 外置刻度尺（约 10 道刻线） */}
       <ReadoutPlate tank={tank} />    {/* ⑤ 罐顶数字读数牌 */}
-      <LevelSensorPair tank={tank} /> {/* 上下限开关量液位传感器 */}
+      <LevelSwitches tank={tank} />   {/* 液位开关组：路数按罐取自 LIQUID_LEVEL_SWITCHES */}
     </group>
   );
 }
@@ -498,7 +545,7 @@ export function Agitator() {
   const motorBase = h + CAP_GAP + MANHOLE_NECK_H + GAP;
   const motorH = PUMP_R * 1.6;
   const shaftTop = motorBase;
-  const shaftBottom = h * LIQUID_PROCESS.LOW_RATIO * 0.5;
+  const shaftBottom = h * LIQUID_PROCESS.MIX_LOW_RATIO * 0.5;
   const shaftLen = shaftTop - shaftBottom;
   const shaftY = (shaftTop + shaftBottom) / 2;
   const frameR = (g.radius - LIQUID_GAP) * 0.62;

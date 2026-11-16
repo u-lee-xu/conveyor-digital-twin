@@ -12,7 +12,7 @@ import {
   LIQUID_INITIAL_COMPONENTS, LIQUID_RESET_VOLUMES, LIQUID_EMPTY_COMPONENTS,
   liquidMixColor, liquidMixBandColors, liquidStratification, liquidSwirlStrength,
   liquidBlendColor, liquidProductColor, liquidMixStratification, liquidPairPresence,
-  liquidValveStateColor, clampUniformity, mixHexColor,
+  liquidValveStateColor, liquidLampStateColor, clampUniformity, mixHexColor,
 } from './constants/liquidConstants';
 import { liquidSensorBits, LIQUID_SENSOR_FEEDBACK, encodeAction, LIQUID_ACTION, liquidSensorHintRow } from './constants/liquidVariables';
 
@@ -55,13 +55,33 @@ describe('去皮 / 零点语义（项目红线）', () => {
 });
 
 describe('模拟量与开关量同源', () => {
-  it('REAL 液位到 90% 触发上限、到 10% 触发下限，14 位布尔表同序', () => {
-    const full = { a: 90, b: 90, mix: 108, product: 270 };
-    const high = liquidSensorStates(full as never, LIQUID_EMPTY_OUTPUTS, 0);
-    expect(high.aHigh && high.bHigh && high.mixHigh && high.productHigh).toBe(true);
-    const low = liquidSensorStates({ a: 10, b: 10, mix: 12, product: 30 } as never, LIQUID_EMPTY_OUTPUTS, 0);
-    expect(low.aLow && low.bLow && low.mixLow && low.productLow).toBe(true);
-    expect(liquidSensorBits(high)).toHaveLength(LIQUID_SENSOR_FEEDBACK.length);
+  it('8 路液位开关按罐分档：原料罐只判下限，混合罐四档，成品罐上下限', () => {
+    // 满量程：混合罐 90% 以上同时点亮中 / 高 / 上极限，成品罐点亮上限、不点亮下限
+    const full = liquidSensorStates(
+      { a: 100, b: 100, mix: 120, product: 300 }, LIQUID_EMPTY_OUTPUTS, 0,
+    );
+    expect([full.mixMid, full.mixHigh, full.mixOver]).toEqual([true, true, true]);
+    expect(full.mixLow).toBe(false);
+    expect(full.productHigh).toBe(true);
+    expect(full.productLow).toBe(false);
+    // 空罐：四罐下限全亮，中 / 高 / 上极限与成品上限全灭
+    const empty = liquidSensorStates({ a: 0, b: 0, mix: 0, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0);
+    expect([empty.aLow, empty.bLow, empty.mixLow, empty.productLow])
+      .toEqual([true, true, true, true]);
+    expect([empty.mixMid, empty.mixHigh, empty.mixOver, empty.productHigh])
+      .toEqual([false, false, false, false]);
+    expect(liquidSensorBits(empty)).toHaveLength(LIQUID_SENSOR_FEEDBACK.length);
+  });
+
+  it('混合罐四档按 10 / 35 / 65 / 90 % 逐档点亮，档与档之间不串', () => {
+    const at = (pct: number) => liquidSensorStates(
+      { a: 80, b: 80, mix: LIQUID_CAPACITY.mix * pct, product: 0 }, LIQUID_EMPTY_OUTPUTS, 0,
+    );
+    const levels = [0.05, 0.4, 0.7, 0.95].map(at);
+    expect(levels.map((s) => s.mixLow)).toEqual([true, false, false, false]);
+    expect(levels.map((s) => s.mixMid)).toEqual([false, true, true, true]);
+    expect(levels.map((s) => s.mixHigh)).toEqual([false, false, true, true]);
+    expect(levels.map((s) => s.mixOver)).toEqual([false, false, false, true]);
   });
 
   it('液面高度由 REAL 体积纯函数派生，零体积零高度、满量程满高度', () => {
@@ -568,6 +588,52 @@ describe('阀门开关状态色与真值同源', () => {
     expect(liquidValveStateColor(S().outputs.discharge)).toBe(LIQUID_VISUAL.LAMP_GREEN);
     const snap = exportLiquidSnapshot();
     expect([snap.LIQUID_VALVE_A, snap.LIQUID_VALVE_B, snap.LIQUID_DISCHARGE]).toEqual([1, 0, 1]);
+  });
+});
+
+describe('三色灯塔：PLC 三线圈 / 快照 / 复位', () => {
+  it('三个灯罩互相独立，PLC 帧与快照成对，观众端可只读镜像', () => {
+    S().resetAll();
+    expect(S().lamps).toEqual({ green: false, yellow: false, red: false });
+    S().setPlcFrame({ lamps: { green: true, red: true } });
+    expect(S().lamps).toEqual({ green: true, yellow: false, red: true });
+    const snap = exportLiquidSnapshot();
+    expect([snap.LIQUID_LAMP_GREEN, snap.LIQUID_LAMP_YELLOW, snap.LIQUID_LAMP_RED])
+      .toEqual([1, 0, 1]);
+    S().resetAll();
+    S().applyBroadcast(snap);
+    expect(S().lamps).toEqual({ green: true, yellow: false, red: true });
+    S().applyBroadcast({ LIQUID_LAMP_GREEN: 0 });
+    expect(S().lamps.green).toBe(false);
+  });
+
+  it('全部复位 / 退出工作区 / 急停都熄灯', () => {
+    S().setLamp('yellow', true);
+    S().resetAll();
+    expect(S().lamps.yellow).toBe(false);
+    S().setLamp('yellow', true);
+    S().resetRuntime();
+    expect(S().lamps.yellow).toBe(false);
+    S().setLamp('yellow', true);
+    S().setEstop(true);
+    expect(S().lamps.yellow).toBe(false);
+  });
+
+  it('三色灯不在 Outputs 里：演示状态机全量重写执行器也不会把它熄灭', () => {
+    S().setLamp('green', true);
+    S().startDemo();
+    run(40);
+    expect(S().lamps.green).toBe(true);
+  });
+
+  it('灯色与 3D 同源：灭态取 LAMP_DARK，亮态取对应灯罩色', () => {
+    expect(liquidLampStateColor('green', true)).toBe(LIQUID_VISUAL.LAMP_GREEN);
+    expect(liquidLampStateColor('yellow', true)).toBe(LIQUID_VISUAL.LAMP_YELLOW);
+    expect(liquidLampStateColor('red', true)).toBe(LIQUID_VISUAL.LAMP_RED);
+    for (const k of ['green', 'yellow', 'red'] as const) {
+      expect(liquidLampStateColor(k, false)).toBe(LIQUID_VISUAL.LAMP_DARK);
+      expect(liquidLampStateColor(k, true)).not.toBe(liquidLampStateColor(k, false));
+    }
   });
 });
 

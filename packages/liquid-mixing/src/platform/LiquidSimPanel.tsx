@@ -4,7 +4,7 @@ import { LIQUID_ADDRESS_ROWS } from '../constants/liquidVariables';
 import { TANK_IDS, LIQUID_TANKS } from '../constants/liquidConstants';
 import {
   box, btn, LEVEL_HINT,
-  LiquidVariableTable, LiquidLevelReadout, LiquidStatusPanel, LiquidAlarmPanel,
+  LiquidVariableTable, LiquidLevelReadout, LiquidSensorPanel, LiquidAlarmPanel,
 } from './LiquidPanelParts';
 import { LiquidHint } from './LiquidAddressHint';
 import { LiquidPlcConnection, pulseLiquidAction, LIQUID_ACTION_BUTTONS } from './LiquidPlcConnection';
@@ -40,9 +40,9 @@ export function LiquidSimPanel() {
         </div>
       </div>
 
-      {/* 关键读数上移；变量地址表默认折叠并放到末尾，避免 23 行地址挤掉液位读数 */}
+      {/* 关键读数上移；变量地址表默认折叠并放到末尾，避免地址表挤掉液位读数与传感器信号 */}
       <LiquidLevelReadout />
-      <LiquidStatusPanel />
+      <LiquidSensorPanel />
       <LiquidAlarmPanel />
       <LiquidVariableTable />
     </div>
