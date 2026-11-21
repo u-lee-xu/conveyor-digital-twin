@@ -56,6 +56,35 @@ const KNOB_T = 0.009;
 const HANDLE_W = BEZEL_R * 0.34;
 const HANDLE_L = BEZEL_R * 1.5;
 const HANDLE_T = 0.004;
+/** 拨柄深色描边比亮银芯每侧宽出的量：拨柄要同时压住深旋钮座和浅门板，靠这层边分界 */
+const HANDLE_EDGE = HANDLE_W * 0.3;
+/** 档位刻点半径：让杆尖（HANDLE_ROOT + HANDLE_L）正好落在刻点上，指向不再需要靠猜 */
+const TICK_R = BEZEL_R * 1.78;
+/** 拨柄根部半径：轮廓、杆尖半径都从这里派生 */
+const HANDLE_ROOT = KNOB_R * 0.16;
+/** 杆尖半径 */
+const HANDLE_END = HANDLE_ROOT + HANDLE_L;
+
+/**
+ * 楔形拨柄轮廓：从 `root` 起沿 +Y 伸出，`shoulder` 之后收窄成箭头。
+ * 抽成函数是为了让「深色描边」和「亮银芯」用**同一条曲线**放大缩小，
+ * 描边才能均匀包住芯线；两边各写一份迟早会走形。
+ */
+function handleShapeOf(halfW: number) {
+  const s = new THREE.Shape();
+  const root = HANDLE_ROOT;
+  const shoulder = root + HANDLE_L * 0.62;
+  const end = HANDLE_END;
+  const tip = halfW * 0.44;
+  s.moveTo(-halfW, root);
+  s.lineTo(halfW, root);
+  s.lineTo(halfW, shoulder);
+  s.lineTo(tip, end);
+  s.lineTo(-tip, end);
+  s.lineTo(-halfW, shoulder);
+  s.closePath();
+  return s;
+}
 
 const PLATE_W = 0.05;
 const PLATE_H = 0.0105;
@@ -231,46 +260,51 @@ function SelectorSwitch({ mode, x, y, onSelect }: {
   mode: LiquidOperatorMode; x: number; y: number; onSelect: (m: LiquidOperatorMode) => void;
 }) {
   const angle = LIQUID_OPERATOR_SELECTOR.angles[mode];
-  const handleShape = useMemo(() => {
-    const s = new THREE.Shape();
-    const half = HANDLE_W / 2;
-    const tip = HANDLE_W * 0.22;
-    const root = KNOB_R * 0.16;
-    const shoulder = root + HANDLE_L * 0.62;
-    const end = root + HANDLE_L;
-    s.moveTo(-half, root);
-    s.lineTo(half, root);
-    s.lineTo(half, shoulder);
-    s.lineTo(tip, end);
-    s.lineTo(-tip, end);
-    s.lineTo(-half, shoulder);
-    s.closePath();
-    return s;
-  }, []);
+  const handles = useMemo(() => ({
+    edge: handleShapeOf(HANDLE_W / 2 + HANDLE_EDGE),
+    core: handleShapeOf(HANDLE_W / 2),
+  }), []);
   const knobTop = FRONT_Z + BEZEL_T + KNOB_T;
+  /**
+   * 旋钮顶面 → 刻度环 → 拨柄逐层让出一个 GAP。
+   * 拨柄底面原来与旋钮顶面**完全共面**，斜视角下深度比较打成平手，
+   * 拨到某一档时整根杆会被旋钮座吞掉（只露出末端一点点），看起来像「档位指示消失」。
+   */
+  const dialZ = knobTop + GAP;
+  const handleZ = knobTop + GAP * 2;
   return (
     <group position={[x, y, 0]} onPointerDown={(e) => { e.stopPropagation(); onSelect(mode === 'auto' ? 'manual' : 'auto'); }}>
       <ZDisc r={SELECTOR_R} depth={BEZEL_T} z={FRONT_Z + BEZEL_T / 2} material={LM.cabinetBezel} />
       <ZDisc r={KNOB_R} depth={KNOB_T} z={FRONT_Z + BEZEL_T + KNOB_T / 2} material={LM.cabinetCollar} />
       {/* 旋钮座顶面的银色刻度环：贴面统一错开 GAP */}
-      <mesh position={[0, 0, knobTop + GAP]} material={LM.cabinetBezel}>
+      <mesh position={[0, 0, dialZ]} material={LM.cabinetBezel}>
         <ringGeometry args={[KNOB_R * 0.68, KNOB_R * 0.92, 32]} />
       </mesh>
-      {/* 两个档位标记：小圆点按 manual / auto 真实偏角摆放，与拨柄指向严格同源 */}
+      {/* 两个档位标记：小圆点按 manual / auto 真实偏角摆放，与拨柄指向严格同源；
+          半径取 TICK_R，让杆尖正好压在刻点上 —— 落在哪个点就是哪一档，不用数角度 */}
       {(['manual', 'auto'] as const).map((key) => {
         const a = LIQUID_OPERATOR_SELECTOR.angles[key];
         return (
           <mesh key={key}
-            position={[-Math.sin(a) * SELECTOR_R * 1.5, Math.cos(a) * SELECTOR_R * 1.5, FRONT_Z + GAP]}
+            position={[-Math.sin(a) * TICK_R, Math.cos(a) * TICK_R, FRONT_Z + GAP]}
             material={LM.cabinetDecal}>
             <circleGeometry args={[BEZEL_R * 0.16, 12]} />
           </mesh>
         );
       })}
       <group rotation={[0, 0, angle]}>
-        {/* 楔形拨柄：ExtrudeGeometry 沿 +Z 挤出，前端收窄成箭头 */}
-        <mesh position={[0, 0, knobTop]} material={LM.cabinetBezel}>
-          <extrudeGeometry args={[handleShape, { depth: HANDLE_T, bevelEnabled: false }]} />
+        {/*
+          双层拨柄：深色描边打底 + 亮银芯压面。
+          拨柄从深石墨旋钮座一直伸到浅灰门板上，单色取哪一头都会有一半看不见
+          （亮银压在门板 `#c3ccd6` 上几乎同色、深色压在旋钮 `#232b35` 上同样吃掉），
+          所以用同一轮廓的两层各自对一种底色，任何机位都能读出指向。
+          两层同 z 同厚共面，只靠 polygonOffset 分级（-2 描边 / -4 芯），不留 z 视差。
+        */}
+        <mesh position={[0, 0, handleZ]} material={LM.cabinetDecal}>
+          <extrudeGeometry args={[handles.edge, { depth: HANDLE_T, bevelEnabled: false }]} />
+        </mesh>
+        <mesh position={[0, 0, handleZ]} material={LM.cabinetPointer}>
+          <extrudeGeometry args={[handles.core, { depth: HANDLE_T, bevelEnabled: false }]} />
         </mesh>
       </group>
     </group>

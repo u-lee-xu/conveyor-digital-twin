@@ -96,8 +96,13 @@ export type LiquidOperatorKey = LiquidOperatorButton['key'];
 export const LIQUID_OPERATOR_SELECTOR = {
   manual: '手动',
   auto: '自动',
-  /** 柜面旋钮拨柄角度（rad，面板平面内）：实物左右档接近 ±60° */
-  angles: { manual: -1.0, auto: 1.0 },
+  /**
+   * 柜面旋钮拨柄角度（rad，门板平面内，绕 +Z 逆时针为正）：实物左右档接近 ±60°。
+   * 门板法线朝 +Z、观察者在 +Z 侧看进来时局部 +X 就是屏幕右侧，
+   * 所以**正角指向左上 = 手动档、负角指向右上 = 自动档**，与柜面铭牌
+   * 「手动 / 自动」（左 → 右）和面板按钮顺序严格同源，别再把符号写反。
+   */
+  angles: { manual: 1.0, auto: -1.0 },
 } as const;
 export type LiquidOperatorMode = keyof typeof LIQUID_OPERATOR_SELECTOR.angles;
 

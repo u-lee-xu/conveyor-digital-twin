@@ -207,6 +207,15 @@ export const LM = {
     color: '#4b5563', metalness: 0.4, roughness: 0.55,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   }),
+  /**
+   * 选择开关拨柄的亮银芯：与深色描边**同 z 同厚共面**，靠更强的 polygonOffset 压在上面。
+   * 不能靠 z 上的 GAP 让位 —— 拨柄一半压在深旋钮座上、一半伸到浅门板上，
+   * 两色层任何 z 间距都会在斜视角下产生视差，把指向推歪半根杆。
+   */
+  cabinetPointer: new THREE.MeshStandardMaterial({
+    color: '#dbe3ec', metalness: 0.18, roughness: 0.3,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+  }),
 } as const;
 
 /* ---------------------- 程序化金属拉丝纹理（惰性烘焙） ---------------------- */

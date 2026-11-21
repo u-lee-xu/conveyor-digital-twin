@@ -883,6 +883,42 @@ describe('操作站与开关柜', () => {
     expect(Object.keys(LIQUID_OPERATOR_SELECTOR.angles)).toEqual(['manual', 'auto']);
   });
 
+  it('选择开关指向与铭牌同源：手动档倒向左上、自动档倒向右上', () => {
+    // 门板法线朝 +Z，观察者在 +Z 侧看进来时局部 +X 就是屏幕右侧；
+    // 绕 +Z 逆时针为正 → 正角把拨柄倒向左上 = 手动档，负角倒向右上 = 自动档。
+    // 这里曾经把符号写反（manual 写成 -1.0），铭牌与按钮顺序都对、唯独拨柄指反，锁死符号。
+    expect(LIQUID_OPERATOR_SELECTOR.angles.manual).toBeGreaterThan(0);
+    expect(LIQUID_OPERATOR_SELECTOR.angles.auto).toBeLessThan(0);
+    expect(LIQUID_OPERATOR_SELECTOR.angles.manual)
+      .toBeCloseTo(-LIQUID_OPERATOR_SELECTOR.angles.auto, 6);
+    // 拨柄朝向必须直接取表里的角度，不能在组件里就地写死
+    expect(cabinet).toContain('const angle = LIQUID_OPERATOR_SELECTOR.angles[mode];');
+    expect(cabinet).toContain('<group rotation={[0, 0, angle]}>');
+  });
+
+  it('选择开关拨柄：杆根 / 杆尖 / 刻点半径全派生，描边与芯共面靠 polygonOffset 分层', () => {
+    // 杆根、杆尖、刻点半径三处派生，改一处三处同步，禁止各写裸数
+    expect(cabinet).toContain('const HANDLE_ROOT = KNOB_R * 0.16;');
+    expect(cabinet).toContain('const HANDLE_END = HANDLE_ROOT + HANDLE_L;');
+    expect(cabinet).toContain('const TICK_R = BEZEL_R * 1.78;');
+    expect(cabinet).toContain('const shoulder = root + HANDLE_L * 0.62;');
+    // 描边与芯用同一条轮廓函数缩放：各写一份描边迟早不均匀
+    expect(cabinet).toContain('function handleShapeOf(halfW: number)');
+    expect(cabinet).toContain('edge: handleShapeOf(HANDLE_W / 2 + HANDLE_EDGE)');
+    expect(cabinet).toContain('core: handleShapeOf(HANDLE_W / 2)');
+    // 两层必须同 z —— 任何 z 间距都会在斜视角下产生视差，把指向推歪半根杆
+    expect(cabinet.match(/position=\{\[0, 0, handleZ\]\}/g)).toHaveLength(2);
+    expect(cabinet).not.toContain('handleZ + HANDLE_T + GAP');
+    // 层序靠 polygonOffset 分级（-2 描边 / -4 芯），不靠 z
+    const materials = read('packages/liquid-mixing/src/scenes/shared/liquidMaterials.ts');
+    expect(materials).toContain('cabinetPointer');
+    expect(materials).toMatch(/cabinetPointer[\s\S]*?polygonOffsetFactor: -4/);
+    expect(materials).toMatch(/cabinetDecal[\s\S]*?polygonOffsetFactor: -2/);
+    // 贴面错开 GAP：刻度环与拨柄都不与旋钮顶面共面
+    expect(cabinet).toContain('const dialZ = knobTop + GAP;');
+    expect(cabinet).toContain('const handleZ = knobTop + GAP * 2;');
+  });
+
   it('操作站 7 个输入点占 C8~C14 / X0~X6 / M41.0~M41.6，与地址表逐行同源', () => {
     const labels = ['启动按钮', '停止按钮', '复位按钮', '急停按钮', '手动档', '自动档', '放料按钮'];
     Object.values(LIQUID_OPERATOR_COIL_NAMES).forEach((name, i) => {
