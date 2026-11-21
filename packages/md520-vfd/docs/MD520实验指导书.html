@@ -30,26 +30,26 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <header>
 <h1>MD520 虚拟变频器实验指导书</h1>
 <p>共 <b>30</b> 个实验，分 6 类。每个实验给出目的、操作步骤、预期现象（带具体数值）、观察窗口与易错点。参数默认值由 <code>generate-lab-guide.cjs</code> 从 <code>md520Spec.ts</code> 读取，参数变动后重跑脚本即同步。</p>
-<p class="notice"><b>教学边界</b>：变频器是教学子集，不是真机。矢量控制、直流制动电流闭环、电机辨识均为近似或不做；39 个参数里约 20 多个真正生效，其余只存值。仿真模式一律连接外部 PLC 编程软件的 simulator 或实物 PLC：用 Modbus TCP 通信控制（F0-02=2 / F0-03=9），或用 DI/AI 端子接线控制（F0-02=1）。内置虚拟 PLC 不是教学交付内容，只在开发 / 验收模式下启用。</p>
+<p class="notice"><b>教学边界</b>：变频器是教学子集，不是真机。矢量控制、直流制动电流闭环、电机辨识均不做；24 个教学参数围绕五种控制方式，改值即有对应现象或显示变化。仿真模式一律连接外部 PLC 编程软件的 simulator 或实物 PLC：用 Modbus TCP 通信控制（F0-02=2 / F0-03=9），或用 DI/AI 端子接线控制（F0-02=1）。内置虚拟 PLC 不是教学交付内容，只在开发 / 验收模式下启用。</p>
 </header>
 <nav><a href="#grpA">A 面板与菜单</a><a href="#grpB">B 给定与频率</a><a href="#grpC">C 停机方向与状态</a><a href="#grpD">D 外部 PLC 三协议</a><a href="#grpE">E DI/AI 端子控制</a><a href="#grpF">F 平台与安全</a></nav>
 <h2>实验速查表</h2>
 <table><tr><th>编号</th><th>实验名称</th><th>类别</th><th>所需模式</th></tr><tr><td class="num">1</td><td><a href="#lab1">三级菜单读写参数</a></td><td>面板与菜单</td><td>手动</td></tr>
 <tr><td class="num">2</td><td><a href="#lab2">四种菜单与主辅显示区</a></td><td>面板与菜单</td><td>手动</td></tr>
 <tr><td class="num">3</td><td><a href="#lab3">面板 RUN/STOP 与预置频率</a></td><td>面板与菜单</td><td>手动</td></tr>
-<tr><td class="num">4</td><td><a href="#lab4">参数初始化 FP-01 六档</a></td><td>面板与菜单</td><td>手动</td></tr>
-<tr><td class="num">5</td><td><a href="#lab5">FP-02 掩码控制自定义菜单</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">4</td><td><a href="#lab4">端子命令方式四档总览</a></td><td>面板与菜单</td><td>手动</td></tr>
+<tr><td class="num">5</td><td><a href="#lab5">改端子功能：交换方向与多段端子</a></td><td>面板与菜单</td><td>手动</td></tr>
 <tr><td class="num">6</td><td><a href="#lab6">四种给定切换</a></td><td>给定与频率</td><td>手动 + 仿真</td></tr>
 <tr><td class="num">7</td><td><a href="#lab7">DI 多段速 8 段</a></td><td>给定与频率</td><td>手动</td></tr>
 <tr><td class="num">8</td><td><a href="#lab8">FC 段速成为真值</a></td><td>给定与频率</td><td>手动</td></tr>
 <tr><td class="num">9</td><td><a href="#lab9">AI 模拟量给定</a></td><td>给定与频率</td><td>手动</td></tr>
 <tr><td class="num">10</td><td><a href="#lab10">外部 PLC 通信给定与状态回读</a></td><td>给定与频率</td><td>仿真</td></tr>
-<tr><td class="num">11</td><td><a href="#lab11">加减速时间与基准频率</a></td><td>给定与频率</td><td>手动</td></tr>
-<tr><td class="num">12</td><td><a href="#lab12">最大频率与控制方式</a></td><td>给定与频率</td><td>手动</td></tr>
-<tr><td class="num">13</td><td><a href="#lab13">F6-10 三种停机方式</a></td><td>停机方向与状态</td><td>手动</td></tr>
-<tr><td class="num">14</td><td><a href="#lab14">F6-11~14 直流制动段</a></td><td>停机方向与状态</td><td>手动</td></tr>
-<tr><td class="num">15</td><td><a href="#lab15">F7-02 STOP/RESET 四档</a></td><td>停机方向与状态</td><td>手动</td></tr>
-<tr><td class="num">16</td><td><a href="#lab16">MF.K 五档功能</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">11</td><td><a href="#lab11">固定斜坡与频率上限</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">12</td><td><a href="#lab12">五种控制方式总览</a></td><td>给定与频率</td><td>手动</td></tr>
+<tr><td class="num">13</td><td><a href="#lab13">减速停机与固定斜坡标尺</a></td><td>停机方向与状态</td><td>手动</td></tr>
+<tr><td class="num">14</td><td><a href="#lab14">两线式1 的禁止态与方向</a></td><td>停机方向与状态</td><td>手动 + 仿真</td></tr>
+<tr><td class="num">15</td><td><a href="#lab15">三线式启动上升沿</a></td><td>停机方向与状态</td><td>手动 + 仿真</td></tr>
+<tr><td class="num">16</td><td><a href="#lab16">MF.K 固定方向与 3D 换向过程</a></td><td>停机方向与状态</td><td>手动</td></tr>
 <tr><td class="num">17</td><td><a href="#lab17">正反转切换：减速到零再反向加速</a></td><td>停机方向与状态</td><td>手动</td></tr>
 <tr><td class="num">18</td><td><a href="#lab18">DO 状态、故障与只读监视量</a></td><td>停机方向与状态</td><td>手动 + 仿真</td></tr>
 <tr><td class="num">19</td><td><a href="#lab19">AutoShop / Modbus TCP 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
@@ -57,7 +57,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <tr><td class="num">21</td><td><a href="#lab21">GX Works2 / GX Simulator2 读写</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
 <tr><td class="num">22</td><td><a href="#lab22">实物档统一 M 区</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
 <tr><td class="num">23</td><td><a href="#lab23">三协议对照与通信 / 端子切换</a></td><td>外部 PLC 三协议</td><td>仿真</td></tr>
-<tr><td class="num">24</td><td><a href="#lab24">端子运行指令 DI4 / DI1</a></td><td>DI/AI 端子控制</td><td>仿真</td></tr>
+<tr><td class="num">24</td><td><a href="#lab24">端子运行指令 DI1 / DI2</a></td><td>DI/AI 端子控制</td><td>仿真</td></tr>
 <tr><td class="num">25</td><td><a href="#lab25">AI1 / AI2 模拟量频率给定</a></td><td>DI/AI 端子控制</td><td>仿真</td></tr>
 <tr><td class="num">26</td><td><a href="#lab26">DI 多段速与 FC 百分比</a></td><td>DI/AI 端子控制</td><td>仿真</td></tr>
 <tr><td class="num">27</td><td><a href="#lab27">通信给定与端子给定对照</a></td><td>DI/AI 端子控制</td><td>仿真</td></tr>
@@ -76,7 +76,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 2　四种菜单与主辅显示区 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　区分 basic / user / changed / fault 四种菜单，掌握菜单键点按与长按。</p>
 <p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>点按菜单键循环四种菜单，观察 basic 与 user 的参数条数。</li><li>先改几个参数，再切到 changed，确认只列出改过出厂值的参数。</li><li>长按菜单键 600ms 切主/辅显示区；切到 fault 看故障列表。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　basic 显示全部 39 个参数；user 默认 4 项；changed 只列偏离默认值的码；fault 显示 6 条教学故障码。</p>
+<p style="margin:6px 0"><b>预期现象</b>　basic 显示全部 24 个参数；user 固定显示五种控制的常用设定；changed 只列偏离默认值的码；fault 显示 6 条教学故障码。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　辅显示区代码、菜单指示灯</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　长按必须超过 600ms，短按只切菜单。</p>
 </article>
@@ -89,20 +89,20 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　斜坡时间是从 0 到最大频率的时间，不是到目标频率的时间。</p>
 </article>
 <article id="lab4" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 4　参数初始化 FP-01 六档 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　分辨恢复出厂、保留电机铭牌、清记录与备份用户参数的差别。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>先把 <code>F1-05</code> 从 1460rpm 改成 2000rpm，并制造一条故障记录。</li><li>依次试 FP-01=1、2、4、501、503，每次记录 F1-05 与故障列表。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　=1 时 F1 铭牌保持 2000rpm；=2 只清故障记录、参数不动；=503 全部回出厂（F1-05=1460）；=4 / 501 为备份/恢复用户参数（教学镜像）。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　参数菜单、fault 菜单</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　FP-01 是「停机更改」，运行中改不了；0=无操作。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 4　端子命令方式四档总览 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　认识 F4-11 四种端子命令方式，理解端子角色由参数而非 DI 编号决定。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>保持 F0-02=0，先看面板出厂默认：DI1 功能 1 正转、DI2 功能 2 反转、F4-11=0 两线式1。</li><li>把 F4-11 依次切到 0/1/2/3，每档到教学信号区看 DI 按钮标题是否随 F4-xx 派生。</li><li>对照教学手册第 1.1.1.3 节四种方式的真值表。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　两线式1 双断/双合停机、单合正转或反转；两线式2 一端子运行一端子方向；三线式 需功能 3 端子常闭且启动取上升沿。面板按钮标题随功能码变化，不再是固定文案。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　F4-11 当前档位、DI 按钮 title、面板 FWD/REV 丝印</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F4-11 与 F4-00~F4-04 配合才决定行为；只改命令方式不改功能码可能得不到预期端子。</p>
 </article>
 <article id="lab5" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 5　FP-02 掩码控制自定义菜单 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　理解功能参数组显示选择对菜单的影响，以及基本菜单不受影响。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>记下 user 菜单默认 4 项（F0-02、F0-08、F0-17、F0-18）。</li><li>把 FP-02 设 0，回 user 菜单；再设 63、1023 各看一次。</li><li>每次都切回 basic 对照。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　FP-02=0 → user 菜单空；=63（默认）→ 4 项；basic 始终是 39 个参数，索引不变。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　user / basic 菜单条数</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　低 10 位按组顺序掩码；只作用 user 菜单，别误以为整个参数表被隐藏。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 5　改端子功能：交换方向与多段端子 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握 F4-00~F4-04 决定 DI 角色，验证端子没有写死的身份。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>把 F4-00 从 1（正转）改成 2（反转）、F4-01 从 2 改成 1（正转），F0-02=1 端子命令源。</li><li>只合 DI1，看方向；再改成只合 DI2，看方向。</li><li>把 F4-00 改成 12（多段指令端子1），回面板看 DI1 标题变化。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　交换功能码后 DI1 驱动反转、DI2 驱动正转，证明方向不绑 DI 编号；改成 12 后 DI1 不再单独给运行命令，标题变成「多段指令端子1」。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　DI 按钮 title、FWD/REV 丝印、3D 转向</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　改端子功能前先停机；多段端子只给段位，运行命令要靠另一个配成正转/反转的端子。</p>
 </article></section>
 <section id="grpB"><h2 style="color:#0F6E56">B 类　给定与频率（7 项）</h2><article id="lab6" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 6　四种给定切换 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>
@@ -145,57 +145,57 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　2000H 没有 0 档，写 0 无意义；7310H 是 0.01Hz，1000H 是 ±100.00% 百分比。</p>
 </article>
 <article id="lab11" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 11　加减速时间与基准频率 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　对比 F0-17/18 与 F0-25 四档基准对斜坡速率的影响。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>默认 F0-25=0，RUN 后记录 1 秒爬升量。</li><li>依次把 F0-25 设 1（同时 F0-08=30）、2、3（同时 F1-04=25），各跑 1 秒。</li><li>改 F0-18 观察停机回落。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　1 秒爬升量依次为 2.5 / 1.5 / 5 / 1.25Hz；F0-18 变小时回落明显加快。默认档 0 与旧行为一致。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 11　固定斜坡与频率上限 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　用 F0-17/F0-18 设定加减速时间，理解 F0-10 是输出频率上限。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>默认 F0-17=20s、F0-18=20s、F0-10=50，RUN 后记录 1 秒爬升量。</li><li>把 F0-17 改成 10s，停机后重新 RUN 再记录 1 秒爬升量。</li><li>把 F0-10 从 50 改成 30，观察主显上限。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　默认 1 秒爬升 2.5Hz；F0-17=10s 后 1 秒爬升 5Hz；F0-10=30 时主显不超过 30Hz。斜坡只由 F0-17/F0-18 决定，没有基准档位切换。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、3D 转速</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F0-25=1 的基准是「设定频率」，所以要先改 F0-08 才看得出差别。</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F0-17/F0-18 是固定斜坡时间，不再按基准档换算；F0-10 是上限，不是给定值。</p>
 </article>
 <article id="lab12" style="background:#fff;border:1px solid var(--line);border-left:4px solid #0F6E56;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 12　最大频率与控制方式 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　理解 F0-10 上限、FC 换算基准，以及 F0-01 三种控制方式的教学近似。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>段 2（40%）下把 F0-10 从 50 改 60，记录频率。</li><li>把 F0-01 依次设 0(SVC)、1(FVC)、2(V/f)，各 RUN 1 秒记录爬升量。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　F0-10=60 后段 2 从 20Hz 变 24Hz；1 秒爬升 SVC 4.0Hz / FVC 3.13Hz / V/f 2.5Hz；FVC 频率到达灯容差更宽。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　段速标签、FM 徽标、3D</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这里只是低速段增益近似，没有真实矢量控制算法。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 12　五种控制方式总览 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　用 F0-02 / F0-03 组合切换面板、端子、多段速、模拟量与通信控制。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>F0-02=0、F0-03=0 走面板：按键启停，MF.K 切方向。</li><li>F0-02=1 走端子：由 F4-11 与 F4-00~F4-04 决定运行命令；F0-03=6 时由功能 12~15 选 FC 段。</li><li>F0-03=2/3 走 AI1/AI2 模拟量给定；F0-02=2、F0-03=9 走 Modbus TCP 通信给定。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　面板档由按键决定方向与频率；端子档由 F4-11 与端子功能码决定；多段速由功能 12~15 选段；模拟量取 |AI| / 满量程 × F0-10；通信档由 2000H/7310H 决定。段 2（40%）在 F0-10=60 时为 24Hz。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　F0-02 / F0-03 当前值、面板 RUN/FWD/REV、主显与 3D</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F0-02 / F0-03 属停机更改参数，运行中切换会被拒绝或延后生效；教学子集没有矢量控制档位。</p>
 </article></section>
 <section id="grpC"><h2 style="color:#BA7517">C 类　停机方向与状态（6 项）</h2><article id="lab13" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 13　F6-10 三种停机方式 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　对比减速停机、自由停机、最大能力停机的曲线差异。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>先 RUN 到 50Hz。</li><li>把 F6-10 依次设 0、1、2，每次从 50Hz 按 STOP，0.5 秒后记录输出频率。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　F6-10=0 约 48.75Hz（按 F0-18 减速）；=1 → 0Hz（立即断输出）；=2 约 43.75Hz（F0-18/5 强制斜坡）。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、3D 是否立即停转</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　自由停机不是「慢慢停」，是立刻断输出。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 13　减速停机与固定斜坡标尺 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解教学子集的停机行为：按 F0-18 减速，标尺固定取 F0-10。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>RUN 到 50Hz 后按 STOP，每 0.5 秒记录一次频率。</li><li>把 F0-18 从 20s 改成 2s 重做一次。</li><li>把 F0-10 从 50 改成 60，观察斜坡速率变化。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　默认 20s 减速下 0.5 秒约剩 48.75Hz；改成 2s 后约剩 43.75Hz；F0-10 加大后同样减速率更快。没有自由停机与直流制动段。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、3D 是否逐渐停转</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　斜坡标尺是 F0-10 最大频率，不是目标频率；教学子集不实现 F6 停机方式与直流制动。</p>
 </article>
 <article id="lab14" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 14　F6-11~14 直流制动段 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　观察制动起始频率、等待时间、制动电流对自由停机过程的影响。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F6-10=1、F6-14=2（制动时间 2s），从 50Hz STOP，记录 0.3 秒频率。</li><li>把 F6-13 从 50% 改 100% 重做；再设 F6-11=20、F6-12=1 各做一次。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　F6-14&gt;0 时自由停机不再瞬间归零，而是有制动减速段；F6-13=100% 比 50% 降得快；F6-12 拉长时间；F6-11 高于当前频率时不加制动增益。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　主显输出频率、停机用时</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这四个参数只在 F6-14&gt;0 的制动段生效，默认 0/0/50 时行为与只看 F6-14 一致。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 14　两线式1 的禁止态与方向 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　验证双断/双合停机与单端子正反转，符合手册真值表。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>F0-02=1、F4-11=0，DI1 正转、DI2 反转。</li><li>依次试：全断、只合 DI1、只合 DI2、双合，记录运行状态与方向。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　全断与双合都停机；只合 DI1 正转；只合 DI2 反转。双合属禁止态，不允许当成反转指令。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　FWD/REV 丝印、1008H DI 位字、3D 转向</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　与电机正反转场景的互锁同类：两路同时有效优先保持安全态。</p>
 </article>
 <article id="lab15" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 15　F7-02 STOP/RESET 四档 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　理解 OFF1/OFF2/OFF3 对停机方式的覆盖。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>保持 F6-10=0（减速停机），把 F7-02 依次设 0、1、2、3，各从 50Hz STOP。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　=0 沿用 F6-10 减速；=1(OFF1) 立刻自由停机；=2(OFF2) 最大能力停机；=3(OFF3) 减速停机。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　输出频率回落曲线</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F7-02 优先级高于 F6-10，排查停机异常时先看它。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 15　三线式启动上升沿 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　理解三线式需要常闭允许端子，且启动信号取上升沿。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F4-11=2、F4-02=3 三线控制，DI1 仍是正转、DI2 反转。</li><li>只合 DI1（允许端子未合），观察。</li><li>先合 DI3 允许，再合 DI1，记录；保持 DI3 与 DI1 闭合，连续采样。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　允许端子未合时一律停机；允许闭合后 DI1 上升沿才启动正转；持续闭合不重复触发，命令保持。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　__dtVfdDrive 或直接看主显与 DI 位字</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　三线式是脉冲触发，不是电平保持；松开允许端子立即停机。</p>
 </article>
 <article id="lab16" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 16　MF.K 五档功能 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　掌握 F7-01 五档分派与「仅操作面板命令源有效」的约束。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>F7-01 依次设 0、1、2、3、4，每档按一次 MF.K 观察。</li><li>把 F0-02 改成 2（通信）后，再试 F7-01=2/3/4。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　=0 无动作；=1 把命令源切回面板；=2 正反转切换；=3/4 正/反转点动（5Hz 上限）。F0-02≠0 时 2/3/4 全部无效。</p>
-<p style="margin:6px 0"><b>观察窗口</b>　FWD/REV 丝印、运行/停机、控制字</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　手册 285 页表 16-6：2、3、4 只在 F0-02=0 有效。</p>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 16　MF.K 固定方向与 3D 换向过程 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
+<p style="margin:6px 0"><b>目的</b>　掌握 MF.K 固定作面板命令源下的方向切换，观察先减速再反向加速。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>F0-02=0，RUN 到有输出，把 F0-17 / F0-18 改小到 2s。</li><li>按 MF.K，立刻看 __dtVfdDrive：targetDirection 变 -1、direction 仍是 1、reversing=true。</li><li>采样直到 hz 归零、direction 翻转，再间隔 0.5 秒采两次 fanAngle / beltPhase。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　换向期间仍按原方向减速；归零后才翻转并反向加速；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）。</p>
+<p style="margin:6px 0"><b>观察窗口</b>　__dtVfdDrive.direction / targetDirection / reversing / hz / fanAngle / beltPhase</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　面板丝印显示目标方向，3D 用实际输出方向 runDirection；别在减速阶段就断言反向。</p>
 </article>
 <article id="lab17" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 17　正反转切换：减速到零再反向加速 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　验证换向不是瞬间反转，而是先按 F0-18 减速到 0、翻转输出方向、再按 F0-17 反向加速。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F7-01=2、F0-02=0，RUN 到有输出（建议先把 F0-18 / F0-17 改小到 2s 缩短等待）。</li><li>按 MF.K，立刻看 __dtVfdDrive：targetDirection 变 -1、direction 仍是 1、reversing=true、hz 持续下降。</li><li>连续采样直到 hz 归零、direction 翻成 -1，再看 hz 反向上升；随后间隔 0.5 秒采两次 fanAngle / beltPhase。</li></ol>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>F0-02=0，RUN 到有输出（建议先把 F0-18 / F0-17 改小到 2s 缩短等待）。</li><li>按 MF.K，立刻看 __dtVfdDrive：targetDirection 变 -1、direction 仍是 1、reversing=true、hz 持续下降。</li><li>连续采样直到 hz 归零、direction 翻成 -1，再看 hz 反向上升；随后间隔 0.5 秒采两次 fanAngle / beltPhase。</li></ol>
 <p style="margin:6px 0"><b>预期现象</b>　换向期间电机仍按原方向转、只是越来越慢（减速阶段风扇角差仍为负）；频率归零后 direction 才由 1 变 -1 并反向加速；风扇角差由负变正（实测 -0.83 → +1.21），皮带相位由正变负（+0.023 → -0.034）；FWD/REV 丝印指令下达即互换。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　__dtVfdDrive.direction / targetDirection / reversing / hz / fanAngle / beltPhase、FWD/REV 灯</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　别在减速阶段就断言反向：那时 direction 还是 1；面板丝印显示的是目标方向，3D 用的是实际输出方向 runDirection。</p>
@@ -203,10 +203,10 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <article id="lab18" style="background:#fff;border:1px solid var(--line);border-left:4px solid #BA7517;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 18　DO 状态、故障与只读监视量 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 + 仿真 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　读懂 DO1/FM/RELAY、3000H 状态与输出电流/功率监视量。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>RUN 到稳态，看 DO1（运行中）、FM（频率到达）亮，RELAY 灭。</li><li>制造故障后看 RELAY 与 3000H=5，再用 STOP/RESET 或 2000H=7 复位。</li><li>把 F1-03 从 9A 改 18A、F1-01 从 3.7 改 7.4kW，看监视量；再设 F1-00=2（永磁同步）。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　满载时默认显示约 9.00A / 3.70kW；铭牌翻倍后约 18.00A / 7.40kW；F1-00=2 时电流 ×0.88；停机后监视量归零。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>RUN 到稳态，看 DO1（运行中）、FM（频率到达）亮，RELAY 灭。</li><li>制造故障后看 RELAY 与 3000H=5，再用 STOP/RESET 或 2000H=7 复位。</li><li>观察满载监视量；改变负载率（调目标频率），看电流/功率随频率线性变化。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　满载显示约 9.00A / 3.70kW；半速约 6.15A / 1.85kW；停机后监视量归零。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　DO 只读徽标、data-dt-vfd-monitor、3000H / 7044H</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这些监视量是教学近似（空载 15% 电流 + 负载率线性），不是真实电机模型。</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　这些监视量是固定系数近似（空载 15% 电流 + 负载率线性），不依赖 F1 铭牌参数，不是真实电机模型。</p>
 </article></section>
 <section id="grpD"><h2 style="color:#534AB7">D 类　外部 PLC 三协议（5 项）</h2><article id="lab19" style="background:#fff;border:1px solid var(--line);border-left:4px solid #534AB7;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 19　AutoShop / Modbus TCP 读写 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
@@ -249,10 +249,10 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　切换给定源前先停机；运行中改 F0-02 / F0-03 属停机更改参数。</p>
 </article></section>
 <section id="grpE"><h2 style="color:#993C1D">E 类　DI/AI 端子控制（4 项）</h2><article id="lab24" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
-<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 24　端子运行指令 DI4 / DI1 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
+<h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 24　端子运行指令 DI1 / DI2 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　掌握 F0-02=1 时由外部 PLC 数字量输出决定运行与方向。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-02=1（端子运行指令），连接外部 PLC 仿真软件或实物 PLC。</li><li>PLC 数字量输出接 DI4（运行使能）与 DI1（正转）、DI2（反转），依次置位观察。</li><li>对照 1008H DI 位字与面板 RUN / FWD / REV。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　DI4=1 且 DI1=1 时变频器按 F0-17 加速到给定频率；DI4=0 立即停机；DI1/DI2 同时有效为禁止态，保持上次方向。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-02=1（端子运行指令），连接外部 PLC 仿真软件或实物 PLC。</li><li>PLC 数字量输出接 DI1（正转）与 DI2（反转），依次置位观察。</li><li>对照 1008H DI 位字与面板 RUN / FWD / REV。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　DI1=1 且 DI2=0 时正转加速；DI2=1 且 DI1=0 时反转；双断或双合停机。功能码可改，端子角色不固定。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　1008H DI 位字、FWD/REV 丝印、3D 风扇转速</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　两路方向信号同时得电属禁止态，不要当成反转指令。</p>
 </article>
@@ -267,7 +267,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <article id="lab26" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 26　DI 多段速与 FC 百分比 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　用 DI1~DI3 组合选择段速，理解 FC-00~FC-07 是相对最大频率的百分比。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-03=6（多段指令），由 PLC 数字量输出组合 DI1~DI3 选择段 0~7。</li><li>把 FC-02 从 40% 改成 10%，再改 F0-10 从 50 到 60，观察同一段频率变化。</li></ol>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设 F0-03=6，把 DI1~DI3 的 F4-00~F4-02 改成 12/13/14，另留 DI4=1 正转给运行；PLC 组合 DI1~DI3 选段 0~7。</li><li>把 FC-02 从 40% 改成 10%，再改 F0-10 从 50 到 60，观察同一段频率变化。</li></ol>
 <p style="margin:6px 0"><b>预期现象</b>　默认 FC-02=40% → 20Hz；改成 10% → 5Hz；F0-10=60 后 10% → 6Hz。面板、PLC 程序、3D 读数同源。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　段速标签、1008H DI 位字、3D</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　FC 单位是相对最大频率的百分比，不是 Hz。</p>
@@ -275,8 +275,8 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <article id="lab27" style="background:#fff;border:1px solid var(--line);border-left:4px solid #993C1D;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 27　通信给定与端子给定对照 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 仿真 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　分清 F0-02 / F0-03 的给定来源，避免两个控制源抢运行权。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>先设 F0-02=2、F0-03=9 用 Modbus TCP 通信给定跑一次。</li><li>再设 F0-02=1、F0-03=2 用 DI4 + AI1 端子给定跑一次，对比运行权与频率来源。</li><li>每次切换前先停机，切换后读 3000H / 1001H / 1009H 与面板主显。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　通信档由 2000H/7310H 决定运行与频率；端子档由 DI4/AI1 决定，通信控制字不再抢运行权；两档的 DO 回读一致。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>先设 F0-02=2、F0-03=9 用 Modbus TCP 通信给定跑一次。</li><li>再设 F0-02=1、F0-03=2 用默认 DI1 正转 + AI1 端子给定跑一次，对比运行权与频率来源。</li><li>每次切换前先停机，切换后读 3000H / 1001H / 1009H 与面板主显。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　通信档由 2000H/7310H 决定运行与频率；端子档由 DI1 正转 / AI1 决定，通信控制字不再抢运行权；两档的 DO 回读一致。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　F0-02 / F0-03 当前值、3000H / 1001H、面板主显</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　F0-02 / F0-03 属停机更改参数；运行中切换会被拒绝或延后生效。</p>
 </article></section>
@@ -299,8 +299,8 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <article id="lab30" style="background:#fff;border:1px solid var(--line);border-left:4px solid #5F5E5A;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 30　教学近似边界识别 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 综合 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　分清哪些参数改了真有效果、哪些只存值，避免把教学模型当真机。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>打开教学手册第 3/4 章，对照「生效 / 仅显示」列。</li><li>挑 F0-17、FC-02、F6-10、F4-00、F5-04、F1-02 各改一次，记录有无现象。</li><li>总结哪些属于矢量控制/直流制动/DO 可写等未实现范围。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　F0-17 / FC-02 / F6-10 有现象；F4-00 / F5-04 / F1-02 只存值；SVC/FVC 只是低速段增益，没有真实矢量算法。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>打开教学手册第 3/4 章，对照「生效 / 仅显示」列。</li><li>挑 F0-17、FC-02、F4-00、F4-11、F0-03、FD-01 各改一次，记录有无现象。</li><li>总结哪些参数真正改变运行、哪些只影响显示，理解教学子集的五种控制边界。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　F0-17 / FC-02 / F4-00 / F4-11 / F0-03 都有现象；FD-01 只改状态行显示；没有矢量算法、直流制动与电机辨识。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　教学手册参数表、面板与 3D</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　09 参数手册抽取失败，未收录的码不猜默认值；参数/故障码都是教学子集。</p>
 </article></section>
