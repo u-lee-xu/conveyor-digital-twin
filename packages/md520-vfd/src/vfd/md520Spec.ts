@@ -44,12 +44,24 @@ export interface Md520Param {
  */
 export const MD520_FC_DEFAULT_PERCENT = [0, 20, 40, 60, 80, 100, 70, 50] as const;
 
+/**
+ * DI 端子功能码（功能手册 1.1.1.3 / 17.2.20）。F4-00~F4-04 共用这一张档位表，
+ * 端子的角色由参数决定，不再写死 DI4 使能 / DI1~DI3 选段。
+ */
+export const MD520_DI_FUNCTION = {
+  NONE: 0, FWD: 1, REV: 2, THREE_WIRE: 3, FJOG: 4, RJOG: 5,
+  FREE_STOP: 8, FAULT_RESET: 9,
+  MULTI1: 12, MULTI2: 13, MULTI3: 14, MULTI4: 15,
+} as const;
+
+export const MD520_DI_FUNCTION_OPTIONS: Record<number, string> = {
+  0: '无功能', 1: '正转运行', 2: '反转运行', 3: '三线式运行控制', 4: '正转点动', 5: '反转点动',
+  8: '自由停机', 9: '故障复位', 12: '多段指令端子1', 13: '多段指令端子2',
+  14: '多段指令端子3', 15: '多段指令端子4',
+};
+
+/** 教学子集只覆盖五种控制方式：面板 / 端子开关量 / 多段速 / AI 模拟量 / Modbus 通信。 */
 export const MD520_PARAMS: Md520Param[] = [
-  /** 08 用户手册 17.2.9：默认 2（V/f）；0=SVC 无速度传感器矢量、1=FVC 带 PG 闭环、2=V/f 开环。
-   *  教学近似只做低速段爬升增益（SVC 1.6 / FVC 1.25）与 FVC 频率到达容差，
-   *  **不实现矢量控制算法**；默认 2 与原斜坡逐值一致，运行中不可改。 */
-  { code: 'F0-01', group: 'F0', index: 1, name: '第1电机控制方式', defaultValue: 2, min: 0, max: 2, decimals: 0, unit: '',
-    options: { 0: 'SVC', 1: 'FVC', 2: 'V/f' }, runLocked: true },
   { code: 'F0-02', group: 'F0', index: 2, name: '运行指令选择', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '操作面板', 1: '端子', 2: '通信', 3: '自定义' } },
   /** 306~307 页 17.2.8：名称「主频率源X选择」，0~9 十档，其他为 F 连接器（非数值档位） */
@@ -60,49 +72,21 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'F0-10', group: 'F0', index: 10, name: '最大频率', defaultValue: 50, min: 50, max: 599, decimals: 2, unit: 'Hz', runLocked: true },
   { code: 'F0-17', group: 'F0', index: 17, name: '加速时间1', defaultValue: 20, min: 0, max: 6500, decimals: 1, unit: 's' },
   { code: 'F0-18', group: 'F0', index: 18, name: '减速时间1', defaultValue: 20, min: 0, max: 6500, decimals: 1, unit: 's' },
-  /** 311 页 17.2.13：加减速时间的基准频率，决定斜坡速率标尺（0 F0-10 / 1 设定 / 2 100Hz / 3 额定） */
-  { code: 'F0-25', group: 'F0', index: 25, name: '加减速时间基准频率', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
-    options: { 0: '最大频率(F0-10)', 1: '设定频率', 2: '100Hz', 3: '额定频率' } },
-  /** F1-00~F1-05 电机铭牌参数：08 用户手册 30 章参数表，调试流程 17.1.1 第 5 步整组设定。
-   *  均为「停机更改」；F1-01 / F1-03 参与只读监视量（输出功率 / 电流），F1-00 给监视电流一个效率系数，
-   *  F1-04 参与 F0-25=3 的斜坡基准；不实现矢量辨识与转矩计算。 */
-  { code: 'F1-00', group: 'F1', index: 0, name: '电机类型选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
-    options: { 0: '普通异步电机', 1: '变频异步电机', 2: '永磁同步电机',
-      3: '无助磁磁阻电机', 4: '电磁线圈' }, runLocked: true },
-  { code: 'F1-01', group: 'F1', index: 1, name: '电机额定功率', defaultValue: 3.7, min: 0.1, max: 1000, decimals: 1, unit: 'kW', runLocked: true },
-  { code: 'F1-02', group: 'F1', index: 2, name: '电机额定电压', defaultValue: 380, min: 1, max: 2000, decimals: 0, unit: 'V', runLocked: true },
-  { code: 'F1-03', group: 'F1', index: 3, name: '电机额定电流', defaultValue: 9, min: 0.01, max: 655.35, decimals: 2, unit: 'A', runLocked: true },
-  { code: 'F1-04', group: 'F1', index: 4, name: '电机额定频率', defaultValue: 50, min: 0.01, max: 599, decimals: 2, unit: 'Hz', runLocked: true },
-  { code: 'F1-05', group: 'F1', index: 5, name: '电机额定转速', defaultValue: 1460, min: 1, max: 65535, decimals: 0, unit: 'rpm', runLocked: true },
-  /** 320 页 17.2.20：DI 功能 0~86，教学子集只列常用档位 */
+  /** 320 页 17.2.20：DI1~DI5 功能选择，档位取自同一张 MD520_DI_FUNCTION_OPTIONS 表 */
   { code: 'F4-00', group: 'F4', index: 0, name: 'DI1端子功能选择', defaultValue: 1, min: 0, max: 86, decimals: 0, unit: '',
-    options: { 0: '无功能', 1: '正转运行', 2: '反转运行', 3: '三线式运行控制', 4: '正转点动', 5: '反转点动',
-      8: '自由停机', 9: '故障复位', 12: '多段指令端子1', 13: '多段指令端子2',
-      14: '多段指令端子3', 15: '多段指令端子4' } },
+    options: MD520_DI_FUNCTION_OPTIONS },
+  { code: 'F4-01', group: 'F4', index: 1, name: 'DI2端子功能选择', defaultValue: 2, min: 0, max: 86, decimals: 0, unit: '',
+    options: MD520_DI_FUNCTION_OPTIONS },
+  { code: 'F4-02', group: 'F4', index: 2, name: 'DI3端子功能选择', defaultValue: 0, min: 0, max: 86, decimals: 0, unit: '',
+    options: MD520_DI_FUNCTION_OPTIONS },
+  { code: 'F4-03', group: 'F4', index: 3, name: 'DI4端子功能选择', defaultValue: 0, min: 0, max: 86, decimals: 0, unit: '',
+    options: MD520_DI_FUNCTION_OPTIONS },
+  { code: 'F4-04', group: 'F4', index: 4, name: 'DI5端子功能选择', defaultValue: 0, min: 0, max: 86, decimals: 0, unit: '',
+    options: MD520_DI_FUNCTION_OPTIONS },
   { code: 'F4-11', group: 'F4', index: 11, name: '端子命令方式', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
     options: { 0: '两线式1', 1: '两线式2', 2: '三线式1', 3: '三线式2' } },
-  { code: 'F5-00', group: 'F5', index: 0, name: 'FM端子输出方式选择', defaultValue: 0, min: 0, max: 1, decimals: 0, unit: '',
-    options: { 0: 'FMP 脉冲输出', 1: 'FMR 开关量输出' } },
-  /** 327 页 17.2.21：DO1 输出功能，教学子集只列常用档位 */
-  { code: 'F5-04', group: 'F5', index: 4, name: 'DO1输出功能选择', defaultValue: 0, min: 0, max: 40, decimals: 0, unit: '',
-    options: { 0: '无输出', 1: '变频器运行中', 2: '故障输出', 3: '频率水平检测FDT1',
-      4: '频率到达', 5: '零速运行中', 19: '欠压状态输出', 20: '通信设定' } },
-  /** 313 页 17.2.17 停机参数：F6-10 决定停机方式（减速 / 自由 / 最大能力），
-   *  F6-14 直流制动时间开启制动段，F6-11 起始频率 / F6-12 等待时间 / F6-13 制动电流
-   *  只在制动段生效；教学子集不实现直流制动电流闭环。 */
-  { code: 'F6-10', group: 'F6', index: 10, name: '停机方式', defaultValue: 0, min: 0, max: 2, decimals: 0, unit: '',
-    options: { 0: '减速停机', 1: '自由停机', 2: '最大能力停机' } },
-  { code: 'F6-11', group: 'F6', index: 11, name: '停机直流制动起始频率', defaultValue: 0, min: 0, max: 599, decimals: 2, unit: 'Hz' },
-  { code: 'F6-12', group: 'F6', index: 12, name: '停机直流制动等待时间', defaultValue: 0, min: 0, max: 100, decimals: 1, unit: 's' },
-  { code: 'F6-13', group: 'F6', index: 13, name: '停机直流制动电流', defaultValue: 50, min: 0, max: 100, decimals: 0, unit: '%' },
-  { code: 'F6-14', group: 'F6', index: 14, name: '停机直流制动时间', defaultValue: 0, min: 0, max: 100, decimals: 1, unit: 's' },
-  { code: 'F7-01', group: 'F7', index: 1, name: 'MF.K键功能选择', defaultValue: 0, min: 0, max: 4, decimals: 0, unit: '',
-    options: { 0: '无效', 1: '强制面板控制', 2: '正反转切换', 3: '正转点动', 4: '反转点动' } },
-  /** 285 页表 16-6：STOP/RESET 键功能四档；教学近似为停机方式覆盖（0 用 F6-10 / 1 自由 / 2 最大能力 / 3 减速） */
-  { code: 'F7-02', group: 'F7', index: 2, name: 'STOP/RESET键功能', defaultValue: 0, min: 0, max: 3, decimals: 0, unit: '',
-    options: { 0: '键盘方式S/R有效', 1: 'OFF1命令S/R有效', 2: 'OFF2命令S/R有效', 3: 'OFF3命令S/R有效' } },
-  /** 331 页 17.2.22：FC-00~FC-15 共 16 段，教学子集取 DI1~DI3 三位选段对应的前 8 段。
-   *  单位 %（相对 F0-10），100% = F0-10；段速真值由这 8 个码计算，不再用硬编码 Hz 表。 */
+  /** 331 页 17.2.22：FC-00~FC-15 共 16 段，教学子集取前 8 段。
+   *  单位 %（相对 F0-10），100% = F0-10；段位来自配成「多段指令端子1~4」的 DI，不再写死 DI1~DI3。 */
   { code: 'FC-00', group: 'FC', index: 0, name: '多段指令1', defaultValue: MD520_FC_DEFAULT_PERCENT[0], min: -100, max: 100, decimals: 1, unit: '%' },
   { code: 'FC-01', group: 'FC', index: 1, name: '多段指令2', defaultValue: MD520_FC_DEFAULT_PERCENT[1], min: -100, max: 100, decimals: 1, unit: '%' },
   { code: 'FC-02', group: 'FC', index: 2, name: '多段指令3', defaultValue: MD520_FC_DEFAULT_PERCENT[2], min: -100, max: 100, decimals: 1, unit: '%' },
@@ -114,12 +98,6 @@ export const MD520_PARAMS: Md520Param[] = [
   { code: 'FD-00', group: 'FD', index: 0, name: '波特率', defaultValue: 5005, min: 0, max: 6999, decimals: 0, unit: '' },
   { code: 'FD-01', group: 'FD', index: 1, name: 'Modbus数据格式', defaultValue: 0, min: 0, max: 7, decimals: 0, unit: '' },
   { code: 'FD-02', group: 'FD', index: 2, name: '本机地址', defaultValue: 1, min: 1, max: 247, decimals: 0, unit: '' },
-  /** 302 页 17.2.3：默认 0（无操作）；501/503 是手册的特殊档位，不是 0~503 连续量程。 */
-  { code: 'FP-01', group: 'FP', index: 1, name: '参数初始化', defaultValue: 0, min: 0, max: 503, decimals: 0, unit: '',
-    options: { 0: '无操作', 1: '恢复出厂不含电机参数', 2: '清除记录信息',
-      4: '备份用户当前参数', 501: '恢复用户备份参数', 503: '恢复出厂含电机参数' }, runLocked: true },
-  /** 教学近似：低 10 位按组顺序控制「用户自定义参数」菜单可见组，基本菜单不受影响 */
-  { code: 'FP-02', group: 'FP', index: 2, name: '功能参数组显示选择', defaultValue: 63, min: 0, max: 65535, decimals: 0, unit: '' },
   { code: 'U0-00', group: 'U0', index: 0, name: '运行频率', defaultValue: 0, min: 0, max: 655.35, decimals: 2, unit: 'Hz', readOnly: true },
 ];
 
@@ -216,18 +194,19 @@ export const MD520_STATUS = {
   FAULT: 5,
 } as const;
 
-/** 物理端子（图 3-9 / 表 4-5）：控制板只有 5 路 DI，DI6~DI10 来自扩展卡 */
+/** 物理端子（图 3-9 / 表 4-5）：控制板只有 5 路 DI，DI6~DI10 来自扩展卡。
+ *  defaultFunction 是出厂默认功能码，真实角色由 F4-00~F4-04 当前值决定；label 只作兜底显示。 */
 export const MD520_DI = [
-  { key: 'DI1', param: 'F4-00', defaultFunction: 1, label: '多段速端子1' },
-  { key: 'DI2', param: 'F4-01', defaultFunction: 2, label: '多段速端子2' },
-  { key: 'DI3', param: 'F4-02', defaultFunction: 0, label: '多段速端子3' },
-  { key: 'DI4', param: 'F4-03', defaultFunction: 0, label: '运行使能' },
-  { key: 'DI5', param: 'F4-04', defaultFunction: 0, label: '高速脉冲输入' },
+  { key: 'DI1', param: 'F4-00', defaultFunction: 1, label: '正转运行' },
+  { key: 'DI2', param: 'F4-01', defaultFunction: 2, label: '反转运行' },
+  { key: 'DI3', param: 'F4-02', defaultFunction: 0, label: '无功能' },
+  { key: 'DI4', param: 'F4-03', defaultFunction: 0, label: '无功能' },
+  { key: 'DI5', param: 'F4-04', defaultFunction: 0, label: '无功能' },
 ] as const;
 
 /**
  * DI 多段速（F0-02=1 端子、F0-03=6 多段指令）的教学演示 Hz 表：
- * DI1~DI3 组成 3 位二进制选段，DI4 作运行使能。
+ * 段位来自配成「多段指令端子1~4」的 DI 所组成的二进制位，不再写死 DI1~DI3。
  * 与 FC-00~FC-07 的百分比默认值一一对应（默认 F0-10=50Hz），也供独立虚拟 PLC
  * 的段速参考程序使用，保证面板 / PLC / 三维读数一致。
  */
