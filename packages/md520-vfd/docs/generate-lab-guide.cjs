@@ -67,6 +67,8 @@ const LABS = [
       `面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 ${'`F0-08`'}，再按 OK 进 L3。`,
       `L3 主显是 ${D['F0-08']}.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。`,
       '按 OK 保存，按 PRG 退出不保存：再改一次数值，先按 PRG 看它退回修改前的 30.00，再改回 30.00 并按 OK 看它保存。'],
+    // 可判定的步骤给规则（与 steps 等长，null = 观察类手动勾）；只读 store 真值，不写不广播
+    auto: [null, { kind: 'level', value: 3 }, { kind: 'param', code: 'F0-08', value: 30 }, { kind: 'level', value: 2 }],
     expect: '按 PRG 退出不保存，数值退回修改前的 30.00；按 OK 保存，主显 30.00 且自动跳到下一个参数码。参数标「停机更改」时运行中改不了。',
     watch: '主/辅显示区、闪烁位、状态行 L1/L2/L3',
     trap: '闪烁位用 ◀▶ 左右键、数值用 △▽ 上下键；右侧印 ⌂ 的 MENU 键是切四种菜单，不是返回键，别按它退出。' },
@@ -322,6 +324,11 @@ fs.writeFileSync(OUT, html, 'utf8');
  */
 const tsPath = path.join(PKG, 'src/constants/labGuide.generated.ts');
 const generatedTs = `/* 由 docs/generate-lab-guide.cjs 自动生成，请勿手改；重跑脚本即同步 */
+export type AutoRule =
+  | { kind: 'level'; value: number }
+  | { kind: 'param'; code: string; value: number }
+  | { kind: 'running'; value: boolean }
+  | { kind: 'di'; key: string; value: boolean };
 export interface LabEntry {
   g: string;
   n: number;
@@ -329,6 +336,7 @@ export interface LabEntry {
   mode: string;
   goal: string;
   steps: string[];
+  auto?: (AutoRule | null)[];
   expect: string;
   watch: string;
   trap: string;

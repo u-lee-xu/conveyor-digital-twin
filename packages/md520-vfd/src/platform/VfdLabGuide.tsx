@@ -2,16 +2,20 @@
  * 场景内实验指导抽屉：右侧浮层，默认收成一个按钮，展开后可一边查步骤一边做实验。
  *
  * - 数据来自 docs/generate-lab-guide.cjs 生成的 labGuide.generated.ts，与打印版手册同源；
- * - 步骤勾选与当前实验只存浏览器 localStorage，是纯本地 UI，不写 store、不广播、观众零上行；
+ * - 步骤勾选与当前实验只存浏览器 localStorage，是纯本地 UI；不写 store、不广播、观众零上行；
+ * - 混合勾选：带 auto 规则的步骤只读订阅 useVfdStore 真值自动判定，观察类步骤仍手动勾；
  * - 挂在变频器自己的 VfdSceneWrapper 里，不改平台壳、不占左侧 528px 真机面板、不影响其它设备；
  * - 默认折叠，3D 场景与面板布局逐像素不变；随时可收起或打开打印版手册。
  */
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import { isViewerRuntime } from '@digital-twin/shared';
 import {
   LABS, LAB_GROUPS, LAB_GROUP_ORDER, LAB_GROUP_COLOR,
   KEY_GUIDE, MODE_GUIDE, MENU_GUIDE,
   type LabEntry,
 } from '../constants/labGuide.generated';
+import { useVfdStore } from '../stores/useVfdStore';
+import { autoCheckedSteps } from './labAutoCheck';
 
 const STORAGE_KEY = 'md520-lab-guide-v1';
 
@@ -52,6 +56,15 @@ export function VfdLabGuide() {
   const [showList, setShowList] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [query, setQuery] = useState('');
+  const [autoEnabled, setAutoEnabled] = useState(true);
+
+  // 只读订阅真值：不调用任何 setter、不碰 Modbus、不广播；观众端不启用自动判定
+  const level = useVfdStore((s) => s.keypad.level);
+  const params = useVfdStore((s) => s.params);
+  const running = useVfdStore((s) => s.running);
+  const di = useVfdStore((s) => s.di);
+  const autoFacts = useMemo(() => ({ level, params, running, di }), [level, params, running, di]);
+  const autoActive = autoEnabled && !isViewerRuntime();
 
   const persist = useCallback((next: SavedState) => {
     setSaved(next);
@@ -59,7 +72,16 @@ export function VfdLabGuide() {
   }, []);
 
   const lab: LabEntry = LABS.find((l) => l.n === saved.current) ?? LABS[0];
-  const checked = saved.checked[String(lab.n)] ?? lab.steps.map(() => false);
+  const manualChecked = saved.checked[String(lab.n)] ?? lab.steps.map(() => false);
+  // 自动勾选与手动勾选合并：自动命中即勾；自动未命中的步骤可手动勾/取消
+  const autoHits = useMemo(
+    () => (autoActive ? autoCheckedSteps(lab.auto, autoFacts) : []),
+    [autoActive, lab.auto, autoFacts],
+  );
+  const checked = useMemo(
+    () => manualChecked.map((v, i) => v || autoHits.includes(i)),
+    [manualChecked, autoHits],
+  );
   const done = checked.filter(Boolean).length;
 
   const filtered = useMemo(() => {
@@ -123,6 +145,22 @@ export function VfdLabGuide() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid rgba(100,116,139,.35)' }}>
             <b style={{ fontSize: 13 }}>实验指导</b>
             <span style={{ color: '#94a3b8' }}>{lab.n} / {LABS.length}</span>
+            {!isViewerRuntime() && (
+              <button
+                type="button"
+                aria-label="自动判定开关"
+                data-dt-vfd-lab-auto
+                aria-pressed={autoActive ? 'true' : 'false'}
+                onClick={() => setAutoEnabled((v) => !v)}
+                title={autoActive ? '已开启：能判断的步骤自动勾选' : '已关闭：全部手动勾选'}
+                style={{ padding: '3px 7px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+                  background: autoActive ? 'rgba(16,122,86,.55)' : 'rgba(71,85,105,.5)',
+                  border: `1px solid ${autoActive ? 'rgba(52,211,153,.7)' : 'rgba(100,116,139,.5)'}`,
+                  color: '#e2e8f0' }}
+              >
+                {autoActive ? '⚡自动判定 开' : '⚡自动判定 关'}
+              </button>
+            )}
             <button
               type="button"
               aria-label="收起实验指导"
@@ -236,22 +274,28 @@ export function VfdLabGuide() {
             <div style={{ margin: '6px 0' }}>
               <b>步骤</b> <span data-dt-vfd-lab-progress-text>{done} / {lab.steps.length}</span>
               <ol style={{ margin: '5px 0 6px 18px', padding: 0 }}>
-                {lab.steps.map((stepText, i) => (
-                  <li key={i} style={{ marginBottom: 5 }}>
-                    <label style={{ display: 'flex', gap: 6, alignItems: 'flex-start', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        aria-label={`步骤 ${i + 1}`}
-                        data-dt-vfd-lab-step={i}
-                        checked={!!checked[i]}
-                        onChange={() => toggleStep(i)}
-                      />
-                      <span style={{ textDecoration: checked[i] ? 'line-through' : 'none', opacity: checked[i] ? 0.65 : 1 }}>
-                        {richText(stepText)}
-                      </span>
-                    </label>
-                  </li>
-                ))}
+                {lab.steps.map((stepText, i) => {
+                  const byAuto = autoHits.includes(i);
+                  return (
+                    <li key={i} style={{ marginBottom: 5 }}>
+                      <label style={{ display: 'flex', gap: 6, alignItems: 'flex-start', cursor: byAuto ? 'default' : 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          aria-label={`步骤 ${i + 1}`}
+                          data-dt-vfd-lab-step={i}
+                          data-dt-vfd-lab-auto-step={byAuto ? '1' : '0'}
+                          checked={!!checked[i]}
+                          disabled={byAuto}
+                          onChange={() => toggleStep(i)}
+                        />
+                        <span style={{ textDecoration: checked[i] ? 'line-through' : 'none', opacity: checked[i] ? 0.65 : 1 }}>
+                          {byAuto && <span style={{ color: '#34d399', fontSize: 10, marginRight: 4 }}>⚡自动</span>}
+                          {richText(stepText)}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
               </ol>
             </div>
 

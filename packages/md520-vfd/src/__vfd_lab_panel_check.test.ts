@@ -97,10 +97,29 @@ describe('场景内实验指导抽屉', () => {
     expect(panel).toContain('/docs/MD520实验指导书.html');
   });
 
-  it('纯本地 UI：不写 store、不广播，观众零上行', () => {
-    expect(panel).not.toContain('useVfdStore');
+  it('纯本地 UI：只读 store、不写不广播，观众零上行', () => {
+    // 混合勾选只读订阅真值做自动判定，但不调用任何 setter / 链路服务
+    expect(panel).toContain('useVfdStore((s) => s.keypad.level)');
+    expect(panel).toContain('isViewerRuntime()');
     expect(panel).not.toContain('applyBroadcast');
     expect(panel).not.toContain('modbusService');
     expect(panel).not.toContain('exportSnapshot');
+    expect(panel).not.toContain('setParam(');
+    expect(panel).not.toContain('dispatchKey(');
+    // 求值器是纯函数，不 import 任何 store 或链路
+    const autoCheck = read('packages/md520-vfd/src/platform/labAutoCheck.ts');
+    expect(autoCheck).not.toContain("from '../stores/useVfdStore'");
+    expect(autoCheck).not.toContain('applyBroadcast');
+    expect(autoCheck).not.toContain('modbusService');
+  });
+
+  it('混合勾选：自动开关、自动步骤标记与规则同源', () => {
+    expect(panel).toContain('data-dt-vfd-lab-auto');
+    expect(panel).toContain('data-dt-vfd-lab-auto-step');
+    expect(panel).toContain('autoHits.includes(i)');
+    expect(panel).toContain('⚡自动');
+    expect(generated).toContain('export type AutoRule');
+    expect(LABS[0].auto).toHaveLength(4);
+    expect(LABS.find((l) => l.n === 2)?.auto).toBeUndefined();
   });
 });
