@@ -25,6 +25,10 @@ import {
   INITIAL_KEYPAD, reduceKeypad, keypadDisplay,
   type KeypadKey, type KeypadState,
 } from '../vfd/md520Keypad';
+import {
+  INITIAL_TERMINAL_LATCH, resolveTerminalCommand, resolveMultiSpeedIndex,
+  type TerminalLatch,
+} from '../vfd/md520Terminal';
 
 const DEFAULT_PARAMS: Record<string, number> = Object.fromEntries(
   MD520_PARAMS.map((p) => [p.code, p.defaultValue]),
@@ -48,7 +52,7 @@ export interface VfdSnapshot {
   doFlags: number;
   /** AI1 模拟量数值镜像（V），由 PLC AO 经 100AH 下发 */
   ai1: number;
-  /** 教学近似的输出电流 / 功率，由 F1-03 额定电流、F1-01 额定功率与负载率算出 */
+  /** 固定系数监视量：50Hz 满速 9.00A / 3.70kW，随负载率线性变化 */
   outputCurrent: number;
   outputPower: number;
   /** 方向数值镜像：观众端 3D 也要跟随换向过程，不用 !! 布尔化 */
@@ -73,6 +77,8 @@ interface VfdStore {
   outputCurrent: number;
   outputPower: number;
   di: Record<string, boolean>;
+  /** 端子命令跨帧锁存（三线式上升沿 + 上一帧命令） */
+  terminalLatch: TerminalLatch;
   doFlags: Record<string, boolean>;
   ai1: number;
   ai2: number;
@@ -118,10 +124,9 @@ function doBitFlags(flags: Record<string, boolean>): number {
   return MD520_DO.reduce((acc, d) => acc | (flags[d.key] ? 1 << d.bit : 0), 0);
 }
 
-/** DI1~DI3 组成 3 位二进制段号，DI4 为运行使能（教学子集） */
-function multiSpeedIndex(di: Record<string, boolean>): number {
-  return (di.DI1 ? 1 : 0) | (di.DI2 ? 2 : 0) | (di.DI3 ? 4 : 0);
-}
+/** 固定系数监视量：不依赖 F1 铭牌参数，50Hz 满速仍显示 9.00A / 3.70kW */
+const NOMINAL_CURRENT = 9;
+const NOMINAL_POWER = 3.7;
 
 function aiFrequency(params: Record<string, number>, ai1: number, ai2: number, mode: Md520Ai2Mode): number {
   const maxHz = params['F0-10'] || NOMINAL_HZ;
@@ -147,6 +152,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
   outputCurrent: 0,
   outputPower: 0,
   di: Object.fromEntries(MD520_DI.map((d) => [d.key, false])),
+  terminalLatch: { ...INITIAL_TERMINAL_LATCH },
   doFlags: Object.fromEntries(MD520_DO.map((d) => [d.key, false])),
   ai1: 0,
   ai2: 0,
@@ -179,6 +185,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     running: false,
     direction: 1,
     runDirection: 1,
+    terminalLatch: { ...INITIAL_TERMINAL_LATCH },
     outputHz: 0,
     outputCurrent: 0,
     outputPower: 0,
@@ -195,35 +202,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
       if (p) {
         params = { ...params, [ev.commit.code]: ev.commit.value };
         patch.params = params;
-        /**
-         * 302 页 17.2.3 参数初始化：
-         *  1   = 恢复出厂参数，不包括电机参数（F1 组铭牌值保留）
-         *  503 = 恢复出厂参数，包括电机参数
-         *  2   = 清除记录信息
-         *  4 / 501（备份 / 恢复备份）教学未实现，仅作参数镜像，不产生副作用。
-         */
-        if (ev.commit.code === 'FP-01') {
-          const mode = Math.trunc(ev.commit.value);
-          if (mode === 1 || mode === 503) {
-            const restored: Record<string, number> = { ...DEFAULT_PARAMS };
-            if (mode === 1) {
-              for (const [code, value] of Object.entries(params)) {
-                if (code.startsWith('F1-')) restored[code] = value;
-              }
-            }
-            patch.params = restored;
-            params = restored;
-          } else if (mode === 2) {
-            patch.faultHistory = [];
-          }
-        }
       }
-    }
-    // MF.K：F7-01=1 强制本地面板控制，把命令源切回操作面板
-    if (ev?.forcePanel) {
-      const nextParams = { ...params, 'F0-02': MD520_SOURCE.PANEL };
-      patch.params = nextParams;
-      params = nextParams;
     }
     // 通信命令源下，面板 RUN/STOP 不抢运行权，由 485 控制字唯一决定
     const panelControlsRun = Math.trunc(params['F0-02']) !== MD520_SOURCE.COMM;
@@ -246,12 +225,6 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
         patch.command = next === -1 ? MD520_COMMAND.REV : MD520_COMMAND.FWD;
         patch.status = next === -1 ? MD520_STATUS.REV : MD520_STATUS.FWD;
       }
-    }
-    if (typeof ev?.jog === 'number') {
-      patch.engaged = true;
-      patch.running = true;
-      patch.command = ev.jog;
-      patch.direction = ev.jog === MD520_COMMAND.RJOG ? -1 : 1;
     }
     if (ev?.potentiometer) {
       const p = MD520_PARAM_MAP['F0-08'];
@@ -317,16 +290,21 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     const freqSource = Math.trunc(s.params['F0-03']);
     let command = s.command;
     let running = false;
+    let direction = s.direction;
+    let terminalLatch = s.terminalLatch;
 
     if (source === MD520_SOURCE.COMM) {
-      // 485 控制字是唯一驱动源，面板与 DI 都不抢运行权
-      running = RUN_COMMANDS
-        .includes(s.command);
+      // 通信控制字是唯一驱动源，面板与端子都不抢运行权
+      running = RUN_COMMANDS.includes(s.command);
       command = s.command;
     } else if (source === MD520_SOURCE.TERMINAL) {
-      // DI4 运行使能 + DI1~DI3 多段速
-      running = !!s.di.DI4;
-      command = running ? MD520_COMMAND.FWD : MD520_COMMAND.STOP;
+      // 端子功能由 F4-00~F4-04 决定，命令方式由 F4-11 决定
+      const result = resolveTerminalCommand(s.di, s.params, s.terminalLatch);
+      command = result.command;
+      running = RUN_COMMANDS.includes(result.command);
+      terminalLatch = result.latch;
+      if (REV_COMMANDS.includes(result.command)) direction = -1;
+      if (FWD_COMMANDS.includes(result.command)) direction = 1;
     } else {
       running = s.running;
       command = running
@@ -339,8 +317,8 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     if (source === MD520_SOURCE.COMM || freqSource === MD520_SOURCE.FREQ_COMM) {
       targetHz = s.externalSetpointHz;
     } else if (freqSource === MD520_SOURCE.FREQ_MULTI) {
-      // 17.2.22：段速真值来自 FC-00~FC-07 百分比（相对 F0-10），不再用硬编码 Hz 表
-      const seg = multiSpeedIndex(s.di);
+      // 段位来自配成「多段指令端子1~4」的 DI，段速真值取 FC-00~FC-07 相对 F0-10 的百分比
+      const seg = resolveMultiSpeedIndex(s.di, s.params);
       targetHz = Math.abs(Number(s.params[`FC-0${seg}`] ?? 0)) / 100 * (s.params['F0-10'] || 50);
     } else if (freqSource === MD520_SOURCE.FREQ_AI1 || freqSource === MD520_SOURCE.FREQ_AI2) {
       targetHz = aiFrequency(s.params, s.ai1, s.ai2, s.ai2Mode);
@@ -357,102 +335,46 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     const dt = Math.min(delta, 0.05);
     const runGoal = Math.min(maxHz, targetHz);
 
-    // 正反转切换的真实过程：目标方向与实际输出方向不一致时，先按 F0-18 把频率
-    // 降到 0（本帧目标 0），到零后才翻转 runDirection，再按 F0-17 反向加速到目标频率。
-    // 面板 FWD/REV 丝印与控制字仍用 s.direction（指令下达即变），3D 用 runDirection。
-    const reversing = running && s.direction !== s.runDirection && s.outputHz > 0.01;
+    // 正反转切换：目标方向与实际输出方向不一致时，先按 F0-18 降到 0，
+    // 到零后才翻转 runDirection，再按 F0-17 反向加速。3D 用 runDirection。
+    const reversing = running && direction !== s.runDirection && s.outputHz > 0.01;
     const goal = reversing ? 0 : (running ? runGoal : 0);
+    // 斜坡标尺固定为最大频率；换向减速时改用运行目标频率，避免速率趋近 0 卡住
+    const baseHz = reversing ? Math.max(0.01, runGoal) : maxHz;
+    const seconds = goal > s.outputHz ? acc : dec;
+    const rate = baseHz / seconds * dt;
+    const outputHz = goal > s.outputHz
+      ? Math.min(goal, s.outputHz + rate)
+      : Math.max(goal, s.outputHz - rate);
 
-    // F0-25 加减速基准频率（311 页 17.2.13）：斜坡速率的标尺，
-    // 0 最大频率(F0-10) / 1 设定频率 / 2 固定 100Hz / 3 额定频率(F1-04)。
-    // 换向减速时不能用 0 当基准，否则速率趋近 0 卡住，改用运行目标频率。
-    const baseMode = Math.trunc(s.params['F0-25'] ?? 0);
-    const rampBase = reversing ? runGoal : goal;
-    const baseHz = baseMode === 1 ? Math.max(0.01, rampBase)
-      : baseMode === 2 ? 100
-        : baseMode === 3 ? (s.params['F1-04'] || NOMINAL_HZ)
-          : maxHz;
-
-    // F6-10 停机方式（313 页 17.2.17）：0 按 F0-18 减速 / 1 自由停机 / 2 最大能力停机。
-    // F7-02 STOP/RESET 键功能（285 页表 16-6）教学近似为停机方式覆盖：
-    //   0 用 F6-10 / 1(OFF1) 自由停机 / 2(OFF2) 最大能力 / 3(OFF3) 减速停机。
-    // 默认 0 时完全沿用 F6-10，既有演示与 CDP 断言不回归。
-    const stopKeyMode = Math.trunc(s.params['F7-02'] ?? 0);
-    const stopMode = stopKeyMode === 0
-      ? Math.trunc(s.params['F6-10'] ?? 0)
-      : stopKeyMode === 1 ? 1 : stopKeyMode === 2 ? 2 : 0;
-    const stopping = !running && goal < s.outputHz;
-
-    // F0-01 控制方式教学近似（不实现矢量算法）：低速段 SVC 响应最快、FVC 居中，
-    // V/f（默认 2）保持原斜坡；FVC 另给更宽的频率到达判定。
-    const ctrlMode = Math.trunc(s.params['F0-01'] ?? 2);
-    const lowSpeedGain = ctrlMode === 0 ? 1.6 : ctrlMode === 1 ? 1.25 : 1;
-
-    let outputHz: number;
-    if (stopping && stopMode === 1) {
-      const brakeTime = Math.max(0, Number(s.params['F6-14']) || 0);
-      if (brakeTime <= 0) {
-        outputHz = goal;
-      } else {
-        // F6-11 制动起始频率 / F6-12 等待时间 / F6-13 制动电流，
-        // 只在 F6-14>0 的制动段生效；默认 0/0/50 时与单看 F6-14 的结果一致。
-        const startHz = Math.max(0, Number(s.params['F6-11']) || 0);
-        const wait = Math.max(0, Number(s.params['F6-12']) || 0);
-        const brakeCurrent = Math.max(1, Number(s.params['F6-13']) || 50);
-        const inBrake = startHz <= 0 || s.outputHz <= startHz;
-        const brakeRate = maxHz / Math.max(0.1, brakeTime + wait)
-          * (inBrake ? brakeCurrent / 50 : 1);
-        outputHz = Math.max(goal, s.outputHz - brakeRate * dt);
-      }
-    } else {
-      const seconds = stopping && stopMode === 2 ? Math.max(0.1, dec / 5)
-        : goal > s.outputHz ? acc : dec;
-      const gain = goal > s.outputHz && s.outputHz < 5 ? lowSpeedGain : 1;
-      const rate = baseHz / seconds * dt * gain;
-      outputHz = goal > s.outputHz
-        ? Math.min(goal, s.outputHz + rate)
-        : Math.max(goal, s.outputHz - rate);
-    }
-
-    // 频率归零后才真正翻转输出方向（下一帧换向结束、按 acc 反向加速）；
-    // 停机状态下没有输出，换向指令直接生效。
+    // 判定必须用帧初的 s.outputHz：帧末可能已是反向加速第一帧，用它判断会来回震荡
     let runDirection = s.runDirection;
-    // 判定必须用帧初的 s.outputHz：帧末 outputHz 已经是「反向加速第一帧」的结果，
-    // 可能已大于 0.01，用它判断会导致不翻转、下一帧又进入减速，来回震荡。
-    if (!reversing && runDirection !== s.direction && (s.outputHz <= 0.01 || !running)) {
-      runDirection = s.direction;
+    if (!reversing && runDirection !== direction && (s.outputHz <= 0.01 || !running)) {
+      runDirection = direction;
     }
 
-    // F1-03 额定电流 / F1-01 额定功率参与只读监视量计算：
-    // 空载按 15% 额定电流，负载率随输出频率线性上升（教学近似，非矢量模型）。
-    // F1-00 电机类型再给一个效率系数：永磁同步(2) 电流低 12%，电磁线圈(4) 高 20%。
+    // 固定系数监视量：空载 15% 额定电流，负载率随频率线性上升
     const load = Math.min(1, outputHz / maxHz);
-    const ratedCurrent = Math.max(0.01, Number(s.params['F1-03']) || 9);
-    const ratedPower = Math.max(0, Number(s.params['F1-01']) || 3.7);
-    const motorType = Math.trunc(s.params['F1-00'] ?? 0);
-    const motorFactor = motorType === 2 ? 0.88 : motorType === 4 ? 1.2 : 1;
     const motoring = running || outputHz > 0.01;
-    const outputCurrent = motoring ? ratedCurrent * (0.15 + 0.85 * load) * motorFactor : 0;
-    const outputPower = motoring ? ratedPower * load : 0;
+    const outputCurrent = motoring ? NOMINAL_CURRENT * (0.15 + 0.85 * load) : 0;
+    const outputPower = motoring ? NOMINAL_POWER * load : 0;
 
-    const reachTolerance = ctrlMode === 1 ? 0.2 : 0.05;
     const doFlags = {
       DO1: running,
-      FM: running && Math.abs(outputHz - goal) < reachTolerance,
+      FM: running && Math.abs(outputHz - goal) < 0.05,
       RELAY: faulted,
     };
     const status = faulted ? MD520_STATUS.FAULT
       : !running ? MD520_STATUS.STOP
-        : (s.direction === -1 ? MD520_STATUS.REV : MD520_STATUS.FWD);
+        : (direction === -1 ? MD520_STATUS.REV : MD520_STATUS.FWD);
 
-    // U0-00 只在两位小数变化时更新；静止期复用整张参数表，省掉每帧 39 项复制
+    // U0-00 只在两位小数变化时更新；静止期复用整张参数表，省掉每帧复制
     const u0 = Math.round(outputHz * 100) / 100;
     const params = Object.is(s.params['U0-00'], u0) ? s.params : { ...s.params, 'U0-00': u0 };
     const patch = {
       outputHz, runDirection, outputCurrent, outputPower,
-      running, command, status, doFlags, params,
+      running, command, status, doFlags, params, direction, terminalLatch,
     };
-    // 静止期不写 store；斜坡 / 换向 / 频率变化时照常写入，连续性不变
     if (patchChanged(s, patch)) set(patch);
     return outputHz / NOMINAL_HZ;
   },
@@ -468,7 +390,7 @@ export const useVfdStore = create<VfdStore>((set, get) => ({
     return s.faultCode ? 0 : Math.max(0, s.outputHz / NOMINAL_HZ);
   },
 
-  multiSpeedIndex: () => multiSpeedIndex(get().di),
+  multiSpeedIndex: () => resolveMultiSpeedIndex(get().di, get().params),
 
   snapshot: () => {
     const s = get();

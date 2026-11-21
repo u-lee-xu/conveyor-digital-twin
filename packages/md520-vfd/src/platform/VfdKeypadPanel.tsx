@@ -20,6 +20,7 @@ import {
   MD520_DI, MD520_DO, MD520_FAULTS, MD520_MENUS, MD520_MENU_LABELS,
   MD520_PARAM_MAP, MD520_UNITS, MD520_AI, MD520_COMM,
 } from '../vfd/md520Spec';
+import { diFunctionLabel } from '../vfd/md520Terminal';
 
 const SEGMENTS: Record<string, string> = {
   '0': 'abcdef', '1': 'bc', '2': 'abdeg', '3': 'abcdg', '4': 'bcfg',
@@ -447,7 +448,9 @@ export function VfdKeypadPanel() {
           {/* 跨列第 1 行：DI 端子 + 段速 */}
           <div style={{ gridColumn: 'span 2', display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
             {MD520_DI.map((d) => (
-              <button key={d.key} type="button" aria-label={d.key} title={d.label} disabled={readOnly}
+              <button key={d.key} type="button" aria-label={d.key}
+                title={diFunctionLabel(params[d.param] ?? d.defaultFunction, d.label)}
+                disabled={readOnly}
                 onClick={() => setDi(d.key, !di[d.key])}
                 style={{ minWidth: 26, height: 18, fontSize: 9, fontWeight: 700, padding: '0 3px',
                   borderRadius: 3, cursor: readOnly ? 'not-allowed' : 'pointer',
@@ -513,7 +516,7 @@ export function VfdKeypadPanel() {
             <span>3000H 状态 {status}</span>
             <span>1000H {((externalSetpointHz / (params['F0-10'] || 50)) * 10000).toFixed(0)}</span>
             <span>{MD520_COMM.FREQ2.toString(16).toUpperCase()}H {externalSetpointHz.toFixed(2)}Hz</span>
-            {/* F1-03 额定电流 / F1-01 额定功率驱动的只读监视量 */}
+            {/* 固定系数只读监视量，50Hz 满速 9.00A / 3.70kW */}
             <span data-dt-vfd-monitor>{outputCurrent.toFixed(2)}A {outputPower.toFixed(2)}kW</span>
             <span style={{ color: C.ink }}>
               {message || (display.blinkDigit !== null ? `位 ${display.blinkDigit + 1}` : `L${keypad.level}`)}

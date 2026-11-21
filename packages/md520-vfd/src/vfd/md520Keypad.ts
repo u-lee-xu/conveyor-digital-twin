@@ -11,7 +11,7 @@
  *  - 故障列表：左右键循环切换故障历史记录
  */
 import {
-  MD520_GROUPS, MD520_MENUS, MD520_PARAMS, MD520_PARAM_MAP, MD520_COMMAND,
+  MD520_GROUPS, MD520_MENUS, MD520_PARAMS, MD520_PARAM_MAP,
   type Md520Menu, type Md520Param,
 } from './md520Spec';
 
@@ -39,8 +39,6 @@ export interface KeypadEvent {
   stop?: boolean;
   resetFault?: boolean;
   toggleDirection?: boolean;
-  /** MF.K：F7-01=1 强制面板控制 / 3~4 点动（值为控制命令） */
-  forcePanel?: boolean;
   jog?: number;
   potentiometer?: number;
   message?: string;
@@ -66,13 +64,10 @@ export const INITIAL_KEYPAD: KeypadState = {
 /** 当前菜单下可见的参数（用户自定义参数 / 用户更改参数按真实语义过滤） */
 export function visibleParams(menu: Md520Menu, values: Record<string, number>): Md520Param[] {
   if (menu === 'user') {
-    // FP-02 功能参数组显示选择：低 10 位按 MD520_GROUPS 顺序掩码控制可见组。
-    // 基本菜单始终显示全部参数，掩码只作用于「用户自定义参数」菜单；
-    // 默认 63 的 bit0 为 1，F0 组四个常用码仍全部可见。
-    const mask = Math.trunc(values['FP-02'] ?? 63);
-    const allowed = new Set(MD520_GROUPS.filter((_g, i) => (mask & (1 << i)) !== 0));
-    return MD520_PARAMS.filter((p) => allowed.has(p.group)
-      && ['F0-02', 'F0-08', 'F0-17', 'F0-18'].includes(p.code));
+    // 教学子集的「用户自定义参数」= 五种控制方式的常用设定，固定集合
+    return MD520_PARAMS.filter((p) => [
+      'F0-02', 'F0-03', 'F0-08', 'F0-17', 'F0-18', 'F4-11', 'FD-02',
+    ].includes(p.code));
   }
   if (menu === 'changed') {
     return MD520_PARAMS.filter((p) => {
@@ -163,18 +158,12 @@ export function reduceKeypad(
   if (key === 'RUN') { event = { run: true }; return { state: s, event }; }
   if (key === 'STOP') { event = { stop: true, resetFault: true }; return { state: s, event }; }
   /**
-   * 285 页表 16-6 / 16.7：MF.K 的功能由 F7-01 决定，不能无条件翻转方向。
-   *  0 无效 / 1 强制面板控制 / 2 正反转切换 / 3 正转点动 / 4 反转点动；
-   *  其中 2/3/4 只在「命令源运行指令 = 操作面板（F0-02=0）」时有效。
+   * MF.K 固定作面板命令源下的正反转切换。教学子集删除了 F7-01，
+   * 面板键保留真机外形但不再依赖参数档位；端子 / 通信命令源下不抢方向。
    */
   if (key === 'MFK') {
-    const fn = Math.trunc(values['F7-01'] ?? 0);
     const panelSource = Math.trunc(values['F0-02'] ?? 0) === 0;
-    if (fn === 1) event = { forcePanel: true };
-    else if (fn === 2 && panelSource) event = { toggleDirection: true };
-    else if (fn === 3 && panelSource) event = { jog: MD520_COMMAND.FJOG };
-    else if (fn === 4 && panelSource) event = { jog: MD520_COMMAND.RJOG };
-    // F7-01=0（此键无功能）或命令源非面板：按手册不产生任何效果
+    if (panelSource) event = { toggleDirection: true };
     return { state: s, event };
   }
 
