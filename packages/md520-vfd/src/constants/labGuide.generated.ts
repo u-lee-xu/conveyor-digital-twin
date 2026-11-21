@@ -59,16 +59,16 @@ export const LABS: LabEntry[] = [
     "n": 1,
     "name": "三级菜单读写参数",
     "mode": "手动",
-    "goal": "掌握真机式 L1 参数组 → L2 参数 → L3 设定值的编辑、保存与放弃。",
+    "goal": "学会用面板找到并修改一个参数。三级菜单就是 L1 参数组 → L2 参数码 → L3 设定值三层，进一层按 OK、退一层按 PRG。",
     "steps": [
-      "设备列表进入「MD520 变频器」，保持手动模式。",
-      "按 PRG 进一级菜单，用递增键切到 F0 组，OK 进二级，选 `F0-08` 后 OK 进三级。",
-      "左右键选闪烁位，上下键把预置频率从 50Hz 改成 30Hz。",
-      "OK 保存（自动跳到下一个参数）；再改一次后用 PRG 放弃，对比两次结果。"
+      "设备列表点「MD520 变频器」进入，左上面板「运行模式」选中「手动」。手动＝不接 PLC，直接用面板按键操作；这是进入后的默认档，本实验不用连任何 PLC。",
+      "面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 `F0-08`，再按 OK 进 L3。",
+      "L3 主显是 50.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。",
+      "按 OK 保存（自动跳到下一个参数）；再改一次但按 PRG 放弃，对比保存和放弃两次的结果。"
     ],
-    "expect": "保存后主显 30.00、状态行显示下一个参数码；PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。",
+    "expect": "保存后主显 30.00、状态行显示下一个参数码；按 PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。",
     "watch": "主/辅显示区、闪烁位、状态行 L1/L2/L3",
-    "trap": "闪烁位用左右键，数值用上下键；不要按菜单键退出（那是切菜单）。"
+    "trap": "闪烁位用 ◀▶ 左右键、数值用 △▽ 上下键；右侧印 ⌂ 的 MENU 键是切四种菜单，不是返回键，别按它退出。"
   },
   {
     "g": "A",
@@ -495,5 +495,112 @@ export const LABS: LabEntry[] = [
     "expect": "F0-17 / FC-02 / F4-00 / F4-11 / F0-03 都有现象；FD-01 只改状态行显示；没有矢量算法、直流制动与电机辨识。",
     "watch": "教学手册参数表、面板与 3D",
     "trap": "09 参数手册抽取失败，未收录的码不猜默认值；参数/故障码都是教学子集。"
+  }
+];
+export interface KeyGuideEntry { code: string; face: string; name: string; where: string; role: string }
+export interface ModeGuideEntry { mode: string; meaning: string; how: string }
+export interface MenuGuideEntry { level: string; reach: string; see: string; move: string }
+export const KEY_GUIDE: KeyGuideEntry[] = [
+  {
+    "code": "PRG",
+    "face": "↩",
+    "name": "编程/返回键",
+    "where": "键盘左侧竖长键",
+    "role": "进一级菜单；编辑时放弃修改并退回上一级"
+  },
+  {
+    "code": "MENU",
+    "face": "⌂",
+    "name": "菜单键",
+    "where": "键盘右侧竖长键",
+    "role": "短按切 basic/user/changed/fault 四种菜单；长按 600ms 切主/辅显示区"
+  },
+  {
+    "code": "OK",
+    "face": "OK",
+    "name": "确认键",
+    "where": "导航环中央圆键",
+    "role": "逐级进入菜单、进入编辑态、保存设定值"
+  },
+  {
+    "code": "UP",
+    "face": "△",
+    "name": "递增键",
+    "where": "导航环上瓣",
+    "role": "切参数组/参数；编辑时增大闪烁位数值"
+  },
+  {
+    "code": "DOWN",
+    "face": "▽",
+    "name": "递减键",
+    "where": "导航环下瓣",
+    "role": "切参数组/参数；编辑时减小闪烁位数值"
+  },
+  {
+    "code": "LEFT",
+    "face": "◀",
+    "name": "左移位键",
+    "where": "导航环左瓣",
+    "role": "编辑时把闪烁位左移一位"
+  },
+  {
+    "code": "RIGHT",
+    "face": "▶",
+    "name": "右移位键",
+    "where": "导航环右瓣",
+    "role": "编辑时把闪烁位右移一位"
+  },
+  {
+    "code": "RUN",
+    "face": "◇",
+    "name": "运行键",
+    "where": "键盘左下斜键",
+    "role": "面板命令源下启动变频器"
+  },
+  {
+    "code": "STOP",
+    "face": "⊗",
+    "name": "停止键/故障复位",
+    "where": "键盘右下斜键",
+    "role": "停机；有故障时复位"
+  },
+  {
+    "code": "MF.K",
+    "face": "MF. K",
+    "name": "多功能选择键",
+    "where": "键盘底部胶囊键",
+    "role": "面板命令源下切换正反转目标方向"
+  }
+];
+export const MODE_GUIDE: ModeGuideEntry[] = [
+  {
+    "mode": "手动",
+    "meaning": "不连 PLC，直接用面板按键操作变频器。设备列表进入后默认就是这一档，入门实验都在这里做。",
+    "how": "进入 MD520 场景后，左上面板「运行模式」选中「手动」即可，无需连接面板、无需 PLC。"
+  },
+  {
+    "mode": "仿真",
+    "meaning": "由外部 PLC 编程软件的 simulator 或实物 PLC 控制变频器，面板下方出现 DI/AI/485 教学信号区。",
+    "how": "在「运行模式」点「仿真」，再用连接面板连外部 PLC；教学交付不启动任何内置虚拟 PLC。"
+  }
+];
+export const MENU_GUIDE: MenuGuideEntry[] = [
+  {
+    "level": "L1 参数组",
+    "reach": "待机主显下按 PRG",
+    "see": "辅显显示参数组字母，如 F0",
+    "move": "UP/DOWN 切组，OK 进 L2，PRG 退回主显"
+  },
+  {
+    "level": "L2 参数",
+    "reach": "L1 下按 OK",
+    "see": "主显显示参数码，如 F0-08",
+    "move": "UP/DOWN 选参数，OK 进 L3，PRG 退回 L1"
+  },
+  {
+    "level": "L3 设定值",
+    "reach": "L2 下按 OK",
+    "see": "主显显示数值并有某一位闪烁，如 50.00",
+    "move": "LEFT/RIGHT 选闪烁位，UP/DOWN 改数值，OK 保存退到 L2，PRG 放弃修改"
   }
 ];

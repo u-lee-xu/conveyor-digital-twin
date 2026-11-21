@@ -32,7 +32,30 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p>共 <b>30</b> 个实验，分 6 类。每个实验给出目的、操作步骤、预期现象（带具体数值）、观察窗口与易错点。参数默认值由 <code>generate-lab-guide.cjs</code> 从 <code>md520Spec.ts</code> 读取，参数变动后重跑脚本即同步。</p>
 <p class="notice"><b>教学边界</b>：变频器是教学子集，不是真机。矢量控制、直流制动电流闭环、电机辨识均不做；24 个教学参数围绕五种控制方式，改值即有对应现象或显示变化。仿真模式一律连接外部 PLC 编程软件的 simulator 或实物 PLC：用 Modbus TCP 通信控制（F0-02=2 / F0-03=9），或用 DI/AI 端子接线控制（F0-02=1）。内置虚拟 PLC 不是教学交付内容，只在开发 / 验收模式下启用。</p>
 </header>
-<nav><a href="#grpA">A 面板与菜单</a><a href="#grpB">B 给定与频率</a><a href="#grpC">C 停机方向与状态</a><a href="#grpD">D 外部 PLC 三协议</a><a href="#grpE">E DI/AI 端子控制</a><a href="#grpF">F 平台与安全</a></nav>
+<nav><a href="#start">开始之前</a><a href="#grpA">A 面板与菜单</a><a href="#grpB">B 给定与频率</a><a href="#grpC">C 停机方向与状态</a><a href="#grpD">D 外部 PLC 三协议</a><a href="#grpE">E DI/AI 端子控制</a><a href="#grpF">F 平台与安全</a></nav>
+<section id="start">
+<h2>开始之前：先认清面板和模式</h2>
+<p>实验步骤里写的 <code>PRG</code> / <code>OK</code> 是按键代号，面板键帽上印的却是符号（比如 <code>PRG</code> 键印的是 ↩）。把鼠标移到按键上，悬停提示会同时显示代号、符号和中文名，例如「PRG ↩ · 编程/返回键」。下面三张表先看一遍，后面 30 个实验就能对上号。</p>
+<h3>1　两种运行模式：实验里的「手动 / 仿真」是什么意思</h3>
+<table><tr><th>模式</th><th>是什么</th><th>怎么进入</th></tr><tr><td><b>手动</b></td><td>不连 PLC，直接用面板按键操作变频器。设备列表进入后默认就是这一档，入门实验都在这里做。</td><td>进入 MD520 场景后，左上面板「运行模式」选中「手动」即可，无需连接面板、无需 PLC。</td></tr>
+<tr><td><b>仿真</b></td><td>由外部 PLC 编程软件的 simulator 或实物 PLC 控制变频器，面板下方出现 DI/AI/485 教学信号区。</td><td>在「运行模式」点「仿真」，再用连接面板连外部 PLC；教学交付不启动任何内置虚拟 PLC。</td></tr></table>
+<h3>2　面板 10 键对照：代号 ↔ 键帽 ↔ 位置</h3>
+<table><tr><th>代号</th><th>键帽符号</th><th>中文名</th><th>面板位置</th><th>作用</th></tr><tr><td><code>PRG</code></td><td style="text-align:center;font-size:15px">↩</td><td>编程/返回键</td><td>键盘左侧竖长键</td><td>进一级菜单；编辑时放弃修改并退回上一级</td></tr>
+<tr><td><code>MENU</code></td><td style="text-align:center;font-size:15px">⌂</td><td>菜单键</td><td>键盘右侧竖长键</td><td>短按切 basic/user/changed/fault 四种菜单；长按 600ms 切主/辅显示区</td></tr>
+<tr><td><code>OK</code></td><td style="text-align:center;font-size:15px">OK</td><td>确认键</td><td>导航环中央圆键</td><td>逐级进入菜单、进入编辑态、保存设定值</td></tr>
+<tr><td><code>UP</code></td><td style="text-align:center;font-size:15px">△</td><td>递增键</td><td>导航环上瓣</td><td>切参数组/参数；编辑时增大闪烁位数值</td></tr>
+<tr><td><code>DOWN</code></td><td style="text-align:center;font-size:15px">▽</td><td>递减键</td><td>导航环下瓣</td><td>切参数组/参数；编辑时减小闪烁位数值</td></tr>
+<tr><td><code>LEFT</code></td><td style="text-align:center;font-size:15px">◀</td><td>左移位键</td><td>导航环左瓣</td><td>编辑时把闪烁位左移一位</td></tr>
+<tr><td><code>RIGHT</code></td><td style="text-align:center;font-size:15px">▶</td><td>右移位键</td><td>导航环右瓣</td><td>编辑时把闪烁位右移一位</td></tr>
+<tr><td><code>RUN</code></td><td style="text-align:center;font-size:15px">◇</td><td>运行键</td><td>键盘左下斜键</td><td>面板命令源下启动变频器</td></tr>
+<tr><td><code>STOP</code></td><td style="text-align:center;font-size:15px">⊗</td><td>停止键/故障复位</td><td>键盘右下斜键</td><td>停机；有故障时复位</td></tr>
+<tr><td><code>MF.K</code></td><td style="text-align:center;font-size:15px">MF. K</td><td>多功能选择键</td><td>键盘底部胶囊键</td><td>面板命令源下切换正反转目标方向</td></tr></table>
+<h3>3　三级菜单是什么：L1 组 → L2 参数 → L3 设定值</h3>
+<p>「三级菜单读写参数」不是在三级子菜单里翻来翻去，而是改一个参数的三个步骤：先选参数所在的组（L1），再选具体参数码（L2），最后改这个参数的数值（L3）。每层按 <code>OK</code> 进一层、按 <code>PRG</code> 退一层。</p>
+<table><tr><th>层级</th><th>怎么进</th><th>屏幕上看什么</th><th>能做什么</th></tr><tr><td><b>L1 参数组</b></td><td>待机主显下按 PRG</td><td>辅显显示参数组字母，如 F0</td><td>UP/DOWN 切组，OK 进 L2，PRG 退回主显</td></tr>
+<tr><td><b>L2 参数</b></td><td>L1 下按 OK</td><td>主显显示参数码，如 F0-08</td><td>UP/DOWN 选参数，OK 进 L3，PRG 退回 L1</td></tr>
+<tr><td><b>L3 设定值</b></td><td>L2 下按 OK</td><td>主显显示数值并有某一位闪烁，如 50.00</td><td>LEFT/RIGHT 选闪烁位，UP/DOWN 改数值，OK 保存退到 L2，PRG 放弃修改</td></tr></table>
+</section>
 <h2>实验速查表</h2>
 <table><tr><th>编号</th><th>实验名称</th><th>类别</th><th>所需模式</th></tr><tr><td class="num">1</td><td><a href="#lab1">三级菜单读写参数</a></td><td>面板与菜单</td><td>手动</td></tr>
 <tr><td class="num">2</td><td><a href="#lab2">四种菜单与主辅显示区</a></td><td>面板与菜单</td><td>手动</td></tr>
@@ -66,11 +89,11 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <tr><td class="num">30</td><td><a href="#lab30">教学近似边界识别</a></td><td>平台与安全</td><td>综合</td></tr></table>
 <section id="grpA"><h2 style="color:#185FA5">A 类　面板与菜单（5 项）</h2><article id="lab1" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 1　三级菜单读写参数 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
-<p style="margin:6px 0"><b>目的</b>　掌握真机式 L1 参数组 → L2 参数 → L3 设定值的编辑、保存与放弃。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设备列表进入「MD520 变频器」，保持手动模式。</li><li>按 PRG 进一级菜单，用递增键切到 F0 组，OK 进二级，选 <code>F0-08</code> 后 OK 进三级。</li><li>左右键选闪烁位，上下键把预置频率从 50Hz 改成 30Hz。</li><li>OK 保存（自动跳到下一个参数）；再改一次后用 PRG 放弃，对比两次结果。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　保存后主显 30.00、状态行显示下一个参数码；PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。</p>
+<p style="margin:6px 0"><b>目的</b>　学会用面板找到并修改一个参数。三级菜单就是 L1 参数组 → L2 参数码 → L3 设定值三层，进一层按 OK、退一层按 PRG。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设备列表点「MD520 变频器」进入，左上面板「运行模式」选中「手动」。手动＝不接 PLC，直接用面板按键操作；这是进入后的默认档，本实验不用连任何 PLC。</li><li>面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 <code>F0-08</code>，再按 OK 进 L3。</li><li>L3 主显是 50.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。</li><li>按 OK 保存（自动跳到下一个参数）；再改一次但按 PRG 放弃，对比保存和放弃两次的结果。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　保存后主显 30.00、状态行显示下一个参数码；按 PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　主/辅显示区、闪烁位、状态行 L1/L2/L3</p>
-<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　闪烁位用左右键，数值用上下键；不要按菜单键退出（那是切菜单）。</p>
+<p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　闪烁位用 ◀▶ 左右键、数值用 △▽ 上下键；右侧印 ⌂ 的 MENU 键是切四种菜单，不是返回键，别按它退出。</p>
 </article>
 <article id="lab2" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 2　四种菜单与主辅显示区 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>

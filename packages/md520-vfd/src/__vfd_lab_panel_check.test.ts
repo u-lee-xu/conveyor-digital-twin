@@ -5,7 +5,10 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LABS, LAB_GROUPS, LAB_GROUP_ORDER, LAB_DEFAULTS } from './constants/labGuide.generated';
+import {
+  LABS, LAB_GROUPS, LAB_GROUP_ORDER, LAB_DEFAULTS,
+  KEY_GUIDE, MODE_GUIDE, MENU_GUIDE,
+} from './constants/labGuide.generated';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../../..');
@@ -53,6 +56,30 @@ describe('场景内实验指导抽屉', () => {
     expect(generator).toContain("platform/public/docs");
     expect(existsSync(join(root, 'packages/platform/public/docs/MD520实验指导书.html'))).toBe(true);
     expect(webHtml).toBe(docsHtml);
+  });
+
+  it('新手按键对照与模式说明三处同源，实验1白话化', () => {
+    expect(KEY_GUIDE).toHaveLength(10);
+    expect(KEY_GUIDE.map((k) => k.code)).toEqual([
+      'PRG', 'MENU', 'OK', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'RUN', 'STOP', 'MF.K',
+    ]);
+    expect(KEY_GUIDE.find((k) => k.code === 'PRG')).toMatchObject({ face: '↩', name: '编程/返回键' });
+    expect(MODE_GUIDE.map((m) => m.mode)).toEqual(['手动', '仿真']);
+    expect(MENU_GUIDE).toHaveLength(3);
+    expect(MENU_GUIDE.map((m) => m.level)).toEqual(['L1 参数组', 'L2 参数', 'L3 设定值']);
+    // 抽屉与打印版都带入门对照，数据来自同一份生成文件
+    expect(panel).toContain('KEY_GUIDE');
+    expect(panel).toContain('data-dt-vfd-lab-guide');
+    expect(panel).toContain('PRG 是哪个键？按键对照');
+    for (const f of [docsHtml, webHtml]) {
+      expect(f).toContain('id="start"');
+      expect(f).toContain('开始之前：先认清面板和模式');
+      expect(f).toContain('PRG ↩ · 编程/返回键');
+      expect(f).toContain('手动＝不接 PLC');
+    }
+    expect(LABS[0].steps[0]).toContain('手动＝不接 PLC');
+    expect(LABS[0].steps[1]).toContain('PRG');
+    expect(LABS[0].trap).toContain('MENU');
   });
 
   it('五段结构与步骤勾选、进度持久化齐全', () => {

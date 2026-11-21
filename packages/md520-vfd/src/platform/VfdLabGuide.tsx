@@ -9,6 +9,7 @@
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import {
   LABS, LAB_GROUPS, LAB_GROUP_ORDER, LAB_GROUP_COLOR,
+  KEY_GUIDE, MODE_GUIDE, MENU_GUIDE,
   type LabEntry,
 } from '../constants/labGuide.generated';
 
@@ -49,6 +50,7 @@ export function VfdLabGuide() {
   const [saved, setSaved] = useState<SavedState>(loadState);
   const [open, setOpen] = useState(false);
   const [showList, setShowList] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [query, setQuery] = useState('');
 
   const persist = useCallback((next: SavedState) => {
@@ -181,6 +183,41 @@ export function VfdLabGuide() {
                     {l.n}
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(100,116,139,.35)' }}>
+            <button
+              type="button"
+              aria-label="面板按键对照"
+              data-dt-vfd-lab-guide
+              onClick={() => setShowGuide((v) => !v)}
+              style={{ padding: '2px 8px', borderRadius: 6, cursor: 'pointer', background: 'rgba(71,85,105,.5)', border: '1px solid rgba(100,116,139,.5)', color: '#cbd5e1' }}
+            >
+              {showGuide ? '收起按键对照' : 'PRG 是哪个键？按键对照'}
+            </button>
+            {showGuide && (
+              <div data-dt-vfd-lab-guide-body style={{ marginTop: 7, fontSize: 11, lineHeight: 1.55 }}>
+                <div style={{ color: '#93c5fd', marginBottom: 3 }}>
+                  运行模式：{MODE_GUIDE.map((m) => `${m.mode}＝${m.meaning.split('。')[0]}`).join('；')}
+                </div>
+                <div style={{ color: '#94a3b8', marginBottom: 4 }}>
+                  三级菜单：{MENU_GUIDE.map((m) => m.level).join(' → ')}，每层 OK 进一级、PRG 退一级
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <tbody>
+                    {KEY_GUIDE.map((k) => (
+                      <tr key={k.code} style={{ borderBottom: '1px solid rgba(100,116,139,.25)' }}>
+                        <td style={{ padding: '2px 4px', color: '#fbbf24', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{k.code}</td>
+                        <td style={{ padding: '2px 4px', textAlign: 'center', fontSize: 14 }}>{k.face}</td>
+                        <td style={{ padding: '2px 4px', color: '#cbd5e1', whiteSpace: 'nowrap' }}>{k.name}</td>
+                        <td style={{ padding: '2px 4px', color: '#94a3b8' }}>{k.where}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ color: '#94a3b8', marginTop: 4 }}>悬停按键可看「代号 · 符号 · 中文名」；完整作用见打印版「开始之前」。</div>
               </div>
             )}
           </div>

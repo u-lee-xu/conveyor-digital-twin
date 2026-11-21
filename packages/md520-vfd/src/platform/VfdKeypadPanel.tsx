@@ -160,8 +160,8 @@ const KEY_BASE: CSSProperties = {
 const KEY_TRANSITION = 'transform 170ms cubic-bezier(.2,.9,.3,1.35), filter 130ms ease';
 const KEY_PRESS_TRANSFORM = ' translateY(2px) scale(0.96)';
 
-function PanelKey({ label, name, onPress, disabled, shape, w, h, style, children }: {
-  label: KeypadKey; name: string; onPress: (k: KeypadKey) => void;
+function PanelKey({ label, name, hint, onPress, disabled, shape, w, h, style, children }: {
+  label: KeypadKey; name: string; hint?: string; onPress: (k: KeypadKey) => void;
   disabled: boolean; shape: KeyShape; w: number; h: number;
   style: CSSProperties; children: React.ReactNode;
 }) {
@@ -170,7 +170,7 @@ function PanelKey({ label, name, onPress, disabled, shape, w, h, style, children
   const baseTransform = typeof style.transform === 'string' ? style.transform : '';
   const release = () => setPressed(false);
   return (
-    <button type="button" aria-label={name} title={name} disabled={disabled}
+    <button type="button" aria-label={name} title={hint ? `${hint} · ${name}` : name} disabled={disabled}
       data-dt-vfd-key-pressed={down ? 1 : 0}
       onPointerDown={() => { if (!disabled) setPressed(true); }}
       onPointerUp={release} onPointerLeave={release} onPointerCancel={release} onBlur={release}
@@ -383,37 +383,37 @@ export function VfdKeypadPanel() {
               与中央 OK 圆之间留 3~5px 均匀间隙，形成真机的十字缝。 */}
           <div data-dt-vfd-nav style={{ position: 'absolute', left: '50%', top: 3, transform: 'translateX(-50%)',
             width: 140, height: 140, borderRadius: '50%' }}>
-            <PanelKey label="UP" name="递增键" onPress={press} disabled={readOnly}
+            <PanelKey label="UP" name="递增键" hint="UP △" onPress={press} disabled={readOnly}
               shape="up" w={62} h={32}
               style={{ left: '50%', top: 4, transform: 'translateX(-50%)', fontSize: 13 }}>
               <span style={{ transform: 'translateY(-4px)' }}>△</span>
             </PanelKey>
-            <PanelKey label="DOWN" name="递减键" onPress={press} disabled={readOnly}
+            <PanelKey label="DOWN" name="递减键" hint="DOWN ▽" onPress={press} disabled={readOnly}
               shape="down" w={62} h={32}
               style={{ left: '50%', bottom: 4, transform: 'translateX(-50%)', fontSize: 13 }}>
               <span style={{ transform: 'translateY(4px)' }}>▽</span>
             </PanelKey>
-            <PanelKey label="LEFT" name="左移位键" onPress={press} disabled={readOnly}
+            <PanelKey label="LEFT" name="左移位键" hint="LEFT ◀" onPress={press} disabled={readOnly}
               shape="left" w={34} h={64}
               style={{ left: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
               <span style={{ transform: 'translateX(-4px)' }}>◀</span>
             </PanelKey>
-            <PanelKey label="RIGHT" name="右移位键" onPress={press} disabled={readOnly}
+            <PanelKey label="RIGHT" name="右移位键" hint="RIGHT ▶" onPress={press} disabled={readOnly}
               shape="right" w={34} h={64}
               style={{ right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 12 }}>
               <span style={{ transform: 'translateX(4px)' }}>▶</span>
             </PanelKey>
-            <PanelKey label="OK" name="确认键" onPress={press} disabled={readOnly}
+            <PanelKey label="OK" name="确认键" hint="OK" onPress={press} disabled={readOnly}
               shape="ok" w={58} h={58}
               style={{ left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
                 borderRadius: '50%', fontSize: 12, zIndex: 2 }}>OK</PanelKey>
           </div>
 
           {/* 左右竖长键 */}
-          <PanelKey label="PRG" name="编程/返回键" onPress={press} disabled={readOnly}
+          <PanelKey label="PRG" name="编程/返回键" hint="PRG ↩" onPress={press} disabled={readOnly}
             shape="tall" w={36} h={80}
             style={{ left: 14, top: 4, fontSize: 18 }}>↩</PanelKey>
-          <button type="button" aria-label="菜单键" title="菜单键" disabled={readOnly}
+          <button type="button" aria-label="菜单键" title="MENU ⌂ · 菜单键" disabled={readOnly}
             data-dt-vfd-key-pressed={menuPressed && !readOnly ? 1 : 0}
             onPointerDown={menuDown} onPointerUp={menuUp} onPointerLeave={menuUp}
             onPointerCancel={menuUp} onBlur={menuUp} onClick={menuClick}
@@ -427,17 +427,17 @@ export function VfdKeypadPanel() {
           </button>
 
           {/* 左下 / 右下斜置运行键：真机倾角约 30° */}
-          <PanelKey label="RUN" name="运行键" onPress={press} disabled={readOnly}
+          <PanelKey label="RUN" name="运行键" hint="RUN ◇" onPress={press} disabled={readOnly}
             shape="tilt" w={50} h={62}
             style={{ left: 28, bottom: 8, transform: 'rotate(-30deg)' }}>
             <span style={{ transform: 'rotate(30deg)', fontSize: 14 }}>◇</span>
           </PanelKey>
-          <PanelKey label="STOP" name="停止键/故障复位" onPress={press} disabled={readOnly}
+          <PanelKey label="STOP" name="停止键/故障复位" hint="STOP ⊗" onPress={press} disabled={readOnly}
             shape="tilt" w={50} h={62}
             style={{ right: 28, bottom: 8, transform: 'rotate(30deg)' }}>
             <span style={{ transform: 'rotate(-30deg)', fontSize: 14 }}>⊗</span>
           </PanelKey>
-          <PanelKey label="MFK" name="多功能选择键" onPress={press} disabled={readOnly}
+          <PanelKey label="MFK" name="多功能选择键" hint="MF.K" onPress={press} disabled={readOnly}
             shape="mfk" w={62} h={26}
             style={{ left: '50%', bottom: 4, transform: 'translateX(-50%)', fontSize: 10 }}>MF. K</PanelKey>
         </div>

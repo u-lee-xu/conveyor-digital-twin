@@ -25,14 +25,51 @@ const esc = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/`([^`]+)`/g, '<code>$1</code>');
 
+/**
+ * 新手入门对照：文档里的按键代号 → 面板键帽符号 → 悬停提示 → 作用。
+ * 面板键帽只印符号（如 ↩），悬停提示带代号（如 "PRG ↩ · 编程/返回键"），
+ * 这份表让「实验步骤里的 PRG」和「鼠标指到的那颗键」能对上号。
+ */
+const KEY_GUIDE = [
+  { code: 'PRG', face: '↩', name: '编程/返回键', where: '键盘左侧竖长键', role: '进一级菜单；编辑时放弃修改并退回上一级' },
+  { code: 'MENU', face: '⌂', name: '菜单键', where: '键盘右侧竖长键', role: '短按切 basic/user/changed/fault 四种菜单；长按 600ms 切主/辅显示区' },
+  { code: 'OK', face: 'OK', name: '确认键', where: '导航环中央圆键', role: '逐级进入菜单、进入编辑态、保存设定值' },
+  { code: 'UP', face: '△', name: '递增键', where: '导航环上瓣', role: '切参数组/参数；编辑时增大闪烁位数值' },
+  { code: 'DOWN', face: '▽', name: '递减键', where: '导航环下瓣', role: '切参数组/参数；编辑时减小闪烁位数值' },
+  { code: 'LEFT', face: '◀', name: '左移位键', where: '导航环左瓣', role: '编辑时把闪烁位左移一位' },
+  { code: 'RIGHT', face: '▶', name: '右移位键', where: '导航环右瓣', role: '编辑时把闪烁位右移一位' },
+  { code: 'RUN', face: '◇', name: '运行键', where: '键盘左下斜键', role: '面板命令源下启动变频器' },
+  { code: 'STOP', face: '⊗', name: '停止键/故障复位', where: '键盘右下斜键', role: '停机；有故障时复位' },
+  { code: 'MF.K', face: 'MF. K', name: '多功能选择键', where: '键盘底部胶囊键', role: '面板命令源下切换正反转目标方向' },
+];
+
+/** 两种运行模式说明：实验步骤里的「保持手动模式」指的是这里的选择 */
+const MODE_GUIDE = [
+  { mode: '手动', meaning: '不连 PLC，直接用面板按键操作变频器。设备列表进入后默认就是这一档，入门实验都在这里做。',
+    how: '进入 MD520 场景后，左上面板「运行模式」选中「手动」即可，无需连接面板、无需 PLC。' },
+  { mode: '仿真', meaning: '由外部 PLC 编程软件的 simulator 或实物 PLC 控制变频器，面板下方出现 DI/AI/485 教学信号区。',
+    how: '在「运行模式」点「仿真」，再用连接面板连外部 PLC；教学交付不启动任何内置虚拟 PLC。' },
+];
+
+/** 三级菜单层级：L1 参数组 → L2 参数 → L3 设定值 */
+const MENU_GUIDE = [
+  { level: 'L1 参数组', reach: '待机主显下按 PRG', see: '辅显显示参数组字母，如 F0', move: 'UP/DOWN 切组，OK 进 L2，PRG 退回主显' },
+  { level: 'L2 参数', reach: 'L1 下按 OK', see: '主显显示参数码，如 F0-08', move: 'UP/DOWN 选参数，OK 进 L3，PRG 退回 L1' },
+  { level: 'L3 设定值', reach: 'L2 下按 OK', see: '主显显示数值并有某一位闪烁，如 50.00', move: 'LEFT/RIGHT 选闪烁位，UP/DOWN 改数值，OK 保存退到 L2，PRG 放弃修改' },
+];
+
 /** 每个实验：目的 / 步骤 / 预期现象（带具体数值）/ 观察窗口 / 易错点 */
 const LABS = [
   // A 面板与菜单
   { g: 'A', n: 1, name: '三级菜单读写参数', mode: '手动',
-    goal: '掌握真机式 L1 参数组 → L2 参数 → L3 设定值的编辑、保存与放弃。',
-    steps: ['设备列表进入「MD520 变频器」，保持手动模式。', `按 PRG 进一级菜单，用递增键切到 F0 组，OK 进二级，选 ${'`F0-08`'} 后 OK 进三级。`, `左右键选闪烁位，上下键把预置频率从 ${D['F0-08']}Hz 改成 30Hz。`, 'OK 保存（自动跳到下一个参数）；再改一次后用 PRG 放弃，对比两次结果。'],
-    expect: '保存后主显 30.00、状态行显示下一个参数码；PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。',
-    watch: '主/辅显示区、闪烁位、状态行 L1/L2/L3', trap: '闪烁位用左右键，数值用上下键；不要按菜单键退出（那是切菜单）。' },
+    goal: '学会用面板找到并修改一个参数。三级菜单就是 L1 参数组 → L2 参数码 → L3 设定值三层，进一层按 OK、退一层按 PRG。',
+    steps: ['设备列表点「MD520 变频器」进入，左上面板「运行模式」选中「手动」。手动＝不接 PLC，直接用面板按键操作；这是进入后的默认档，本实验不用连任何 PLC。',
+      `面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 ${'`F0-08`'}，再按 OK 进 L3。`,
+      `L3 主显是 ${D['F0-08']}.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。`,
+      '按 OK 保存（自动跳到下一个参数）；再改一次但按 PRG 放弃，对比保存和放弃两次的结果。'],
+    expect: '保存后主显 30.00、状态行显示下一个参数码；按 PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。',
+    watch: '主/辅显示区、闪烁位、状态行 L1/L2/L3',
+    trap: '闪烁位用 ◀▶ 左右键、数值用 △▽ 上下键；右侧印 ⌂ 的 MENU 键是切四种菜单，不是返回键，别按它退出。' },
   { g: 'A', n: 2, name: '四种菜单与主辅显示区', mode: '手动',
     goal: '区分 basic / user / changed / fault 四种菜单，掌握菜单键点按与长按。',
     steps: ['点按菜单键循环四种菜单，观察 basic 与 user 的参数条数。', '先改几个参数，再切到 changed，确认只列出改过出厂值的参数。', '长按菜单键 600ms 切主/辅显示区；切到 fault 看故障列表。'],
@@ -198,6 +235,11 @@ const GROUP_COLOR = { A: '#185FA5', B: '#0F6E56', C: '#BA7517', D: '#534AB7', E:
 
 const quickRows = LABS.map((l) => `<tr><td class="num">${l.n}</td><td><a href="#lab${l.n}">${esc(l.name)}</a></td><td>${GROUPS[l.g]}</td><td>${esc(l.mode)}</td></tr>`).join('\n');
 
+/** 入门对照表：文档代号 ↔ 键帽符号 ↔ 位置 ↔ 作用，三份产物同源 */
+const keyRows = KEY_GUIDE.map((k) => `<tr><td><code>${esc(k.code)}</code></td><td style="text-align:center;font-size:15px">${esc(k.face)}</td><td>${esc(k.name)}</td><td>${esc(k.where)}</td><td>${esc(k.role)}</td></tr>`).join('\n');
+const modeRows = MODE_GUIDE.map((m) => `<tr><td><b>${esc(m.mode)}</b></td><td>${esc(m.meaning)}</td><td>${esc(m.how)}</td></tr>`).join('\n');
+const menuRows = MENU_GUIDE.map((m) => `<tr><td><b>${esc(m.level)}</b></td><td>${esc(m.reach)}</td><td>${esc(m.see)}</td><td>${esc(m.move)}</td></tr>`).join('\n');
+
 const sections = Object.keys(GROUPS).map((g) => {
   const cards = LABS.filter((l) => l.g === g).map((l) => `<article id="lab${l.n}" style="background:#fff;border:1px solid var(--line);border-left:4px solid ${GROUP_COLOR[g]};border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 ${l.n}　${esc(l.name)} <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ ${esc(l.mode)} 模式</span></h3>
@@ -244,7 +286,18 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p>共 <b>${LABS.length}</b> 个实验，分 6 类。每个实验给出目的、操作步骤、预期现象（带具体数值）、观察窗口与易错点。参数默认值由 <code>generate-lab-guide.cjs</code> 从 <code>md520Spec.ts</code> 读取，参数变动后重跑脚本即同步。</p>
 <p class="notice"><b>教学边界</b>：变频器是教学子集，不是真机。矢量控制、直流制动电流闭环、电机辨识均不做；24 个教学参数围绕五种控制方式，改值即有对应现象或显示变化。仿真模式一律连接外部 PLC 编程软件的 simulator 或实物 PLC：用 Modbus TCP 通信控制（F0-02=2 / F0-03=9），或用 DI/AI 端子接线控制（F0-02=1）。内置虚拟 PLC 不是教学交付内容，只在开发 / 验收模式下启用。</p>
 </header>
-<nav>${Object.keys(GROUPS).map((g) => `<a href="#grp${g}">${g} ${GROUPS[g]}</a>`).join('')}</nav>
+<nav><a href="#start">开始之前</a>${Object.keys(GROUPS).map((g) => `<a href="#grp${g}">${g} ${GROUPS[g]}</a>`).join('')}</nav>
+<section id="start">
+<h2>开始之前：先认清面板和模式</h2>
+<p>实验步骤里写的 <code>PRG</code> / <code>OK</code> 是按键代号，面板键帽上印的却是符号（比如 <code>PRG</code> 键印的是 ↩）。把鼠标移到按键上，悬停提示会同时显示代号、符号和中文名，例如「PRG ↩ · 编程/返回键」。下面三张表先看一遍，后面 30 个实验就能对上号。</p>
+<h3>1　两种运行模式：实验里的「手动 / 仿真」是什么意思</h3>
+<table><tr><th>模式</th><th>是什么</th><th>怎么进入</th></tr>${modeRows}</table>
+<h3>2　面板 10 键对照：代号 ↔ 键帽 ↔ 位置</h3>
+<table><tr><th>代号</th><th>键帽符号</th><th>中文名</th><th>面板位置</th><th>作用</th></tr>${keyRows}</table>
+<h3>3　三级菜单是什么：L1 组 → L2 参数 → L3 设定值</h3>
+<p>「三级菜单读写参数」不是在三级子菜单里翻来翻去，而是改一个参数的三个步骤：先选参数所在的组（L1），再选具体参数码（L2），最后改这个参数的数值（L3）。每层按 <code>OK</code> 进一层、按 <code>PRG</code> 退一层。</p>
+<table><tr><th>层级</th><th>怎么进</th><th>屏幕上看什么</th><th>能做什么</th></tr>${menuRows}</table>
+</section>
 <h2>实验速查表</h2>
 <table><tr><th>编号</th><th>实验名称</th><th>类别</th><th>所需模式</th></tr>${quickRows}</table>
 ${sections}
@@ -285,6 +338,12 @@ export const LAB_GROUPS: Record<string, string> = ${JSON.stringify(GROUPS, null,
 export const LAB_GROUP_COLOR: Record<string, string> = ${JSON.stringify(GROUP_COLOR, null, 2)};
 export const LAB_DEFAULTS: Record<string, number> = ${JSON.stringify(D, null, 2)};
 export const LABS: LabEntry[] = ${JSON.stringify(LABS, null, 2)};
+export interface KeyGuideEntry { code: string; face: string; name: string; where: string; role: string }
+export interface ModeGuideEntry { mode: string; meaning: string; how: string }
+export interface MenuGuideEntry { level: string; reach: string; see: string; move: string }
+export const KEY_GUIDE: KeyGuideEntry[] = ${JSON.stringify(KEY_GUIDE, null, 2)};
+export const MODE_GUIDE: ModeGuideEntry[] = ${JSON.stringify(MODE_GUIDE, null, 2)};
+export const MENU_GUIDE: MenuGuideEntry[] = ${JSON.stringify(MENU_GUIDE, null, 2)};
 `;
 fs.writeFileSync(tsPath, generatedTs, 'utf8');
 
