@@ -273,23 +273,37 @@ export function VfdLabGuide() {
 
             <div style={{ margin: '6px 0' }}>
               <b>步骤</b> <span data-dt-vfd-lab-progress-text>{done} / {lab.steps.length}</span>
-              <ol style={{ margin: '5px 0 6px 18px', padding: 0 }}>
+              <div data-dt-vfd-lab-legend style={{ fontSize: 10, color: '#94a3b8', margin: '3px 0 5px' }}>
+                <span style={{ color: '#34d399' }}>⚡自动</span> 做到就自动打勾 · <span style={{ color: '#cbd5e1' }}>✎手动</span> 自己做完后点勾
+              </div>
+              <ol style={{ margin: '5px 0 6px 0', padding: 0, listStyle: 'none' }}>
                 {lab.steps.map((stepText, i) => {
+                  const isAutoStep = !!lab.auto?.[i];
                   const byAuto = autoHits.includes(i);
                   return (
-                    <li key={i} style={{ marginBottom: 5 }}>
-                      <label style={{ display: 'flex', gap: 6, alignItems: 'flex-start', cursor: byAuto ? 'default' : 'pointer' }}>
+                    <li key={i} data-dt-vfd-lab-kind={isAutoStep ? 'auto' : 'manual'}
+                      style={{ marginBottom: 5, display: 'flex', gap: 6, alignItems: 'flex-start',
+                        paddingLeft: 5, borderLeft: `2px solid ${isAutoStep ? 'rgba(52,211,153,.55)' : 'rgba(100,116,139,.35)'}` }}>
+                      <span aria-hidden="true" data-dt-vfd-lab-kind-badge
+                        title={isAutoStep ? '此步由设备状态自动判定' : '此步需自己确认后点勾'}
+                        style={{ flexShrink: 0, fontSize: 9, lineHeight: '15px', padding: '0 4px', borderRadius: 4,
+                          background: isAutoStep ? 'rgba(16,122,86,.35)' : 'rgba(100,116,139,.28)',
+                          border: `1px solid ${isAutoStep ? 'rgba(52,211,153,.6)' : 'rgba(148,163,184,.4)'}`,
+                          color: isAutoStep ? '#6ee7b7' : '#cbd5e1', whiteSpace: 'nowrap' }}>
+                        {isAutoStep ? '⚡自动' : '✎手动'}
+                      </span>
+                      <label style={{ display: 'flex', gap: 5, alignItems: 'flex-start', flex: 1,
+                        cursor: isAutoStep && autoActive ? 'default' : 'pointer' }}>
                         <input
                           type="checkbox"
                           aria-label={`步骤 ${i + 1}`}
                           data-dt-vfd-lab-step={i}
                           data-dt-vfd-lab-auto-step={byAuto ? '1' : '0'}
                           checked={!!checked[i]}
-                          disabled={byAuto}
+                          disabled={isAutoStep && autoActive}
                           onChange={() => toggleStep(i)}
                         />
                         <span style={{ textDecoration: checked[i] ? 'line-through' : 'none', opacity: checked[i] ? 0.65 : 1 }}>
-                          {byAuto && <span style={{ color: '#34d399', fontSize: 10, marginRight: 4 }}>⚡自动</span>}
                           {richText(stepText)}
                         </span>
                       </label>

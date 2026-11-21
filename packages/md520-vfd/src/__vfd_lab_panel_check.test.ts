@@ -117,7 +117,13 @@ describe('场景内实验指导抽屉', () => {
     expect(panel).toContain('data-dt-vfd-lab-auto');
     expect(panel).toContain('data-dt-vfd-lab-auto-step');
     expect(panel).toContain('autoHits.includes(i)');
-    expect(panel).toContain('⚡自动');
+    // 每步都有身份标记：⚡自动 / ✎手动，配图例，一眼区分
+    expect(panel).toContain('data-dt-vfd-lab-legend');
+    expect(panel).toContain('data-dt-vfd-lab-kind');
+    expect(panel).toContain('data-dt-vfd-lab-kind-badge');
+    expect(panel).toContain('⚡自动</span> 做到就自动打勾');
+    expect(panel).toContain('isAutoStep ? \'⚡自动\' : \'✎手动\'');
+    expect(panel).toContain('disabled={isAutoStep && autoActive}');
     expect(generated).toContain('export type AutoRule');
     expect(LABS[0].auto).toHaveLength(5);
     expect(LABS[0].steps).toHaveLength(5);
