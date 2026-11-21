@@ -37,8 +37,8 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <h2>开始之前：先认清面板和模式</h2>
 <p>实验步骤里写的 <code>PRG</code> / <code>OK</code> 是按键代号，面板键帽上印的却是符号（比如 <code>PRG</code> 键印的是 ↩）。把鼠标移到按键上，悬停提示会同时显示代号、符号和中文名，例如「PRG ↩ · 编程/返回键」。下面三张表先看一遍，后面 30 个实验就能对上号。</p>
 <h3>1　两种运行模式：实验里的「手动 / 仿真」是什么意思</h3>
-<table><tr><th>模式</th><th>是什么</th><th>怎么进入</th></tr><tr><td><b>手动</b></td><td>不连 PLC，直接用面板按键操作变频器。设备列表进入后默认就是这一档，入门实验都在这里做。</td><td>进入 MD520 场景后，左上面板「运行模式」选中「手动」即可，无需连接面板、无需 PLC。</td></tr>
-<tr><td><b>仿真</b></td><td>由外部 PLC 编程软件的 simulator 或实物 PLC 控制变频器，面板下方出现 DI/AI/485 教学信号区。</td><td>在「运行模式」点「仿真」，再用连接面板连外部 PLC；教学交付不启动任何内置虚拟 PLC。</td></tr></table>
+<table><tr><th>模式</th><th>是什么</th><th>怎么进入</th></tr><tr><td><b>手动</b></td><td>不连 PLC，直接用面板按键操作变频器。设备列表进入后默认就是这一档，入门实验都在这里做。</td><td>进场景后看左侧面板「运行模式」下的两个按钮，点蓝色的 🎮 手动（默认已选中）；下方不会出连接面板，直接按键即可。</td></tr>
+<tr><td><b>仿真</b></td><td>由外部 PLC 编程软件的 simulator 或实物 PLC 控制变频器，面板下方出现 DI/AI/485 教学信号区。</td><td>在左侧面板「运行模式」下点橙色的 🔌 仿真，下方出现连接面板后再连外部 PLC；教学交付不启动任何内置虚拟 PLC。</td></tr></table>
 <h3>2　面板 10 键对照：代号 ↔ 键帽 ↔ 位置</h3>
 <table><tr><th>代号</th><th>键帽符号</th><th>中文名</th><th>面板位置</th><th>作用</th></tr><tr><td><code>PRG</code></td><td style="text-align:center;font-size:15px">↩</td><td>编程/返回键</td><td>键盘左侧竖长键</td><td>进一级菜单；编辑时放弃修改并退回上一级</td></tr>
 <tr><td><code>MENU</code></td><td style="text-align:center;font-size:15px">⌂</td><td>菜单键</td><td>键盘右侧竖长键</td><td>短按切 basic/user/changed/fault 四种菜单；长按 600ms 切主/辅显示区</td></tr>
@@ -90,7 +90,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <section id="grpA"><h2 style="color:#185FA5">A 类　面板与菜单（5 项）</h2><article id="lab1" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 1　三级菜单读写参数 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　学会用面板找到并修改一个参数。三级菜单就是 L1 参数组 → L2 参数码 → L3 设定值三层，进一层按 OK、退一层按 PRG。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>设备列表点「MD520 变频器」进入，左上面板「运行模式」选中「手动」。手动＝不接 PLC，直接用面板按键操作；这是进入后的默认档，本实验不用连任何 PLC。</li><li>面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 <code>F0-08</code>，再按 OK 进 L3。</li><li>L3 主显是 50.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。</li><li>按 OK 保存（自动跳到下一个参数）；再改一次但按 PRG 放弃，对比保存和放弃两次的结果。</li></ol>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>① 在设备列表点「MD520 变频器」卡片进入场景。② 看左侧面板「运行模式」下的两个按钮：🎮 手动、🔌 仿真。③ 点蓝色的 🎮 手动按钮（进来时它已默认选中；若亮着的是橙色仿真，就点一下手动切换）。本实验到此为止不用连 PLC、不用点连接面板，直接操作下面第 2 步的键盘即可。</li><li>面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 <code>F0-08</code>，再按 OK 进 L3。</li><li>L3 主显是 50.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。</li><li>按 OK 保存（自动跳到下一个参数）；再改一次但按 PRG 放弃，对比保存和放弃两次的结果。</li></ol>
 <p style="margin:6px 0"><b>预期现象</b>　保存后主显 30.00、状态行显示下一个参数码；按 PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　主/辅显示区、闪烁位、状态行 L1/L2/L3</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　闪烁位用 ◀▶ 左右键、数值用 △▽ 上下键；右侧印 ⌂ 的 MENU 键是切四种菜单，不是返回键，别按它退出。</p>

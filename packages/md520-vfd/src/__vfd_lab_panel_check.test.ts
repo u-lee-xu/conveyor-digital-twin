@@ -75,9 +75,12 @@ describe('场景内实验指导抽屉', () => {
       expect(f).toContain('id="start"');
       expect(f).toContain('开始之前：先认清面板和模式');
       expect(f).toContain('PRG ↩ · 编程/返回键');
-      expect(f).toContain('手动＝不接 PLC');
+      expect(f).toContain('🎮 手动');
+      expect(f).toContain('🔌 仿真');
     }
-    expect(LABS[0].steps[0]).toContain('手动＝不接 PLC');
+    expect(LABS[0].steps[0]).toContain('MD520 变频器');
+    expect(LABS[0].steps[0]).toContain('🎮 手动');
+    expect(LABS[0].steps[0]).toContain('已默认选中');
     expect(LABS[0].steps[1]).toContain('PRG');
     expect(LABS[0].trap).toContain('MENU');
   });
