@@ -424,6 +424,15 @@ describe('接线防回退：面板 / 链路 / 地址表 / 网关单字', () => {
     expect(panel).toContain('MENU_ICONS');
   });
 
+  it('L3 编辑位真闪烁：keyframes + data 锚点，非固定淡色', () => {
+    expect(panel).toContain('@keyframes dt-vfd-digit-blink');
+    expect(panel).toContain('[data-dt-vfd-blink="1"]');
+    expect(panel).toContain('dt-vfd-digit-blink 1.1s step-end infinite');
+    expect(panel).toContain('prefers-reduced-motion: reduce');
+    expect(panel).toContain('data-dt-vfd-blink={blinkIndex === i ? 1 : 0}');
+    expect(panel).not.toContain('opacity: blinkIndex === i ? 0.45 : 1');
+  });
+
   it('按键区：SVG 凹弧四瓣 + 双层轮廓 + 30° 斜键 + 倒梯形 MF.K', () => {
     expect(panel).toContain('data-dt-vfd-nav');
     expect(panel).toContain("width: 140, height: 140, borderRadius: '50%'");

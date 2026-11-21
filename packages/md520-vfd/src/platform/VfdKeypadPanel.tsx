@@ -76,7 +76,7 @@ function SevenSegment({ chars, dotIndex, blinkIndex, aux }: {
         const on = SEGMENTS[ch] ?? '';
         return (
           <svg key={i} width={w} height={h} viewBox="0 0 20 32" aria-hidden="true"
-            style={{ opacity: blinkIndex === i ? 0.45 : 1 }}>
+            data-dt-vfd-blink={blinkIndex === i ? 1 : 0}>
             {Object.entries(SEG_RECT).map(([seg, [x, y, sw, sh]]) => (
               <rect key={seg} x={x} y={y} width={sw} height={sh} rx={aux ? 0.7 : 1}
                 fill={on.includes(seg) ? C.segOn : C.segOff} />
@@ -290,6 +290,12 @@ export function VfdKeypadPanel() {
       <style>{`
         [data-dt-vfd-signal] button { transition: transform 150ms cubic-bezier(.2,.9,.3,1.35), filter 120ms ease; }
         [data-dt-vfd-signal] button:active:not(:disabled) { transform: translateY(1px) scale(0.97); filter: brightness(0.92); }
+        /* L3 编辑态选中的数码位：真机是明暗交替闪烁，不是固定淡色 */
+        @keyframes dt-vfd-digit-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: .22; } }
+        [data-dt-vfd-blink="1"] { animation: dt-vfd-digit-blink 1.1s step-end infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          [data-dt-vfd-blink="1"] { animation: none; opacity: .45; }
+        }
       `}</style>
       <div style={{ border: `1px solid ${C.shellLine}`, borderRadius: 18, padding: '6px 9px 9px',
         background: 'rgba(255,255,255,.10)' }}>
