@@ -119,7 +119,8 @@ describe('场景内实验指导抽屉', () => {
     expect(panel).toContain('autoHits.includes(i)');
     expect(panel).toContain('⚡自动');
     expect(generated).toContain('export type AutoRule');
-    expect(LABS[0].auto).toHaveLength(4);
+    expect(LABS[0].auto).toHaveLength(5);
+    expect(LABS[0].steps).toHaveLength(5);
     expect(LABS.find((l) => l.n === 2)?.auto).toBeUndefined();
   });
 });

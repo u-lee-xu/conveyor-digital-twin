@@ -25,12 +25,15 @@ describe('MD520 实验步骤自动判定', () => {
     expect(autoCheckedSteps(lab2.auto, facts())).toEqual([]);
   });
 
-  it('实验1：进 L3 自动勾第2步；改成 30 再勾第3步；退回 L2 勾第4步', () => {
+  it('实验1：进 L3 自动勾第2步，改成 30 勾第3步；保存/退出类步骤手动', () => {
     const lab1 = LABS.find((l) => l.n === 1)!;
-    expect(lab1.auto).toHaveLength(4);
+    expect(lab1.steps).toHaveLength(5);
+    expect(lab1.auto).toHaveLength(5);
     expect(autoCheckedSteps(lab1.auto, facts())).toEqual([]);
     expect(autoCheckedSteps(lab1.auto, facts({ level: 3 }))).toEqual([1]);
     expect(autoCheckedSteps(lab1.auto, facts({ level: 3, params: { 'F0-08': 30 } }))).toEqual([1, 2]);
-    expect(autoCheckedSteps(lab1.auto, facts({ level: 2, params: { 'F0-08': 30 } }))).toEqual([2, 3]);
+    // 第4步「改35退出看还是30」、第5步「改40保存」无法从真值区分，必须手动
+    expect(autoCheckedSteps(lab1.auto, facts({ level: 2, params: { 'F0-08': 30 } }))).toEqual([2]);
+    expect(autoCheckedSteps(lab1.auto, facts({ level: 2, params: { 'F0-08': 40 } }))).toEqual([]);
   });
 });
