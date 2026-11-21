@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  MD520_PARAMS, MD520_PARAM_MAP, MD520_GROUPS, MD520_COMM, MD520_MULTI_SPEED,
+  MD520_PARAMS, MD520_PARAM_MAP, MD520_COMM, MD520_MULTI_SPEED,
+  MD520_DI_FUNCTION as FN,
   MD520_FC_DEFAULT_PERCENT, MD520_COMMAND, MD520_STATUS,
   paramCommAddress, paramRamAddress, groupHex,
 } from './vfd/md520Spec';
@@ -19,6 +20,7 @@ import {
   visibleParams, groupParams,
 } from './vfd/md520Keypad';
 import { useVfdStore } from './stores/useVfdStore';
+import { INITIAL_TERMINAL_LATCH } from './vfd/md520Terminal';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = (p: string) => readFileSync(join(here, p), 'utf8');
@@ -33,6 +35,7 @@ beforeEach(() => {
     keypad: { ...INITIAL_KEYPAD },
     running: false,
     direction: 1,
+    terminalLatch: { ...INITIAL_TERMINAL_LATCH },
     externalSetpointHz: 50,
     outputHz: 0,
     di: { DI1: false, DI2: false, DI3: false, DI4: false, DI5: false },
@@ -63,41 +66,22 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     expect(MD520_PARAM_MAP['FD-02'].defaultValue).toBe(1);
   });
 
-  it('F0-01 第1电机控制方式按用户手册 17.2.9 收录，且是 F0 组首项', () => {
-    const p01 = MD520_PARAM_MAP['F0-01'];
-    expect(p01).toBeDefined();
-    expect(MD520_PARAMS[0].code).toBe('F0-01');
-    expect(p01.name).toBe('第1电机控制方式');
-    expect(p01.defaultValue).toBe(2);
-    expect(p01.min).toBe(0);
-    expect(p01.max).toBe(2);
-    expect(p01.options).toEqual({ 0: 'SVC', 1: 'FVC', 2: 'V/f' });
-    expect(p01.runLocked).toBe(true);
-    expect(paramCommAddress('F0-01')).toBe(0xf001);
-  });
-
-  it('F0 组翻页顺序按手册功能码递增：F0-01 → F0-02 → F0-03', () => {
+  it('F0 组从运行指令选择起翻页，功能码递增', () => {
     const f0 = MD520_PARAMS.filter((p) => p.group === 'F0').map((p) => p.code);
-    expect(f0.slice(0, 3)).toEqual(['F0-01', 'F0-02', 'F0-03']);
+    expect(f0).toEqual(['F0-02', 'F0-03', 'F0-08', 'F0-10', 'F0-17', 'F0-18']);
+    expect(paramCommAddress('F0-02')).toBe(0xf002);
   });
 
-  it('教学必备清单齐全：控制模式 / 命令源 / 频率源 / 加减速 / 参数初始化 / 电机铭牌', () => {
-    for (const code of ['F0-01', 'F0-02', 'F0-03', 'F0-17', 'F0-18', 'FP-01',
-      'F1-00', 'F1-01', 'F1-02', 'F1-03', 'F1-04', 'F1-05']) {
-      expect(MD520_PARAM_MAP[code]).toBeDefined();
+  it('五种控制方式必备参数齐全，教学子集不含矢量/铭牌/停机/初始化参数', () => {
+    for (const code of [
+      'F0-02', 'F0-03', 'F0-08', 'F0-10', 'F0-17', 'F0-18',
+      'F4-00', 'F4-01', 'F4-02', 'F4-03', 'F4-04', 'F4-11',
+      'FC-00', 'FC-07', 'FD-00', 'FD-01', 'FD-02', 'U0-00',
+    ]) expect(MD520_PARAM_MAP[code]).toBeDefined();
+    for (const code of ['F0-01', 'F0-25', 'F1-00', 'F6-10', 'F7-01', 'FP-01']) {
+      expect(MD520_PARAM_MAP[code]).toBeUndefined();
     }
-  });
-
-  it('F1-00~F1-05 按用户手册 30 章参数表整组收录，均为停机更改', () => {
-    const f1 = MD520_PARAMS.filter((p) => p.group === 'F1');
-    expect(f1.map((p) => p.code)).toEqual(['F1-00', 'F1-01', 'F1-02', 'F1-03', 'F1-04', 'F1-05']);
-    expect(f1.every((p) => p.runLocked)).toBe(true);
-    const value = (code: string) => MD520_PARAM_MAP[code].defaultValue;
-    expect([value('F1-01'), value('F1-02'), value('F1-03'), value('F1-04'), value('F1-05')])
-      .toEqual([3.7, 380, 9, 50, 1460]);
-    expect(MD520_PARAM_MAP['F1-00'].options?.[0]).toBe('普通异步电机');
-    expect(paramCommAddress('F1-00')).toBe(0xf100);
-    expect(paramCommAddress('F1-05')).toBe(0xf105);
+    expect(MD520_PARAMS).toHaveLength(24);
   });
 
   it('339 页 18.3 Modbus 专用参数通信地址表', () => {
@@ -124,33 +108,13 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     expect(MD520_COMM.FAULT_DESC).toBe(0x8000);
   });
 
-  it('FP-01 按 302 页 17.2.3：默认 0、六档、停机更改、通信地址 0x1F01', () => {
-    const fp01 = MD520_PARAM_MAP['FP-01'];
-    expect(fp01.defaultValue).toBe(0);
-    expect(fp01.runLocked).toBe(true);
-    expect(fp01.options).toEqual({
-      0: '无操作', 1: '恢复出厂不含电机参数', 2: '清除记录信息',
-      4: '备份用户当前参数', 501: '恢复用户备份参数', 503: '恢复出厂含电机参数',
-    });
-    expect(paramCommAddress('FP-01')).toBe(0x1f01);
-    expect(paramRamAddress('FP-01')).toBe(0x1f01);
-  });
-
-  it('F1-00 按 303 页 17.2.5 收录五档电机类型', () => {
-    expect(MD520_PARAM_MAP['F1-00'].max).toBe(4);
-    expect(MD520_PARAM_MAP['F1-00'].options).toEqual({
-      0: '普通异步电机', 1: '变频异步电机', 2: '永磁同步电机',
-      3: '无助磁磁阻电机', 4: '电磁线圈',
-    });
-  });
-
-  it('306 页起各调试章节的常用功能码齐全', () => {
-    for (const code of [
-      'F0-02', 'F0-03', 'F0-01', 'F0-17', 'F0-18', 'F0-25',
-      'F6-10', 'F6-11', 'F6-12', 'F6-13', 'F6-14',
-      'F4-00', 'F5-04',
-      'FC-00', 'FC-01', 'FC-02', 'FC-03', 'FC-04', 'FC-05', 'FC-06', 'FC-07',
-    ]) expect(MD520_PARAM_MAP[code]).toBeDefined();
+  it('端子功能与命令方式参数按手册默认收录', () => {
+    expect(MD520_PARAM_MAP['F4-00'].defaultValue).toBe(1);
+    expect(MD520_PARAM_MAP['F4-01'].defaultValue).toBe(2);
+    expect(MD520_PARAM_MAP['F4-02'].defaultValue).toBe(0);
+    expect(MD520_PARAM_MAP['F4-11'].defaultValue).toBe(0);
+    expect(MD520_PARAM_MAP['F4-11'].options).toEqual({ 0: '两线式1', 1: '两线式2', 2: '三线式1', 3: '三线式2' });
+    expect(paramCommAddress('F4-11')).toBe(0xf40b);
   });
 
   it('17.2.8 主频率源X 的 0~9 十档与手册一致', () => {
@@ -162,13 +126,15 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     expect(p.options?.[7]).toBe('简易PLC');
   });
 
-  it('17.2.13 / 17.2.17 / 17.2.20 / 17.2.21 新增码口径', () => {
-    expect(MD520_PARAM_MAP['F0-25'].options?.[0]).toContain('F0-10');
-    expect(MD520_PARAM_MAP['F6-10'].options)
-      .toEqual({ 0: '减速停机', 1: '自由停机', 2: '最大能力停机' });
-    expect(MD520_PARAM_MAP['F6-13'].defaultValue).toBe(50);
-    expect(MD520_PARAM_MAP['F4-00'].options?.[12]).toBe('多段指令端子1');
-    expect(MD520_PARAM_MAP['F5-04'].options?.[1]).toBe('变频器运行中');
+  it('17.2.20 DI 功能表五路共用，档位与手册一致', () => {
+    const opts = MD520_PARAM_MAP['F4-00'].options;
+    expect(opts?.[FN.FWD]).toBe('正转运行');
+    expect(opts?.[FN.REV]).toBe('反转运行');
+    expect(opts?.[FN.THREE_WIRE]).toBe('三线式运行控制');
+    expect(opts?.[FN.MULTI1]).toBe('多段指令端子1');
+    for (const code of ['F4-00', 'F4-01', 'F4-02', 'F4-03', 'F4-04']) {
+      expect(MD520_PARAM_MAP[code].options).toBe(opts);
+    }
   });
 
   it('17.2.22 FC 组按百分比口径，默认值与 Hz 演示表一一对应', () => {
@@ -186,6 +152,9 @@ describe('MD520 手册口径：参数表与通信地址', () => {
     useVfdStore.getState().setParam('F0-03', 6);
     useVfdStore.getState().setParam('F0-17', 0.1);
     useVfdStore.getState().setParam('F0-18', 0.1);
+    useVfdStore.getState().setParam('F4-00', FN.MULTI1);
+    useVfdStore.getState().setParam('F4-01', FN.MULTI2);
+    useVfdStore.getState().setParam('F4-03', FN.FWD);
     const s = useVfdStore.getState();
     s.setDi('DI4', true);
     s.setDi('DI2', true);
@@ -245,12 +214,12 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
   });
 
   it('只读参数不进三级菜单，运行中锁定参数拒绝编辑', () => {
-    // 组顺序 F0/F1/F4/F5/F6/F7/FC/FD/FP/U0，U0 只读组位于索引 9
-    const readonlyState = { ...INITIAL_KEYPAD, level: 1 as const, groupIndex: 9 };
+    // 组顺序 F0/F4/FC/FD/U0，U0 只读组位于索引 4
+    const readonlyState = { ...INITIAL_KEYPAD, level: 1 as const, groupIndex: 4 };
     const r = reduceKeypad({ ...readonlyState, level: 2 }, 'OK', defaults, false);
     expect(r.state.level).toBeLessThanOrEqual(3);
-    // F0 组顺序 F0-01/02/03/08/10/17/18，F0-08（runLocked）位于索引 3
-    const locked = { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 3 };
+    // F0 组顺序 F0-02/03/08/10/17/18，F0-08（runLocked）位于索引 2
+    const locked = { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 2 };
     const running = reduceKeypad(locked, 'OK', defaults, true);
     expect(running.state.level).toBe(2);
     expect(running.event?.message).toBeTruthy();
@@ -278,9 +247,9 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
     expect(blinkPosition(p02, 0)).toBe(4);
     const p08 = MD520_PARAM_MAP['F0-08'];
     expect(digitPlaces(p08)).toEqual([100, 10, 1, 0.1, 0.01]);
-    // F0 组首项已是 F0-01，F0-02 位于索引 1
+    // F0 组首项是 F0-02
     const entered = reduceKeypad(
-      { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 1 }, 'OK', defaults, false,
+      { ...INITIAL_KEYPAD, level: 2 as const, paramIndex: 0 }, 'OK', defaults, false,
     ).state;
     expect(entered.level).toBe(3);
     expect(entered.digit).toBe(0);
@@ -288,7 +257,7 @@ describe('LED 键盘：三级菜单与编辑语义', () => {
     expect(up.editValue).toBe(1);
     expect(reduceKeypad(up, 'OK', defaults, false).event?.commit)
       .toEqual({ code: 'F0-02', value: 1 });
-    expect(groupParams({ ...INITIAL_KEYPAD, level: 2 }, defaults)[0].code).toBe('F0-01');
+    expect(groupParams({ ...INITIAL_KEYPAD, level: 2 }, defaults)[0].code).toBe('F0-02');
   });
 });
 
@@ -303,14 +272,17 @@ describe('四种给定来源与 3D 频率倍率', () => {
     expect(useVfdStore.getState().speedFactor()).toBeCloseTo(out / 50, 4);
   });
 
-  it('DI 多段速：DI4 使能 + DI1~DI3 选段', () => {
+  it('DI 多段速：DI1~DI3 配成功能 12/13/14 后三位选段', () => {
     useVfdStore.getState().setParam('F0-02', 1);
     useVfdStore.getState().setParam('F0-03', 6);
     useVfdStore.getState().setParam('F0-17', 0.1);
-    useVfdStore.getState().setParam('F0-18', 0.1);
+    useVfdStore.getState().setParam('F4-00', FN.MULTI1);
+    useVfdStore.getState().setParam('F4-01', FN.MULTI2);
+    useVfdStore.getState().setParam('F4-02', FN.MULTI3);
+    useVfdStore.getState().setParam('F4-03', FN.FWD);
     const s = useVfdStore.getState();
     s.setDi('DI4', true);
-    s.setDi('DI2', true); // 段 2
+    s.setDi('DI2', true);
     expect(useVfdStore.getState().multiSpeedIndex()).toBe(2);
     for (let i = 0; i < 200; i += 1) useVfdStore.getState().tick(1 / 60);
     expect(useVfdStore.getState().outputHz).toBeCloseTo(MD520_MULTI_SPEED[2], 1);
@@ -342,7 +314,7 @@ describe('四种给定来源与 3D 频率倍率', () => {
     expect(useVfdStore.getState().speedFactor()).toBeGreaterThan(0);
 
     useVfdStore.getState().setEngaged(false);
-    useVfdStore.getState().setDi('DI4', true);
+    useVfdStore.getState().setDi('DI1', true);
     expect(useVfdStore.getState().engaged).toBe(true);
     useVfdStore.getState().setEngaged(false);
     useVfdStore.getState().setPlcFrame({ command: 1 });
@@ -617,70 +589,20 @@ describe('按键触感（按压动画）防回退', () => {
   });
 });
 
-describe('参数初始化 FP-01 语义（用户手册 302 页 17.2.3）', () => {
-  const commitFp01 = (mode: number) => {
-    useVfdStore.setState({
-      keypad: {
-        ...INITIAL_KEYPAD,
-        level: 3, groupIndex: MD520_GROUPS.indexOf('FP'), paramIndex: 0, editValue: mode,
-      },
-    });
-    useVfdStore.getState().dispatchKey('OK');
-  };
-
-  it('FP-01=1 恢复出厂参数，但保留 F1 组电机铭牌值', () => {
-    useVfdStore.getState().setParam('F0-08', 33);
-    useVfdStore.getState().setParam('F1-05', 2900);
-    commitFp01(1);
-    const s = useVfdStore.getState();
-    expect(s.params['F0-08']).toBe(50);
-    expect(s.params['F1-05']).toBe(2900);
-    expect(s.params['FP-01']).toBe(0);
-  });
-
-  it('FP-01=503 连电机参数一起恢复出厂', () => {
-    useVfdStore.getState().setParam('F1-05', 2900);
-    commitFp01(503);
-    expect(useVfdStore.getState().params['F1-05']).toBe(1460);
-  });
-
-  it('FP-01=2 清除故障记录，不复位参数', () => {
-    useVfdStore.setState({ faultHistory: ['E002.1'] });
-    useVfdStore.getState().setParam('F0-08', 33);
-    commitFp01(2);
-    const s = useVfdStore.getState();
-    expect(s.faultHistory).toEqual([]);
-    expect(s.params['F0-08']).toBe(33);
-  });
-});
-
-describe('285 页面板参数与 MF.K 正反转切换', () => {
+describe('面板 MF.K 正反转切换（教学子集固定功能）', () => {
   const keypad = src('vfd/md520Keypad.ts');
   const rig = src('scenes/vfd/PhysicsVfdDrive.tsx');
 
-  it('表 16-6：F7-01 五档 / F7-02 四档', () => {
-    expect(MD520_PARAM_MAP['F7-01'].options).toEqual({
-      0: '无效', 1: '强制面板控制', 2: '正反转切换', 3: '正转点动', 4: '反转点动',
-    });
-    expect(MD520_PARAM_MAP['F7-02'].options?.[0]).toBe('键盘方式S/R有效');
-  });
-
-  it('MF.K 按 F7-01 分派，2/3/4 仅在操作面板命令源有效', () => {
-    const base = { ...defaults, 'F7-01': 2, 'F0-02': 0 };
+  it('MF.K 固定作面板命令源下的方向切换，不依赖 F7-01', () => {
     const dispatch = (values: Record<string, number>) =>
       reduceKeypad({ ...INITIAL_KEYPAD }, 'MFK', values, false).event;
-    expect(dispatch({ ...defaults, 'F7-01': 0 })).toBeUndefined();
-    expect(dispatch(base)?.toggleDirection).toBe(true);
-    expect(dispatch({ ...base, 'F0-02': 2 })).toBeUndefined();
-    expect(dispatch({ ...base, 'F7-01': 3 })?.jog).toBe(MD520_COMMAND.FJOG);
-    expect(dispatch({ ...base, 'F7-01': 4 })?.jog).toBe(MD520_COMMAND.RJOG);
-    expect(dispatch({ ...base, 'F7-01': 1 })?.forcePanel).toBe(true);
-    expect(keypad).toContain("values['F7-01']");
+    expect(dispatch(defaults)?.toggleDirection).toBe(true);
+    expect(dispatch({ ...defaults, 'F0-02': 2 })).toBeUndefined();
     expect(keypad).toContain('panelSource');
+    expect(keypad).not.toContain("values['F7-01']");
   });
 
   it('方向切换立刻反映到控制字 / 状态字，3D 动画乘 runDirection', () => {
-    useVfdStore.getState().setParam('F7-01', 2);
     useVfdStore.getState().setParam('F0-02', 0);
     useVfdStore.getState().dispatchKey('RUN');
     expect(useVfdStore.getState().direction).toBe(1);
@@ -697,8 +619,8 @@ describe('285 页面板参数与 MF.K 正反转切换', () => {
     expect(rig).toContain('reversing:');
   });
 
-  it('F7-01=0 时按 MF.K 不改变方向', () => {
-    useVfdStore.getState().setParam('F7-01', 0);
+  it('通信命令源下按 MF.K 不改变方向', () => {
+    useVfdStore.getState().setParam('F0-02', 2);
     useVfdStore.getState().dispatchKey('RUN');
     useVfdStore.getState().dispatchKey('MFK');
     expect(useVfdStore.getState().direction).toBe(1);

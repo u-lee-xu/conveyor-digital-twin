@@ -47,7 +47,7 @@ describe('场景内实验指导抽屉', () => {
     expect(LAB_GROUP_ORDER).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
     expect(Object.keys(LAB_GROUPS)).toHaveLength(6);
     expect(LAB_DEFAULTS['F0-08']).toBe(50);
-    expect(LAB_DEFAULTS['F1-05']).toBe(1460);
+    expect(LAB_DEFAULTS['F4-01']).toBe(2);
     expect(generated).toContain('自动生成，请勿手改');
     expect(generator).toContain('labGuide.generated.ts');
     expect(generator).toContain("platform/public/docs");

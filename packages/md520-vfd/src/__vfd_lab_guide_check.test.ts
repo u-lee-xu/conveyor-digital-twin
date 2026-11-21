@@ -40,21 +40,21 @@ describe('MD520 实验指导书', () => {
   it('预期现象带具体数值，且与代码实现一致', () => {
     const html = readFileSync(guidePath, 'utf8');
     for (const t of [
-      '2.5Hz', '1.5 / 5 / 1.25Hz', '48.75', '43.75', '4.0Hz', '3.13Hz',
-      '改成 10% → 5Hz', '0b01101=13', '9.00A', '3.70kW', '×0.88',
-      '-0.83', '+1.21', '+0.023', '-0.034', 'DI4=0 立即停机',
+      '2.5Hz', '1 秒爬升 5Hz', '48.75', '43.75',
+      '改成 10% → 5Hz', '0b01101=13', '9.00A', '3.70kW',
+      '-0.83', '+1.21', '+0.023', '-0.034', '双断或双合停机',
     ]) expect(html).toContain(t);
   });
 
   it('关键地址、参数与端口口径齐全', () => {
     const html = readFileSync(guidePath, 'utf8');
     for (const t of [
-      'F0-02', 'F0-03', 'F0-08', 'F0-10', 'F0-17', 'F0-25', 'F6-10', 'F6-14',
-      'F7-01', 'F7-02', 'FP-01', 'FP-02', 'FC-02',
+      'F0-02', 'F0-03', 'F0-08', 'F0-10', 'F0-17', 'F0-18',
+      'F4-00', 'F4-01', 'F4-02', 'F4-11', 'FC-00', 'FC-02', 'FD-01',
       '2000H', '7310H', '1000H', '3000H', '1008H', '1009H',
       '130~134', '140~142', 'M130.0~M134.0', 'MW1000~MW1014',
       'Y0~Y4', 'D1000~D1014', 'Modbus TCP :502', 'F0-02=2', 'F0-03=9',
-      'DI4', 'AI1', 'DI1~DI3', 'npm run start:devlab', '教学交付不启动任何内置虚拟 PLC',
+      'DI1', 'DI2', 'AI1', 'DI1~DI3', 'npm run start:devlab', '教学交付不启动任何内置虚拟 PLC',
     ]) expect(html).toContain(t);
   });
 
@@ -63,7 +63,7 @@ describe('MD520 实验指导书', () => {
     expect(gen).toContain("src/vfd/md520Spec.ts");
     expect(gen).toContain('MD520_FC_DEFAULT_PERCENT');
     expect(gen).toContain('MD520实验指导书.html');
-    expect(MD520_PARAMS).toHaveLength(39);
+    expect(MD520_PARAMS).toHaveLength(24);
     const book = readFileSync(bookPath, 'utf8');
     expect(book).toContain('MD520实验指导书.html');
     const guide = readFileSync(guidePath, 'utf8');

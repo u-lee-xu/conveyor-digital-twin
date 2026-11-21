@@ -42,7 +42,6 @@ const advance = (seconds: number) => {
 
 describe('正反转切换先减速再反向加速', () => {
   it('运行中按 MF.K：目标方向立刻变，但输出方向保持到频率归零', () => {
-    useVfdStore.getState().setParam('F7-01', 2);
     useVfdStore.getState().dispatchKey('RUN');
     advance(4); // 默认 F0-17=20s，此时约 10Hz
     const before = useVfdStore.getState().outputHz;
@@ -62,7 +61,6 @@ describe('正反转切换先减速再反向加速', () => {
   });
 
   it('频率归零后才翻转 runDirection，随后按加速时间反向升频', () => {
-    useVfdStore.getState().setParam('F7-01', 2);
     useVfdStore.getState().dispatchKey('RUN');
     advance(4);
     useVfdStore.getState().dispatchKey('MFK');
@@ -97,7 +95,6 @@ describe('正反转切换先减速再反向加速', () => {
   });
 
   it('换向减速使用 F0-18，反向加速使用 F0-17', () => {
-    useVfdStore.getState().setParam('F7-01', 2);
     useVfdStore.getState().setParam('F0-18', 2);
     useVfdStore.getState().setParam('F0-17', 2);
     useVfdStore.getState().dispatchKey('RUN');
@@ -139,11 +136,10 @@ describe('正反转切换先减速再反向加速', () => {
     expect(fast.reversedHz).toBeGreaterThan(slow.reversedHz * 5);
   });
 
-  it('源码中没有另设的换向时间常数，斜坡只取 F0-17 / F0-18 / F0-25', () => {
+  it('源码中没有另设的换向时间常数，斜坡只取 F0-17 / F0-18', () => {
     const store = read('packages/md520-vfd/src/stores/useVfdStore.ts');
     expect(store).toContain("Math.max(0.1, s.params['F0-17'])");
     expect(store).toContain("Math.max(0.1, s.params['F0-18'])");
-    expect(store).toContain("Math.trunc(s.params['F0-25'] ?? 0)");
     expect(store).not.toContain('REVERSE_TIME');
     expect(store).not.toContain('const reversingSeconds');
   });

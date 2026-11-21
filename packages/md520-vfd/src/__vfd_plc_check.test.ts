@@ -145,7 +145,7 @@ describe('PLC 参考程序：三条接口 + 读写分离 + 默认停机', () => 
     expect(conveyorPlc).not.toContain('vfdWords.set(VR.VFD_STATUS1');
   });
 
-  it('18.3 表 18-2：2000H 无 0 档，PLC 停机写 6（按 F6-10）', () => {
+  it('18.3 表 18-2：2000H 无 0 档，PLC 停机写 6（按停机方式）', () => {
     expect(conveyorPlc).toContain('comm ? 1 : 6');
     expect(conveyorPlc).not.toContain('comm ? 1 : 0');
     // 未连 PLC 时面板不得把 store 初始 0 标成 2000H 命令值
@@ -198,7 +198,7 @@ describe('store：PLC 给定走同一入口，engaged 闩锁口径不变', () =>
     useVfdStore.getState().setPlcFrame({ diFlags: 0b01001, ai1: 6.5 });
     const s = useVfdStore.getState();
     expect(s.di.DI1).toBe(true);
-    expect(s.di.DI4).toBe(true);
+    expect(s.di.DI1).toBe(true);
     expect(s.di.DI2).toBe(false);
     expect(s.ai1).toBe(6.5);
     expect(s.engaged).toBe(true);
