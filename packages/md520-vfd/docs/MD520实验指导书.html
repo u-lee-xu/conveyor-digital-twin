@@ -54,7 +54,7 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <p>「三级菜单读写参数」不是在三级子菜单里翻来翻去，而是改一个参数的三个步骤：先选参数所在的组（L1），再选具体参数码（L2），最后改这个参数的数值（L3）。每层按 <code>OK</code> 进一层、按 <code>PRG</code> 退一层。</p>
 <table><tr><th>层级</th><th>怎么进</th><th>屏幕上看什么</th><th>能做什么</th></tr><tr><td><b>L1 参数组</b></td><td>待机主显下按 PRG</td><td>辅显显示参数组字母，如 F0</td><td>UP/DOWN 切组，OK 进 L2，PRG 退回主显</td></tr>
 <tr><td><b>L2 参数</b></td><td>L1 下按 OK</td><td>主显显示参数码，如 F0-08</td><td>UP/DOWN 选参数，OK 进 L3，PRG 退回 L1</td></tr>
-<tr><td><b>L3 设定值</b></td><td>L2 下按 OK</td><td>主显显示数值并有某一位闪烁，如 50.00</td><td>LEFT/RIGHT 选闪烁位，UP/DOWN 改数值，OK 保存退到 L2，PRG 放弃修改</td></tr></table>
+<tr><td><b>L3 设定值</b></td><td>L2 下按 OK</td><td>主显显示数值并有某一位闪烁，如 50.00</td><td>LEFT/RIGHT 选闪烁位，UP/DOWN 改数值，OK 保存退到 L2，PRG 退出不保存</td></tr></table>
 </section>
 <h2>实验速查表</h2>
 <table><tr><th>编号</th><th>实验名称</th><th>类别</th><th>所需模式</th></tr><tr><td class="num">1</td><td><a href="#lab1">三级菜单读写参数</a></td><td>面板与菜单</td><td>手动</td></tr>
@@ -90,8 +90,8 @@ footer{color:var(--soft);font-size:12px;text-align:center;margin-top:26px}
 <section id="grpA"><h2 style="color:#185FA5">A 类　面板与菜单（5 项）</h2><article id="lab1" style="background:#fff;border:1px solid var(--line);border-left:4px solid #185FA5;border-radius:10px;padding:16px 20px;margin-bottom:14px">
 <h3 style="margin:0 0 10px;font-size:15px;color:var(--ink)">实验 1　三级菜单读写参数 <span style="font-size:12px;font-weight:400;color:var(--soft)">｜ 手动 模式</span></h3>
 <p style="margin:6px 0"><b>目的</b>　学会用面板找到并修改一个参数。三级菜单就是 L1 参数组 → L2 参数码 → L3 设定值三层，进一层按 OK、退一层按 PRG。</p>
-<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>① 在设备列表点「MD520 变频器」卡片进入场景。② 看左侧面板「运行模式」下的两个按钮：🎮 手动、🔌 仿真。③ 点蓝色的 🎮 手动按钮（进来时它已默认选中；若亮着的是橙色仿真，就点一下手动切换）。本实验到此为止不用连 PLC、不用点连接面板，直接操作下面第 2 步的键盘即可。</li><li>面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 <code>F0-08</code>，再按 OK 进 L3。</li><li>L3 主显是 50.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。</li><li>按 OK 保存（自动跳到下一个参数）；再改一次但按 PRG 放弃，对比保存和放弃两次的结果。</li></ol>
-<p style="margin:6px 0"><b>预期现象</b>　保存后主显 30.00、状态行显示下一个参数码；按 PRG 放弃则回到修改前的值。参数标「停机更改」时运行中改不了。</p>
+<p style="margin:6px 0 4px"><b>步骤</b></p><ol style="margin:4px 0 8px 20px;padding:0"><li>① 在设备列表点「MD520 变频器」卡片进入场景。② 看左侧面板「运行模式」下的两个按钮：🎮 手动、🔌 仿真。③ 点蓝色的 🎮 手动按钮（进来时它已默认选中；若亮着的是橙色仿真，就点一下手动切换）。本实验到此为止不用连 PLC、不用点连接面板，直接操作下面第 2 步的键盘即可。</li><li>面板左上那颗印着 ↩ 的键就是 PRG 键（鼠标悬停显示「PRG ↩ · 编程/返回键」）。按它进 L1，用 △ 递增键切到 F0 组，按中央 OK 进 L2，用 △ 选到 <code>F0-08</code>，再按 OK 进 L3。</li><li>L3 主显是 50.00 且有一位在闪：◀▶ 左右键选闪烁位，△▽ 上下键把预置频率改成 30.00Hz。</li><li>按 OK 保存，按 PRG 退出不保存：再改一次数值，先按 PRG 看它退回修改前的 30.00，再改回 30.00 并按 OK 看它保存。</li></ol>
+<p style="margin:6px 0"><b>预期现象</b>　按 PRG 退出不保存，数值退回修改前的 30.00；按 OK 保存，主显 30.00 且自动跳到下一个参数码。参数标「停机更改」时运行中改不了。</p>
 <p style="margin:6px 0"><b>观察窗口</b>　主/辅显示区、闪烁位、状态行 L1/L2/L3</p>
 <p style="margin:6px 0;color:var(--warn)"><b>易错点</b>　闪烁位用 ◀▶ 左右键、数值用 △▽ 上下键；右侧印 ⌂ 的 MENU 键是切四种菜单，不是返回键，别按它退出。</p>
 </article>
