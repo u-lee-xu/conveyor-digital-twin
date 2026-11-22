@@ -72,6 +72,12 @@ websocket-server/*.ps1
 # NATFRP config (root owned)
 deploy/natfrp-config/
 
+# 环境变量与密钥：任何形态的 .env 都不得入库（历史上 deploy/.env 曾被提交过，已删但仍可从旧提交取到）
+.env
+.env.*
+deploy/.env
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
