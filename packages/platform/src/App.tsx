@@ -5,7 +5,7 @@ import { DEVICE_META } from './deviceMeta';
 
 /**
  * 工作区按需加载：启动器首屏只带轻量元数据，进入设备 / 成为观众时才拉起
- * 设备注册表、7 个设备实现与 Three / Rapier 所在的 chunk。
+ * 设备注册表、各设备实现与 Three / Rapier 所在的 chunk。
  */
 const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then((m) => ({ default: m.TeacherWorkspace })));
 const ViewerWorkspace = lazy(() => import('./ViewerWorkspace').then((m) => ({ default: m.ViewerWorkspace })));

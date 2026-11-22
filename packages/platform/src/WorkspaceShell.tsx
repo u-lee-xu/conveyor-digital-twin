@@ -136,7 +136,7 @@ export function WorkspaceShell({ device, onBack }: WorkspaceShellProps) {
   const ModePanel = activeMode?.panel;
   const Extras = device.sidebarExtras;
   const Effects = device.effects;
-  // 7 个设备都自带 SceneWrapper；不再静态兜底 PhysicsScene，否则 Rapier 会进入每个设备分包
+  // 每个设备都自带 SceneWrapper；不再静态兜底 PhysicsScene，否则 Rapier 会进入每个设备分包
   const Scene = device.SceneWrapper;
 
   return (

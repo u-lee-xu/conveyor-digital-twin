@@ -1,6 +1,6 @@
 /**
  * 主控工作区（按需加载）：只下载当前选中的那一个设备实现，
- * 不再一次拉起 7 个设备与它们的 3D / 物理依赖。
+ * 不再一次拉起全部设备与它们的 3D / 物理依赖。
  */
 import { useEffect, useState } from 'react';
 import { getDevice, loadDevice } from './registry';

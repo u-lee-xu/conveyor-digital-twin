@@ -4,7 +4,8 @@
  *
  *   npm run start:lab
  *
- * 默认起 8 个进程，但浏览器（含智能电视）只需要访问一个地址：
+ * 教学形态只起 3 个服务（Web preview + PLC 网关 + 状态中继），
+ * 但浏览器（含智能电视）只需要访问一个地址：
  *   http://<教师机当前任一可达 IP>:5201/
  * 教学交付只启动 8081 PLC 网关 / 8082 状态中继，两者显式绑定 127.0.0.1，
  * 只有 Vite preview 的 /ws/plc 与 /ws/relay 同源代理能触达，CSP 的 'self' 直接放行。
@@ -371,7 +372,7 @@ async function main() {
   /**
    * strictPort 下 Vite 会直接抛 "Port 5201 is already in use"，用户只看到原始异常，
    * 不知道旧实例其实还活着、直接访问即可。先预检一次，给出可操作的提示。
-   * 必须在 preview() 之前，避免半初始化；也避免继续拉起 4 个内部服务与旧实例混跑。
+   * 必须在 preview() 之前，避免半初始化；也避免继续拉起内部服务与旧实例混跑。
    */
   if (await portBusy(PORT)) {
     console.error(`[lab] :${PORT} 已被占用，实验室很可能已经在运行。`);

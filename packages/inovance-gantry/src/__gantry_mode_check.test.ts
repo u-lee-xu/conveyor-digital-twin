@@ -253,7 +253,7 @@ describe('仿真模式与 PLC 交互', () => {
 
   it('start-lab 默认不启龙门内置靶机，只在显式开关下起', () => {
     const lab = read('scripts/start-lab.cjs');
-    expect(lab).toContain('默认起 8 个进程');
+    // 只断言行为：注释里的进程数量会随交付形态变化，不作为断言行
     expect(lab).toContain('DT_ENABLE_GANTRY_MOCK');
     expect(lab).toContain('GANTRY_MOCK_ENABLED');
     expect(lab).toContain('if (GANTRY_MOCK_ENABLED)');
