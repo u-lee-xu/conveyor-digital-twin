@@ -1,0 +1,37 @@
+{
+  "name": "@digital-twin/motor-reversing",
+  "productName": "电机正反转控制",
+  "description": "按钮→PLC→硬件互锁接触器→电机→传送带的教学型正反转控制数字孪生；含控制柜内 QF/FU/KM1/KM2/FR 模型与过载跳闸",
+  "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b",
+    "lint": "eslint .",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@digital-twin/platform": "*",
+    "@digital-twin/shared": "*",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.183.1",
+    "@vitejs/plugin-react": "^4.3.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.183.1",
+    "typescript": "~5.9.3",
+    "vite": "^5.4.0",
+    "vitest": "^3.2.4",
+    "zustand": "^5.0.11"
+  }
+}

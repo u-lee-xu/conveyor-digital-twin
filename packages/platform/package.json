@@ -25,6 +25,7 @@
     "@digital-twin/md520-vfd": "*",
     "@digital-twin/inovance-gantry": "*",
     "@digital-twin/liquid-mixing": "*",
+    "@digital-twin/motor-reversing": "*",
     "@digital-twin/shared": "*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
