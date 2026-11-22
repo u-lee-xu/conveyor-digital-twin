@@ -4,7 +4,7 @@
   "description": "多设备统一平台 - 数字孪生教学软件（启动页 + 统一模式框架 + 连接管理）",
   "version": "1.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",

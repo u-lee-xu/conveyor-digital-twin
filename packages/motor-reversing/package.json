@@ -3,7 +3,7 @@
   "productName": "电机正反转控制",
   "description": "按钮→PLC→硬件互锁接触器→电机→传送带的教学型正反转控制数字孪生；含控制柜内 QF/FU/KM1/KM2/FR 模型与过载跳闸",
   "version": "1.0.0",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

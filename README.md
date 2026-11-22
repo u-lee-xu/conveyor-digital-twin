@@ -62,4 +62,10 @@ PLC 或 PLC 仿真软件 ⇄ :8081 网关（仅回环）⇄ 主控浏览器
 
 ## 许可证
 
-本项目以 [MIT License](LICENSE) 发布。可以自由使用、修改、再分发（含教学与商业用途），保留版权声明与许可声明即可；软件按「原样」提供，不含任何担保。
+本项目以 [PolyForm Noncommercial License 1.0.0](LICENSE) 发布：
+
+- **免费**：教学、教研、个人学习、学校与其他教育机构、非营利组织、政府机构使用，无需申请也无需付费，可修改、可再分发（需保留许可与 Required Notice）。
+- **需授权**：任何以商业获利为目的的使用——收费培训与课程包、随商品或集成项目交付、托管服务（SaaS）、企业内部商业运营——须事先取得著作权人书面许可。
+- 软件按「原样」提供，不含任何担保。
+
+第三方依赖（React / Three.js / Rapier / Electron / Vite 等）仍适用各自许可证，均为 MIT、ISC、BSD、Apache-2.0 等宽松许可，与本项目的非商业条款不冲突；明细与分发义务见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

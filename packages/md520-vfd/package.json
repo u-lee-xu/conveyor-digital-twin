@@ -4,7 +4,7 @@
   "description": "汇川 MD520 虚拟变频器独立教学场景：面板参数设定、四种给定来源、PLC 双向联调与三维电机联动",
   "version": "1.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

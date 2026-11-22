@@ -4,7 +4,7 @@
   "description": "汇川龙门设备实验：XY 直角坐标双伺服、Z 气缸吸盘、棋盘格象棋棋子，position 坐标变量驱动，EtherCAT 仅保留变量/信号映射",
   "version": "1.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

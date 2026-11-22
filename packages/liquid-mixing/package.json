@@ -4,7 +4,7 @@
   "description": "A/B 双液依次定量进料、正反向搅拌、转入成品储液罐的教学型液体混装数字孪生；四罐液位为 32 位 REAL 模拟量并带上下限开关量",
   "version": "1.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

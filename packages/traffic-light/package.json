@@ -4,7 +4,7 @@
   "description": "十字路口交通灯数字孪生仿真平台",
   "version": "1.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

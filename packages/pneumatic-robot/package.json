@@ -4,7 +4,7 @@
   "description": "三气缸气动机械手数字孪生仿真平台",
   "version": "1.3.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

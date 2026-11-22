@@ -4,7 +4,7 @@
   "description": "自动配药数字孪生仿真平台（滑块料斗 + 四药仓气动送药 + 末端翻转取药）",
   "version": "1.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",

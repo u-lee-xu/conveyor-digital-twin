@@ -4,7 +4,7 @@
   "description": "工业级煤料输送与智能分拣数字孪生仿真平台",
   "version": "2.0.0",
   "author": "老徐",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
