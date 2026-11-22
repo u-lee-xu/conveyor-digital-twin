@@ -9,6 +9,8 @@
  *  - 快照来自主控 UI store，因此演示 / 手动模式（未连 PLC）观众也能同步看到画面。
  *  - 观众端零上行：只有主控连接能 report；观众发来的任何消息一律丢弃。
  *  - 后加入的观众立即收到 lastSnapshot，不会黑屏等待。
+ *  - 主控连接活着但停止上报（后台节流 / 页面卡死）时，由独立保活定时器按静默时长
+ *    接管或释放，不再永久占坑（见 CONTROLLER_SILENT_MS / CONTROLLER_RELEASE_MS）。
  *
  * 安全边界（2026-11-10 P0-2）：
  *  - 角色不再由客户端自报。vite 代理按 TCP localAddress + Host 计算 teacher/viewer，
@@ -39,6 +41,16 @@ const MAX_BUFFERED = 512 * 1024;
 const WS_HEARTBEAT_MS = 30000;
 /** 静止期仍每 1s 发一帧完整快照：观众端「更新于」时间戳与链路保活，扇出比 10Hz 降 90% */
 const SNAPSHOT_KEEPALIVE_MS = 1000;
+/**
+ * 主控 report 静默判据（P1，2026-11-21 审核）：主控 ws 仍 OPEN、pong 正常，但 report 停了
+ * （后台标签节流、页面卡死、脚本异常）时，旧实现只认 close / leave / 心跳半开，于是
+ * 第二主控被「已有主控在演示」永久拒绝、观众永远停在最后一帧。改为两级兜底：
+ *  - 静默 ≥ CONTROLLER_SILENT_MS：允许新主控接管，旧连接降级为普通连接（不影响它自己的本地操作）；
+ *  - 静默 ≥ CONTROLLER_RELEASE_MS：按主控离场释放，走与 leave 相同的清场广播。
+ * 主控正常是 10Hz 上报，即使被后台节流到 1s 一次也远小于这两个阈值。
+ */
+const CONTROLLER_SILENT_MS = Number(process.env.DT_RELAY_SILENT_MS) || 15000;
+const CONTROLLER_RELEASE_MS = Number(process.env.DT_RELAY_RELEASE_MS) || 120000;
 /** 与网关侧同源的键名黑名单，防止 report 帧写入对象原型 */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -82,6 +94,10 @@ class Relay {
     /** 完整快照镜像：主控只发变化键，合并后才扇出，观众端协议保持完整 vars 不变 */
     this.vars = {};
     this.lastPublishAt = 0;
+    /** 最近一次主控 report 的时间戳；静默判据的唯一依据 */
+    this.lastReportAt = 0;
+    /** 独立保活定时器：不依赖 report 分支，主控在线时始终 1Hz 扇出 */
+    this.keepaliveTimer = null;
   }
 
   start() {
@@ -107,6 +123,12 @@ class Relay {
       }
     }, WS_HEARTBEAT_MS);
     this.heartbeat.unref?.();
+    /**
+     * 独立保活：旧实现只在 report 分支里扇出，主控一静默中继就完全不发声。
+     * 这里每秒检查一次，主控在线时保活扇出、静默超限时释放占坑。
+     */
+    this.keepaliveTimer = setInterval(() => this.tick(), SNAPSHOT_KEEPALIVE_MS);
+    this.keepaliveTimer.unref?.();
     wss.on('connection', (ws, req) => {
       const verdict = verifyInternalRequest(req, { allowViewer: true });
       ws.role = verdict.role;
@@ -132,15 +154,22 @@ class Relay {
         if (msg.type === 'report') {
           // 第一个上报者成为主控；同一教室只认一台主控
           if (this.controller && this.controller !== ws && this.controller.readyState === WebSocket.OPEN) {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'rejected', error: '已有主控在演示' }));
+            const silent = Date.now() - this.lastReportAt;
+            if (silent < CONTROLLER_SILENT_MS) {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'rejected', error: '已有主控在演示' }));
+              }
+              return;
             }
-            return;
+            // 旧主控连接还开着但已停止上报：直接交接，否则第二主控会被永久拒绝
+            console.warn(`[relay] 主控静默 ${Math.round(silent / 1000)}s，交接给新的上报连接`);
+            this.controller = null;
           }
           const incoming = sanitizeVars(msg.vars, msg.delta === true);
           const deviceChanged = this.deviceId !== (msg.deviceId ?? null);
           const modeChanged = this.mode !== (msg.mode ?? null);
           this.controller = ws;
+          this.lastReportAt = Date.now();
           this.cancelRelease();
           this.deviceId = msg.deviceId ?? null;
           this.mode = msg.mode ?? null;
@@ -203,7 +232,28 @@ class Relay {
     this.mode = null;
     this.vars = {};
     this.lastPublishAt = 0; // 不依赖 publish 的副作用重置保活窗口
+    this.lastReportAt = 0;
     this.publish(this.snapshot(this.vars, { error: '主控已离开' }));
+  }
+
+  /**
+   * 每秒一次的独立巡检：主控在线就保活扇出，静默超限就释放占坑。
+   * 与 close / leave 的关系：close 与 leave 仍走 800ms 宽限，这里只处理「连接活着但不再上报」。
+   */
+  tick() {
+    const controller = this.controller;
+    if (!controller || controller.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    const silent = now - this.lastReportAt;
+    if (silent >= CONTROLLER_RELEASE_MS) {
+      console.warn(`[relay] 主控 ${Math.round(silent / 1000)}s 未上报，按离场清场`);
+      this.scheduleRelease(controller);
+      return;
+    }
+    // 静默中的主控不再刷新时间戳：观众端「更新于」必须如实反映停更，而不是被保活伪装成在线
+    if (silent < CONTROLLER_SILENT_MS && now - this.lastPublishAt >= SNAPSHOT_KEEPALIVE_MS) {
+      this.publish(this.snapshot(this.vars, { error: undefined }));
+    }
   }
 
   snapshot(vars, extra) {
@@ -237,6 +287,7 @@ class Relay {
 
   shutdown() {
     if (this.heartbeat) { clearInterval(this.heartbeat); this.heartbeat = null; }
+    if (this.keepaliveTimer) { clearInterval(this.keepaliveTimer); this.keepaliveTimer = null; }
     if (this.leaveTimer) { clearTimeout(this.leaveTimer); this.leaveTimer = null; }
     if (this.wss) {
       for (const ws of this.wss.clients) {
