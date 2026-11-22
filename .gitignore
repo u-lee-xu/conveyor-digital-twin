@@ -43,6 +43,32 @@ docs/*.doc
 websocket-server/延迟测试报告_*.txt
 websocket-server/_mx_tmp.ps1
 
+# 审核 / 架构评估报告：本地工作稿，结论已沉淀到提交信息与项目记忆
+CODE_AUDIT_*.md
+ARCHITECTURE_REVIEW_*.md
+
+# 根目录的一次性脚本与生成物（论文/课件/表格）。
+# 已跟踪的 generate_paper.py / write_paper.py / index.html 不受 gitignore 影响，仍会正常提交。
+/*.py
+/*.docx
+/*.pptx
+/*.csv
+
+# docs 下的本地素材与证据页（已跟踪的 8 份设计文档不受影响）
+# 项目约定 docs/ 下的草稿不入库；确需入库的文档默认放仓库根（如 SCENE_DEVELOPMENT.md），
+# 或对 docs/ 内的单个文件用 git add -f 显式加入。
+docs/*.md
+docs/*.html
+docs/*.docx
+docs/*.exe
+docs/*.zip
+
+# 包根目录的实物参照照：建模用素材，不是运行时资源（运行时图集都在公开目录下）
+packages/*/*.png
+
+# 临时探针脚本：验证用，不进交付
+websocket-server/*.ps1
+
 # NATFRP config (root owned)
 deploy/natfrp-config/
 
