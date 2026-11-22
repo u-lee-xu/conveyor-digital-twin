@@ -54,7 +54,7 @@ describe('运行时地址端点：不固化 IP', () => {
   });
 
   it('启动脚本与 dev 配置里不出现任何写死的现场 IP / 域名', () => {
-    const stale = ['192.168.3.34', '10.70.40.241', '10.40.32.59', 'siit.duckdns.org'];
+    const stale = ['203.0.113.34', '198.51.100.41', '192.0.2.59', 'siit.example.org'];
     stale.forEach((value) => {
       expect(startLab).not.toContain(value);
       expect(platformVite).not.toContain(value);
@@ -100,50 +100,50 @@ describe('浏览器端：同源兜底 + 候选单一来源', () => {
 describe('rankViewerUrls 纯函数', () => {
   it('本机 127.0.0.1 打开时把可达网卡地址排前，回环降为兜底', () => {
     const urls = rankViewerUrls(
-      ['http://10.70.40.241:5201/', 'http://192.168.1.8:5201/'],
+      ['http://198.51.100.41:5201/', 'http://192.0.2.8:5201/'],
       'http://127.0.0.1:5201/',
     );
-    expect(urls[0]).toBe('http://10.70.40.241:5201/');
+    expect(urls[0]).toBe('http://198.51.100.41:5201/');
     expect(urls).toContain('http://127.0.0.1:5201/');
     expect(urls[urls.length - 1]).toBe('http://127.0.0.1:5201/');
   });
 
   it('用 LAN IP / 域名访问本机时同源地址优先', () => {
     const urls = rankViewerUrls(
-      ['http://10.70.40.241:5201/', 'http://192.168.1.8:5201/'],
+      ['http://198.51.100.41:5201/', 'http://192.0.2.8:5201/'],
       'http://siit.example.org:5201/',
     );
     expect(urls[0]).toBe('http://siit.example.org:5201/');
-    expect(urls).toContain('http://10.70.40.241:5201/');
+    expect(urls).toContain('http://198.51.100.41:5201/');
   });
 
   it('服务端不可用或只给旧静态 viewerUrl 时仍能给出可用地址', () => {
     expect(rankViewerUrls([], 'http://127.0.0.1:5201/')).toEqual(['http://127.0.0.1:5201/']);
-    expect(rankViewerUrls(['http://192.168.3.34:5201/'], '')).toEqual(['http://192.168.3.34:5201/']);
+    expect(rankViewerUrls(['http://203.0.113.34:5201/'], '')).toEqual(['http://203.0.113.34:5201/']);
   });
 
   it('服务端把本地 IP 排第一时，浏览器端不会把它重排掉', () => {
     const urls = rankViewerUrls(
-      ['http://10.70.40.241:5201/', 'http://172.31.16.1:5201/', 'http://127.0.0.1:5201/'],
+      ['http://198.51.100.41:5201/', 'http://198.51.100.16:5201/', 'http://127.0.0.1:5201/'],
       'http://127.0.0.1:5201/',
     );
-    expect(urls[0]).toBe('http://10.70.40.241:5201/');
+    expect(urls[0]).toBe('http://198.51.100.41:5201/');
     expect(urls[urls.length - 1]).toBe('http://127.0.0.1:5201/');
   });
 
   it('多网卡重复候选去重，顺序稳定', () => {
     const urls = rankViewerUrls(
-      ['http://10.70.40.241:5201/', 'http://10.70.40.241:5201/', 'http://10.70.40.241:5201/'],
-      'http://10.70.40.241:5201/',
+      ['http://198.51.100.41:5201/', 'http://198.51.100.41:5201/', 'http://198.51.100.41:5201/'],
+      'http://198.51.100.41:5201/',
     );
-    expect(urls).toEqual(['http://10.70.40.241:5201/']);
+    expect(urls).toEqual(['http://198.51.100.41:5201/']);
   });
 
   it('回环识别覆盖 localhost / 127.0.0.1 / IPv6 字面量', () => {
     expect(isLoopbackViewerUrl('http://localhost:5201/')).toBe(true);
     expect(isLoopbackViewerUrl('http://127.0.0.1:5201/')).toBe(true);
     expect(isLoopbackViewerUrl('http://[::1]:5201/')).toBe(true);
-    expect(isLoopbackViewerUrl('http://10.70.40.241:5201/')).toBe(false);
+    expect(isLoopbackViewerUrl('http://198.51.100.41:5201/')).toBe(false);
     expect(isLoopbackViewerUrl('not-a-url')).toBe(false);
   });
 
@@ -151,8 +151,8 @@ describe('rankViewerUrls 纯函数', () => {
     expect(labInfo).toContain('typeof location');
     expect(labInfo).toContain('location.host');
     expect(sameOriginViewerUrl()).toBe(''); // Node 测试环境没有 window.location
-    expect(labInfo).not.toContain('192.168.3.34');
-    expect(labInfo).not.toContain('10.70.40.241');
-    expect(labInfo).not.toContain('10.40.32.59');
+    expect(labInfo).not.toContain('203.0.113.34');
+    expect(labInfo).not.toContain('198.51.100.41');
+    expect(labInfo).not.toContain('192.0.2.59');
   });
 });
