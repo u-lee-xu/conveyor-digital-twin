@@ -20,8 +20,10 @@
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { loadSceneDescriptors } = require('./device-catalog.cjs');
+const { loadSceneDescriptors, cardIndexOf } = require('./device-catalog.cjs');
 const scenes = loadSceneDescriptors();
+/** 传送带在启动器里的下标由清单派生，不写死 0：order 调整后仍点到同一设备 */
+const CONVEYOR_CARD = cardIndexOf(scenes, 'conveyor-sorting');
 const os = require('os');
 const path = require('path');
 const http = require('http');
@@ -141,7 +143,7 @@ async function main() {
     await send('Page.bringToFront', {}, teacher);
 
     check('主控启动器就绪', await wait(teacher, `document.querySelectorAll('.device-card').length === ${scenes.length}`));
-    await ev(teacher, "document.querySelectorAll('.device-card')[0].click()");
+    await ev(teacher, `document.querySelectorAll('.device-card')[${CONVEYOR_CARD}].click()`);
     check('传送带三维场景挂载', await wait(teacher, canvasExpr, 30000), { device: 'conveyor-sorting' });
 
     // 切「仿真」模式：把连接端口从默认 502 改为本机虚拟 PLC :1503

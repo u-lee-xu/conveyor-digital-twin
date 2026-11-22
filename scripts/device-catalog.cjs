@@ -31,4 +31,17 @@ function loadSceneDescriptors() {
     (Number.isFinite(a.order) ? a.order : 999) - (Number.isFinite(b.order) ? b.order : 999));
 }
 
-module.exports = { loadSceneDescriptors, PACKAGES_DIR };
+/**
+ * 按 id 定位启动器卡片下标。
+ *
+ * CDP / 联动脚本一律用它取下标，不要写 `.device-card[0]`：卡片顺序由 `device.json`
+ * 的 order 决定，硬编码下标在调整顺序或新增 `order=0` 场景时会静默点错设备，
+ * 断言随之失真却不报错。找不到时直接抛错，避免误判成产品缺陷。
+ */
+function cardIndexOf(descriptors, id) {
+  const index = descriptors.findIndex((d) => d.id === id);
+  if (index < 0) throw new Error(`场景清单里没有 id=${id}，无法定位启动器卡片`);
+  return index;
+}
+
+module.exports = { loadSceneDescriptors, cardIndexOf, PACKAGES_DIR };

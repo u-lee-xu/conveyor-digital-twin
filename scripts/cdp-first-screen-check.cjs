@@ -5,7 +5,7 @@
  *   npm run start:lab
  *   node scripts/cdp-first-screen-check.cjs
  *
- * 用全新 profile 的 headless Chrome 走 CDP：验证启动器 7 张卡、点击设备后
+ * 用全新 profile 的 headless Chrome 走 CDP：验证启动器设备卡与元数据一致、点击设备后
  * lazy chunk 能加载且 canvas 真正出现、观众端 ViewerWorkspace 能挂载。
  * 结束自动关闭 Chrome 并删除临时 profile，不碰用户浏览器数据。
  */
@@ -140,6 +140,13 @@ async function main() {
     const DEVICE_LABELS = scenes.map((s) => s.name);
     const firstPhysical = scenes.findIndex((s) => s.hasPhysics);
     const firstNonPhysical = scenes.findIndex((s) => !s.hasPhysics);
+    // 前置断言：Rapier 口径靠「一个物理 + 一个非物理」两个样本对比，
+    // 任一类别缺席会让下面的 if 永不成立、断言被静默跳过（假绿），必须先挡住
+    check(
+      'Rapier 对比样本齐备（物理 / 非物理各至少一个）',
+      firstPhysical !== -1 && firstNonPhysical !== -1,
+      { firstPhysical, firstNonPhysical, hasPhysics: scenes.map((s) => s.hasPhysics) },
+    );
     const canvasExpr = "(()=>{const c=document.querySelector('canvas');return !!c && c.width>600 && c.height>400;})()";
     for (let i = 0; i < scenes.length; i += 1) {
       if (i > 0) {

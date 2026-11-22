@@ -46,10 +46,27 @@ function packageOf(file: string): string {
   return parts[parts.length - 2] || '';
 }
 
+/**
+ * 不合规的 device.json 不能静默消失：第三方包字段写错时，唯一症状会是「卡片不出现」，
+ * 浏览器侧没有任何排错线索（Node 侧 device-catalog.cjs 会直接抛错，两边行为必须一致）。
+ * 这里报出包目录与原因，返回值仍按原规则过滤，不改变已合规包的加载结果。
+ */
+function invalidReason(d: SceneDescriptor): string | null {
+  if (typeof d.id !== 'string' || d.id === '') return '缺少字符串 id';
+  if (d.id !== d.pkg) return `id(${d.id}) 与目录名(${d.pkg}) 不一致`;
+  if (typeof d.name !== 'string' || d.name === '') return '缺少字符串 name';
+  return null;
+}
+
 /** 按 order 排序，保持既有卡片顺序；仅收目录名与 id 一致、且字段完整的包 */
 export const SCENE_DESCRIPTORS: readonly SceneDescriptor[] = Object.entries(manifests)
   .map(([file, meta]) => ({ ...meta, pkg: packageOf(file) }))
-  .filter((d) => typeof d.id === 'string' && d.id === d.pkg && typeof d.name === 'string')
+  .filter((d) => {
+    const reason = invalidReason(d);
+    if (reason === null) return true;
+    console.error(`[deviceCatalog] 忽略场景包 ${d.pkg || '?'}：device.json ${reason}`);
+    return false;
+  })
   .sort((a, b) => (Number.isFinite(a.order) ? a.order : 999) - (Number.isFinite(b.order) ? b.order : 999));
 
 /** 首屏只需要标量元数据；实现仍由 registry 按设备懒加载 */

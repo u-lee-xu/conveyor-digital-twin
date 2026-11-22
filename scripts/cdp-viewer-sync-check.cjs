@@ -11,8 +11,11 @@
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { loadSceneDescriptors } = require('./device-catalog.cjs');
+const { loadSceneDescriptors, cardIndexOf } = require('./device-catalog.cjs');
 const scenes = loadSceneDescriptors();
+/** 卡片下标由清单派生：主控先入传送带、再切交通灯，顺序调整后仍点同一设备 */
+const FIRST_CARD = cardIndexOf(scenes, 'conveyor-sorting');
+const SECOND_CARD = cardIndexOf(scenes, 'traffic-light');
 const os = require('os');
 const path = require('path');
 const http = require('http');
@@ -129,7 +132,7 @@ async function main() {
     check('观众端 ViewerWorkspace 挂载', await wait(viewer, "!!document.querySelector('[data-viewer-link]')"));
     check('观众端连上中继', await wait(viewer, "document.querySelector('[data-viewer-link]')?.getAttribute('data-viewer-link') === 'online'", 10000));
 
-    await ev(teacher, "document.querySelectorAll('.device-card')[0].click()");
+    await ev(teacher, `document.querySelectorAll('.device-card')[${FIRST_CARD}].click()`);
     check('主控进入设备后观众收到 deviceId', await wait(viewer, "document.querySelector('[data-viewer-device]')?.getAttribute('data-viewer-device') === 'conveyor-sorting'"));
     check('观众按设备懒加载后渲染出 canvas', await wait(viewer, canvasExpr, 30000));
     check('观众无加载失败态', (await ev(viewer, "document.querySelector('[data-viewer-load-error]')?.getAttribute('data-viewer-load-error')")) === '');
@@ -144,7 +147,7 @@ async function main() {
     // 主控再进另一设备：观众应跟随切换并重新渲染
     await wait(teacher, `document.querySelectorAll('.device-card').length === ${scenes.length}`, 20000);
     await send('Page.bringToFront', {}, viewer);
-    await ev(teacher, "document.querySelectorAll('.device-card')[2].click()");
+    await ev(teacher, `document.querySelectorAll('.device-card')[${SECOND_CARD}].click()`);
     check('主控切到交通灯后观众跟随', await wait(viewer, "document.querySelector('[data-viewer-device]')?.getAttribute('data-viewer-device') === 'traffic-light'", 30000));
     check('观众重新渲染新设备 canvas', await wait(viewer, canvasExpr, 30000));
 
